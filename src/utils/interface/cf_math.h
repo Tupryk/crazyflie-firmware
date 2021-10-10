@@ -35,7 +35,8 @@
 #include "arm_math.h"
 #pragma GCC diagnostic pop
 
-#include "cfassert.h"
+// #include "cfassert.h"
+#define ASSERT(e) if(e);
 
 
 #define DEG_TO_RAD (PI/180.0f)

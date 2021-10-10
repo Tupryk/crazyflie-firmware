@@ -56,14 +56,15 @@
  */
 
 #include "kalman_core.h"
-#include "cfassert.h"
+// #include "cfassert.h"
 
 #include "physicalConstants.h"
 
-#include "param.h"
+// #include "param.h"
 #include "math3d.h"
-#include "debug.h"
+// #include "debug.h"
 #include "static_mem.h"
+#include <string.h>
 
 #include "lighthouse_calibration.h"
 // #define DEBUG_STATE_CHECK
@@ -129,10 +130,10 @@ static const float stdDevInitialPosition_xy = 100;
 static const float stdDevInitialPosition_z = 1;
 static const float stdDevInitialVelocity = 0.01;
 static const float stdDevInitialAttitude_rollpitch = 0.01;
-static const float stdDevInitialAttitude_yaw = 0.01;
+static const float stdDevInitialAttitude_yaw = 1.0;//0.01;
 
-static float procNoiseAcc_xy = 0.5f;
-static float procNoiseAcc_z = 1.0f;
+static float procNoiseAcc_xy = 1.0f;//0.5f;
+static float procNoiseAcc_z = 2.0f; //1.0f;
 static float procNoiseVel = 0;
 static float procNoisePos = 0;
 static float procNoiseAtt = 0;
@@ -479,7 +480,7 @@ void kalmanCorePredict(kalmanCoreData_t* this, Axis3f *acc, Axis3f *gyro, float 
   float tmpSPX, tmpSPY, tmpSPZ;
   float zacc;
 
-  if (quadIsFlying) // only acceleration in z direction
+  if (false)//quadIsFlying) // only acceleration in z direction
   {
     // Use accelerometer and not commanded thrust, as this has proper physical units
     zacc = acc->z;
@@ -550,14 +551,14 @@ void kalmanCorePredict(kalmanCoreData_t* this, Axis3f *acc, Axis3f *gyro, float 
   tmpq2 = dq[2]*this->q[0] - dq[3]*this->q[1] + dq[0]*this->q[2] + dq[1]*this->q[3];
   tmpq3 = dq[3]*this->q[0] + dq[2]*this->q[1] - dq[1]*this->q[2] + dq[0]*this->q[3];
 
-  if (! quadIsFlying) {
-    float keep = 1.0f - ROLLPITCH_ZERO_REVERSION;
+  // if (! quadIsFlying) {
+  //   float keep = 1.0f - ROLLPITCH_ZERO_REVERSION;
 
-    tmpq0 = keep * tmpq0 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[0];
-    tmpq1 = keep * tmpq1 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[1];
-    tmpq2 = keep * tmpq2 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[2];
-    tmpq3 = keep * tmpq3 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[3];
-  }
+  //   tmpq0 = keep * tmpq0 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[0];
+  //   tmpq1 = keep * tmpq1 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[1];
+  //   tmpq2 = keep * tmpq2 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[2];
+  //   tmpq3 = keep * tmpq3 + ROLLPITCH_ZERO_REVERSION * initialQuaternion[3];
+  // }
 
   // normalize and store the result
   float norm = arm_sqrt(tmpq0*tmpq0 + tmpq1*tmpq1 + tmpq2*tmpq2 + tmpq3*tmpq3) + EPS;
@@ -792,53 +793,53 @@ void kalmanCoreDecoupleXY(kalmanCoreData_t* this)
   decoupleState(this, KC_STATE_PY);
 }
 
-PARAM_GROUP_START(kalman)
-/**
- * @brief Process noise for x and y acceleration
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, pNAcc_xy, &procNoiseAcc_xy)
- /**
- * @brief Process noise for z acceleration
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, pNAcc_z, &procNoiseAcc_z)
- /**
- * @brief Process noise for velocity
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, pNVel, &procNoiseVel)
- /**
- * @brief Process noise for position
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, pNPos, &procNoisePos)
- /**
- * @brief Process noise for attitude
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, pNAtt, &procNoiseAtt)
- /**
- * @brief Measurement noise for barometer
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, mNBaro, &measNoiseBaro)
- /**
- * @brief Measurement Noise for roll/pitch gyros
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, mNGyro_rollpitch, &measNoiseGyro_rollpitch)
- /**
- * @brief Measurement Noise for yaw gyro
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, mNGyro_yaw, &measNoiseGyro_yaw)
- /**
- * @brief Initial X after reset [m]
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialX, &initialX)
- /**
- * @brief Initial Y after reset [m]
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialY, &initialY)
- /**
- * @brief Initial Z after reset [m]
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialZ, &initialZ)
- /**
- * @brief Initial Yaw after reset [rad]
- */
-  PARAM_ADD_CORE(PARAM_FLOAT, initialYaw, &initialYaw)
-PARAM_GROUP_STOP(kalman)
+// PARAM_GROUP_START(kalman)
+// /**
+//  * @brief Process noise for x and y acceleration
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, pNAcc_xy, &procNoiseAcc_xy)
+//  /**
+//  * @brief Process noise for z acceleration
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, pNAcc_z, &procNoiseAcc_z)
+//  /**
+//  * @brief Process noise for velocity
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, pNVel, &procNoiseVel)
+//  /**
+//  * @brief Process noise for position
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, pNPos, &procNoisePos)
+//  /**
+//  * @brief Process noise for attitude
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, pNAtt, &procNoiseAtt)
+//  /**
+//  * @brief Measurement noise for barometer
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, mNBaro, &measNoiseBaro)
+//  /**
+//  * @brief Measurement Noise for roll/pitch gyros
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, mNGyro_rollpitch, &measNoiseGyro_rollpitch)
+//  /**
+//  * @brief Measurement Noise for yaw gyro
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, mNGyro_yaw, &measNoiseGyro_yaw)
+//  /**
+//  * @brief Initial X after reset [m]
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, initialX, &initialX)
+//  /**
+//  * @brief Initial Y after reset [m]
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, initialY, &initialY)
+//  /**
+//  * @brief Initial Z after reset [m]
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, initialZ, &initialZ)
+//  /**
+//  * @brief Initial Yaw after reset [rad]
+//  */
+//   PARAM_ADD_CORE(PARAM_FLOAT, initialYaw, &initialYaw)
+// PARAM_GROUP_STOP(kalman)

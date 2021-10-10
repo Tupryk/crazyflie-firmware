@@ -495,7 +495,7 @@ bindings_python: bindings/setup.py bin/cffirmware_wrap.c $(MOD_SRC)/*.c
 	$(PYTHON) bindings/setup.py build_ext --inplace
 
 bin/cffirmware_wrap.c cffirmware.py: bindings/cffirmware.i $(MOD_INC)/*.h
-	swig -python -I$(MOD_INC) -o bin/cffirmware_wrap.c bindings/cffirmware.i
+	swig -python -I$(MOD_INC) -I$(MOD_INC)/kalman_core -I$(CRAZYFLIE_BASE)/src/utils/interface -I$(CRAZYFLIE_BASE)/src/hal/interface -o bin/cffirmware_wrap.c bindings/cffirmware.i
 	mv bin/cffirmware.py cffirmware.py
 
 .PHONY: all clean build compile unit prep erase flash check_submodules trace openocd gdb halt reset flash_dfu flash_verify cload size print_version clean_version bindings_python
