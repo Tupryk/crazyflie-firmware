@@ -27,6 +27,7 @@ PLATFORM          ?= cf2
 LPS_TDMA_ENABLE   ?= 0
 LPS_TDOA_ENABLE   ?= 0
 LPS_TDOA3_ENABLE  ?= 0
+APP               ?= 1
 
 
 # Platform configuration handling
@@ -268,6 +269,9 @@ INCLUDES += -I$(LIB)/Segger_RTT/RTT
 PROJ_OBJ += SEGGER_RTT.o SEGGER_RTT_printf.o
 CFLAGS += -DDEBUG_PRINT_ON_SEGGER_RTT
 endif
+
+# App Layer
+PROJ_OBJ += cvmrs.o
 
 # Libs
 PROJ_OBJ += libarm_math.a
