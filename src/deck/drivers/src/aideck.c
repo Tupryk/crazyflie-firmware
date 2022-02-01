@@ -56,6 +56,7 @@
 #include "aideck.h"
 
 static bool isInit = false;
+static bool reset = false;
 static uint8_t byte;
 
 #define UART_TRANSPORT_HEADER_SIZE (2)
@@ -195,7 +196,24 @@ static void Gap8Task(void *param)
   // Read out the byte the Gap8 sends and immediately send it to the console.
   while (1)
   {
+    // If the client triggers a reset via parameter update
+    if (reset) {
+
+      // Pull reset for GAP8/ESP32
+      pinMode(DECK_GPIO_IO4, OUTPUT);
+      digitalWrite(DECK_GPIO_IO4, LOW);
+
+      vTaskDelay(M2T(100));
+
+      // Release reset for GAP8/ESP32
+      digitalWrite(DECK_GPIO_IO4, HIGH);
+      pinMode(DECK_GPIO_IO4, INPUT_PULLUP);
+
+      paramSetInt(paramGetVarId("aiDeck", "reset"), 0);
+    }
+
     uart1GetDataWithDefaultTimeout(&byte);
+    consolePutchar(byte);
   }
 }
 
@@ -329,5 +347,14 @@ PARAM_GROUP_START(deck)
 PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcAIDeck, &isInit)
 
 PARAM_GROUP_STOP(deck)
+
+PARAM_GROUP_START(aiDeck)
+/**
+ * @brief Reset the AI deck (GAP8 and NINA)
+ */
+PARAM_ADD_CORE(PARAM_UINT8, reset, &reset)
+
+PARAM_GROUP_STOP(aiDeck)
+
 
 DECK_DRIVER(aideck_deck);

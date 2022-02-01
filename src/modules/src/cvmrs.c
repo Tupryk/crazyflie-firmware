@@ -5,7 +5,7 @@
 #include "aideck.h"
 #include "usec_time.h"
 
-#define TASK_FREQ 100
+#define TASK_FREQ 10
 
 typedef struct
 {
@@ -27,7 +27,6 @@ void appMain()
     //Wait for the system to be fully started to start stabilization loop
     systemWaitStart();
 
-    lastWakeTime = xTaskGetTickCount();
 
     logVarId_t x_id = logGetVarId("stateEstimateZ", "x");
     logVarId_t y_id = logGetVarId("stateEstimateZ", "y");
@@ -40,6 +39,9 @@ void appMain()
     StatePacket_t* state_packet = (StatePacket_t*)&cpx_packet.data;
     state_packet->cmd = 0;
 
+    vTaskDelay(10000);
+
+    lastWakeTime = xTaskGetTickCount();
     while (1)
     {
         vTaskDelayUntil(&lastWakeTime, F2T(TASK_FREQ));
