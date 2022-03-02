@@ -112,6 +112,11 @@ void attitudeControllerCorrectRatePID(
   yawOutput = saturateSignedInt16(pidUpdate(&pidYawRate, yawRateActual, true));
 }
 
+static float my_mod(float a, float n)
+{
+  return a - floorf(a/n) * n;
+}
+
 void attitudeControllerCorrectAttitudePID(
        float eulerRollActual, float eulerPitchActual, float eulerYawActual,
        float eulerRollDesired, float eulerPitchDesired, float eulerYawDesired,
@@ -127,10 +132,8 @@ void attitudeControllerCorrectAttitudePID(
   // Update PID for yaw axis
   float yawError;
   yawError = eulerYawDesired - eulerYawActual;
-  if (yawError > 180.0f)
-    yawError -= 360.0f;
-  else if (yawError < -180.0f)
-    yawError += 360.0f;
+  // see https://stackoverflow.com/questions/1878907/how-can-i-find-the-difference-between-two-angles
+  yawError = my_mod(yawError + 180, 360) - 180;
   pidSetError(&pidYaw, yawError);
   *yawRateDesired = pidUpdate(&pidYaw, eulerYawActual, false);
 }
