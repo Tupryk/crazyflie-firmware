@@ -33,9 +33,10 @@ void appMain()
     logVarId_t z_id = logGetVarId("stateEstimateZ", "z");
     logVarId_t quat_id = logGetVarId("stateEstimateZ", "quat");
 
-    cpx_packet.route.destination = GAP8;
-    cpx_packet.route.function = APP;
-    cpx_packet.route.source = STM32;
+    cpx_packet.route.destination = CPX_T_GAP8;
+    cpx_packet.route.function = CPX_F_APP;
+    cpx_packet.route.source = CPX_T_STM32;
+    cpx_packet.dataLength = sizeof(StatePacket_t);
     StatePacket_t* state_packet = (StatePacket_t*)&cpx_packet.data;
     state_packet->cmd = 0;
 
@@ -53,6 +54,6 @@ void appMain()
         state_packet->z = logGetInt(z_id);
         state_packet->quat = logGetInt(quat_id);
 
-        cpxSendPacketBlocking(&cpx_packet, sizeof(StatePacket_t));
+        cpxSendPacketBlocking(&cpx_packet);
     }
 }
