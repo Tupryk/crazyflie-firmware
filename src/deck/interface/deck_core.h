@@ -66,10 +66,12 @@ bool deckTest(void);
 #define DECK_USING_I2C     (DECK_USING_PB6  | DECK_USING_PB7)
 #define DECK_USING_TIMER3  (1 << 13)
 #define DECK_USING_TIMER5  (1 << 14)
+#define DECK_USING_TIMER10 (1 << 16)
 #define DECK_USING_TIMER14 (1 << 15)
 
 struct deckInfo_s;
 struct deckFwUpdate_s;
+typedef struct deckMemDef_s deckMemDef_t;
 
 /* Structure definition and registering macro */
 typedef struct deck_driver {
@@ -96,8 +98,11 @@ typedef struct deck_driver {
   StateEstimatorType requiredEstimator;
   bool requiredLowInterferenceRadioMode;
 
-  // Deck memory access definition
+  // Deck memory access definitions
   const struct deckMemDef_s* memoryDef;
+
+  // Secondary memory area for instance for decks with two firmwares.
+  const struct deckMemDef_s* memoryDefSecondary;
 
   /* Init and test functions */
   void (*init)(struct deckInfo_s *);
@@ -146,11 +151,12 @@ typedef struct deckInfo_s {
  * @param address: Address where the buffer should be written. The start of the firmware is at address 0.
  * @param len: Buffer length
  * @param buffer: Buffer to write in the firmware memory
+ * @param memDef: The memory def for the device the write is related to
  *
- * @return True if the buffer could be written successully, false otherwise (if the deck if not in bootloader
+ * @return True if the buffer could be written successfully, false otherwise (if the deck is not in bootloader
  *         mode for example)
  */
-typedef bool (deckMemoryWrite)(const uint32_t vAddr, const uint8_t len, const uint8_t* buffer);
+typedef bool (deckMemoryWrite)(const uint32_t vAddr, const uint8_t len, const uint8_t* buffer, const struct deckMemDef_s* memDef);
 
 /**
  * @brief Definition of function to read the firmware
@@ -176,6 +182,11 @@ typedef bool (deckMemoryRead)(const uint32_t vAddr, const uint8_t len, uint8_t* 
 typedef uint8_t (deckMemoryProperties)();
 
 /**
+ * @brief Definition of function to execute a command
+ */
+typedef void (deckMemoryCommandCallback)();
+
+/**
  * @brief This struct defines the firmware required by the deck and the function
  * to use to flash new firmware to the deck.
  */
@@ -187,14 +198,23 @@ typedef struct deckMemDef_s {
   // Function to query properties of the deck memory
   deckMemoryProperties* properties;
 
-  // True if the deck supports FW upgrades
+  // Set to true if the deck supports FW upgrades
   bool supportsUpgrade;
+
+  // A pointer to a uint32_t that holds the size of a new FW to be flashed to the device (if supported)
+  // Updated by the cfloader during flashing and should be considered read-only
+  uint32_t* newFwSizeP;
 
   // Definition of the required firmware for the deck (if supported)
   uint32_t requiredHash;
-  // TOOD krri rename to length?
   uint32_t requiredSize;
 
+  // Optional id, if non-null will be added to the name as [drivername:id]
+  const char *id;
+
+  // Optional command callbacks
+  deckMemoryCommandCallback* commandResetToFw;
+  deckMemoryCommandCallback* commandResetToBootloader;
 } DeckMemDef_t;
 
 int deckCount(void);

@@ -31,7 +31,7 @@
 
 #pragma once
 
-// #include "cfassert.h"
+#include "cfassert.h"
 
 /**
  * @brief Macro to indicate that a variable can be placed in the CCM
