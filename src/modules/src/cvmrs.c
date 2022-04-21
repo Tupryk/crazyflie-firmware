@@ -4,6 +4,7 @@
 #include "log.h"
 #include "aideck.h"
 #include "usec_time.h"
+#include "debug.h"
 
 #define TASK_FREQ 10
 
@@ -13,7 +14,7 @@ typedef struct
     uint64_t timestamp; // usec timestamp from STM32
     int16_t x;          // compressed [mm]
     int16_t y;          // compressed [mm]
-    int16_t z;          // compressed
+    int16_t z;          // compressed [mm]
     uint32_t quat;      // compressed, see quatcompress.h
 } __attribute__((packed)) StatePacket_t;
 // static StatePacket_t cf_state;
@@ -33,9 +34,7 @@ void appMain()
     logVarId_t z_id = logGetVarId("stateEstimateZ", "z");
     logVarId_t quat_id = logGetVarId("stateEstimateZ", "quat");
 
-    cpx_packet.route.destination = CPX_T_GAP8;
-    cpx_packet.route.function = CPX_F_APP;
-    cpx_packet.route.source = CPX_T_STM32;
+    cpxInitRoute(CPX_T_STM32, CPX_T_GAP8, CPX_F_APP, &cpx_packet.route);
     cpx_packet.dataLength = sizeof(StatePacket_t);
     StatePacket_t* state_packet = (StatePacket_t*)&cpx_packet.data;
     state_packet->cmd = 0;
@@ -54,6 +53,7 @@ void appMain()
         state_packet->z = logGetInt(z_id);
         state_packet->quat = logGetInt(quat_id);
 
-        cpxSendPacketBlocking(&cpx_packet);
+        cpxSendPacket(&cpx_packet, /*timeout*/ 10 /* ms */);
+        // DEBUG_PRINT("cpxSendPacket\n");
     }
 }
