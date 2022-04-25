@@ -6,7 +6,7 @@
 #include "usec_time.h"
 #include "debug.h"
 
-#define TASK_FREQ 10
+#define TASK_FREQ 1
 
 typedef struct
 {
