@@ -115,6 +115,7 @@ static bool enableLighthouseAngleStream = false;
 static float extPosStdDev = 0.01;
 static float extQuatStdDev = 4.5e-3;
 static bool isInit = false;
+static bool isTimeSynced = false;
 static uint8_t my_id;
 static uint16_t tickOfLastPacket; // tick when last packet was received
 
@@ -161,7 +162,29 @@ static void updateLogFromExtPos()
   ext_pose.z = ext_pos.z;
 }
 
+/* This function is called from all localization events that use
+   broadcasts (i.e., pos, pos_packed, pose, pose_packed). The first
+   time such a broadcast is received, the usecTimer is reset to 0.
+   Since broadcasts are received simultanously at all Crazyflies,
+   this should reset the local on-board timer of all Crazyflies
+   at almost the same exact time.
+
+   TODO: In the future, it would be better to have a dedicated CRTP
+         functionality for this, rather than "piggybacking" on the
+         localization service for the motion capture.
+*/
+
+static void syncTimeIfNeeded()
+{
+  if (!isTimeSynced) {
+    usecTimerReset();
+    isTimeSynced = true;
+  }
+}
+
 static void extPositionHandler(CRTPPacket* pk) {
+  syncTimeIfNeeded();
+
   const struct CrtpExtPosition* data = (const struct CrtpExtPosition*)pk->data;
 
   ext_pos.x = data->x;
@@ -176,6 +199,8 @@ static void extPositionHandler(CRTPPacket* pk) {
 }
 
 static void extPoseHandler(const CRTPPacket* pk) {
+  syncTimeIfNeeded();
+
   const struct CrtpExtPose* data = (const struct CrtpExtPose*)&pk->data[1];
 
   ext_pose.x = data->x;
@@ -193,6 +218,8 @@ static void extPoseHandler(const CRTPPacket* pk) {
 }
 
 static void extPosePackedHandler(const CRTPPacket* pk) {
+  syncTimeIfNeeded();
+
   uint8_t numItems = (pk->size - 1) / sizeof(extPosePackedItem);
   for (uint8_t i = 0; i < numItems; ++i) {
     const extPosePackedItem* item = (const extPosePackedItem*)&pk->data[1 + i * sizeof(extPosePackedItem)];
@@ -306,6 +333,8 @@ static void genericLocHandle(CRTPPacket* pk)
 
 static void extPositionPackedHandler(CRTPPacket* pk)
 {
+  syncTimeIfNeeded();
+
   uint8_t numItems = pk->size / sizeof(extPositionPackedItem);
   for (uint8_t i = 0; i < numItems; ++i) {
     const extPositionPackedItem* item = (const extPositionPackedItem*)&pk->data[i * sizeof(extPositionPackedItem)];
