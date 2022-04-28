@@ -1,9 +1,7 @@
 
-#include "stabilizer.h"
 #include "stabilizer_types.h"
 
 #include "attitude_controller.h"
-#include "sensfusion6.h"
 #include "position_controller.h"
 #include "controller_pid.h"
 
@@ -12,8 +10,6 @@
 #include "math3d.h"
 
 #define ATTITUDE_UPDATE_DT    (float)(1.0f/ATTITUDE_RATE)
-
-static bool tiltCompensationEnabled = false;
 
 static attitude_t attitudeDesired;
 static attitude_t rateDesired;
@@ -79,8 +75,12 @@ void controllerPid(control_t *control, setpoint_t *setpoint,
           attitudeDesired.yaw = state->attitude.yaw - YAW_MAX_DELTA;
         }
       #endif
-    } else {
+    } else if (setpoint->mode.yaw == modeAbs) {
       attitudeDesired.yaw = setpoint->attitude.yaw;
+    } else if (setpoint->mode.quat == modeAbs) {
+      struct quat setpoint_quat = mkquat(setpoint->attitudeQuaternion.x, setpoint->attitudeQuaternion.y, setpoint->attitudeQuaternion.z, setpoint->attitudeQuaternion.w);
+      struct vec rpy = quat2rpy(setpoint_quat);
+      attitudeDesired.yaw = degrees(rpy.z);
     }
 
     attitudeDesired.yaw = capAngle(attitudeDesired.yaw);
@@ -136,14 +136,7 @@ void controllerPid(control_t *control, setpoint_t *setpoint,
     accelz = sensors->acc.z;
   }
 
-  if (tiltCompensationEnabled)
-  {
-    control->thrust = actuatorThrust / sensfusion6GetInvThrustCompensationForTilt();
-  }
-  else
-  {
-    control->thrust = actuatorThrust;
-  }
+  control->thrust = actuatorThrust;
 
   if (control->thrust == 0)
   {
@@ -232,13 +225,3 @@ LOG_ADD(LOG_FLOAT, pitchRate, &rateDesired.pitch)
 LOG_ADD(LOG_FLOAT, yawRate,   &rateDesired.yaw)
 LOG_GROUP_STOP(controller)
 
-
-/**
- * Controller parameters
- */
-PARAM_GROUP_START(controller)
-/**
- * @brief Nonzero for tilt compensation enabled (default: 0)
- */
-PARAM_ADD(PARAM_UINT8, tiltComp, &tiltCompensationEnabled)
-PARAM_GROUP_STOP(controller)

@@ -174,6 +174,13 @@ typedef struct control_s {
   float thrust;
 } control_t;
 
+typedef struct motors_thrust_s {
+  uint16_t m1;  // PWM ratio
+  uint16_t m2;  // PWM ratio
+  uint16_t m3;  // PWM ratio
+  uint16_t m4;  // PWM ratio
+} motors_thrust_t;
+
 typedef enum mode_e {
   modeDisable = 0,
   modeAbs,
@@ -300,6 +307,7 @@ typedef struct
 #define RATE_MAIN_LOOP RATE_1000_HZ
 #define ATTITUDE_RATE RATE_500_HZ
 #define POSITION_RATE RATE_100_HZ
+#define RATE_HL_COMMANDER RATE_100_HZ
 
 #define RATE_DO_EXECUTE(RATE_HZ, TICK) ((TICK % (RATE_MAIN_LOOP / RATE_HZ)) == 0)
 
