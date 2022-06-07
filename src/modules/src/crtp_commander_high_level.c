@@ -112,6 +112,7 @@ static float defaultTakeoffVelocity = 0.5f;
 static float defaultLandingVelocity = 0.5f;
 
 static float yawrate = 0.0f;
+static float yawrate_current = 0.0f;
 
 // Trajectory memory handling from the memory module
 static uint32_t handleMemGetSize(void) { return crtpCommanderHighLevelTrajectoryMemSize(); }
@@ -353,13 +354,22 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
     // store the last setpoint
     pos = ev.pos;
     vel = ev.vel;
-    if (yawrate != 0) {
-      yaw = normalize_radians(yaw + yawrate / ((float)(RATE_HL_COMMANDER)));
+    // if (yawrate != 0) {
+      float delta = yawrate - yawrate_current;
+      if (delta < -0.01f) {
+        delta = -0.01f;
+      }
+      if (delta > 0.01f) {
+        delta = 0.01f;
+      }
+      yawrate_current += delta;
+
+      yaw = normalize_radians(yaw + yawrate_current / ((float)(RATE_HL_COMMANDER)));
       setpoint->attitude.yaw = degrees(yaw);
-      setpoint->attitudeRate.yaw = degrees(yawrate);
-    } else {
-      yaw = ev.yaw;
-    }
+      setpoint->attitudeRate.yaw = degrees(yawrate_current);
+    // } else {
+    //   yaw = ev.yaw;
+    // }
 
     return true;
   }
