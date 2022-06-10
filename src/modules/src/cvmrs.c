@@ -3,6 +3,7 @@
 #include "system.h"
 #include "log.h"
 #include "aideck.h"
+#include "uart1.h"
 #include "usec_time.h"
 #include "debug.h"
 
@@ -39,7 +40,10 @@ void appMain()
     StatePacket_t* state_packet = (StatePacket_t*)&cpx_packet.data;
     state_packet->cmd = 0;
 
-    vTaskDelay(10000);
+    // Delay is only needed for CPX
+    // vTaskDelay(60000);
+
+    DEBUG_PRINT("Starting CVMRS task\n");
 
     lastWakeTime = xTaskGetTickCount();
     while (1)
@@ -53,7 +57,25 @@ void appMain()
         state_packet->z = logGetInt(z_id);
         state_packet->quat = logGetInt(quat_id);
 
-        cpxSendPacket(&cpx_packet, /*timeout*/ 10 /* ms */);
+        // cpxSendPacket(&cpx_packet, /*timeout*/ 10 /* ms */);
+
+        uint8_t magic = 0xBC;
+        uint8_t length = sizeof(StatePacket_t);
+        uart1SendData(1, &magic);
+        uart1SendData(1, &length);
+        uart1SendData(length, (uint8_t*)state_packet);
+
+        // compute crc
+        uint8_t crc = 0;
+        for (const uint8_t* p = (uint8_t*)state_packet; p < (uint8_t*)state_packet + length; p++) {
+            crc ^= *p;
+        }
+        uart1SendData(1, &crc);
+
+        if (uart1DidOverrun()) {
+            DEBUG_PRINT("UART overrun!\n");
+        }
+
         // DEBUG_PRINT("cpxSendPacket\n");
     }
 }
