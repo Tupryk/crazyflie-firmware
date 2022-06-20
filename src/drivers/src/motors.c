@@ -827,7 +827,7 @@ LOG_ADD(LOG_UINT16, m3_pwm, &motor_ratios[2])
 /**
  * @brief Current motor 4 PWM output
  */ 
-LOG_ADD(LOG_UINT32, m4_pwm, &motor_ratios[3])
+LOG_ADD(LOG_UINT16, m4_pwm, &motor_ratios[3])
 /**
  * @brief Cycle time of M1 output in microseconds
  */
