@@ -44,6 +44,21 @@
 //Logging includes
 #include "log.h"
 #include "param.h"
+#include "math3d.h"
+
+// Data for CF14
+static float d00 = 0.5543364748044269;
+static float d10 = 0.11442589787133063;
+static float d01 = -0.5067031467944692;
+static float d20 = -0.002283966554392003;
+static float d11 = -0.03255320005438393;
+
+static float e00 = -10.291152501242268;
+static float e10 = 3.926415845326646;
+static float e01 = 26.077196474667165;
+
+static float maxThrust;
+static bool new_thrust_comp = false;
 
 static bool motorSetEnable = false;
 static uint32_t motorPower[] = {0, 0, 0, 0};    // user-requested PWM signals
@@ -92,6 +107,12 @@ const MotorHealthTestDef unknownMotorHealthTestSettings = {
 };
 
 static bool isInit = false;
+
+// Compensate thrust depending on battery voltage so it will produce about the same
+// amount of thrust independent of the battery voltage. Based on thrust measurement.
+// Not applied for brushless motor setup.
+static uint8_t batCompensation = true;
+
 static uint64_t lastCycleTime;
 static uint32_t cycleTime;
 
@@ -168,6 +189,7 @@ GPIO_InitTypeDef GPIO_PassthroughOutput =
 //
 // And to get the PWM as a percentage we would need to divide the
 // Voltage needed with the Supply voltage.
+
 static uint16_t motorsCompensateBatteryVoltage(uint16_t ithrust)
 {
   float supply_voltage = pmGetBatteryVoltage();
@@ -179,6 +201,24 @@ static uint16_t motorsCompensateBatteryVoltage(uint16_t ithrust)
    * under 2V. That would suggest a damaged battery. This protects against
    * rushing the motors on bugs and invalid voltage levels.
    */
+  if (new_thrust_comp) {
+    if (ithrust > 0) {
+      // desired thrust in grams
+      float maxThrust = motorsGetMaxThrust();
+      float maxNewton = maxThrust / 1000.0f * 9.81f;
+      float thrustNewton = ((float)ithrust / 65535.0f) * maxNewton;
+      float thrustGram = thrustNewton / 9.81f * 1000.0f;
+      // normalized voltage
+      float v = supply_voltage / 4.2f;
+      // normalized pwm:
+      float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+
+      return pwm * UINT16_MAX;
+    } else {
+      return 0;
+    }
+  }
+
   if (supply_voltage < 2.0f)
   {
     return ithrust;
@@ -327,6 +367,9 @@ void motorsStop()
   motorsSetRatio(MOTOR_M2, 0);
   motorsSetRatio(MOTOR_M3, 0);
   motorsSetRatio(MOTOR_M4, 0);
+#ifdef CONFIG_MOTORS_ESC_PROTOCOL_DSHOT
+  motorsBurstDshot();
+#endif
 }
 
 #ifdef CONFIG_MOTORS_ESC_PROTOCOL_DSHOT
@@ -353,6 +396,11 @@ static void motorsDshotDMASetup()
 
   for (int i = 0; i < NBR_OF_MOTORS; i++)
   {
+    DMA_InitStructureShare.DMA_PeripheralBaseAddr = motorMap[i]->DMA_PerifAddr;
+    DMA_InitStructureShare.DMA_Memory0BaseAddr = (uint32_t)dshotDmaBuffer[i];
+    DMA_InitStructureShare.DMA_Channel = motorMap[i]->DMA_Channel;
+    DMA_Init(motorMap[i]->DMA_stream, &DMA_InitStructureShare);
+
     NVIC_InitStructure.NVIC_IRQChannel = motorMap[i]->DMA_IRQChannel;
     NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_MID_PRI;
     NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
@@ -403,41 +451,43 @@ static void motorsPrepareDshot(uint32_t id, uint16_t ratio)
   {
     dmaWait++;
   }
-
-  // Setup DMA Stream. TODO optimize reloading
-  DMA_InitStructureShare.DMA_PeripheralBaseAddr = motorMap[id]->DMA_PerifAddr;
-  DMA_InitStructureShare.DMA_Memory0BaseAddr = (uint32_t)dshotDmaBuffer[id];
-  DMA_InitStructureShare.DMA_Channel = motorMap[id]->DMA_Channel;
-  DMA_Init(motorMap[id]->DMA_stream, &DMA_InitStructureShare);
-
-  DMA_ITConfig(motorMap[id]->DMA_stream, DMA_IT_TC, ENABLE);
 }
 
 /**
- * Unfortunately the TIM2_CH2 and TIM2_CH4 share DMA channel 3 request and can't
+ * Unfortunately the TIM2_CH2 (M1) and TIM2_CH4 (M2) share DMA channel 3 request and can't
  * be used at the same time. Solved by running after each other and TIM2_CH2
  * will be started in DMA1_Stream6_IRQHandler. Thus M2 will have a bit of latency.
  */
 void motorsBurstDshot()
 {
 
-  /* Enable TIM DMA Requests M2*/
+    motorMap[0]->DMA_stream->NDTR = DSHOT_DMA_BUFFER_SIZE;
+    motorMap[1]->DMA_stream->NDTR = DSHOT_DMA_BUFFER_SIZE;
+    /* Enable TIM DMA Requests M1*/
     TIM_DMACmd(motorMap[0]->tim, motorMap[0]->TIM_DMASource, ENABLE);
+    DMA_ITConfig(motorMap[0]->DMA_stream, DMA_IT_TC, ENABLE);
+    DMA_ITConfig(motorMap[1]->DMA_stream, DMA_IT_TC, ENABLE);
     /* Enable DMA TIM Stream */
     DMA_Cmd(motorMap[0]->DMA_stream, ENABLE);
+
+    motorMap[2]->DMA_stream->NDTR = DSHOT_DMA_BUFFER_SIZE;
     /* Enable TIM DMA Requests M3*/
     TIM_DMACmd(motorMap[2]->tim, motorMap[2]->TIM_DMASource, ENABLE);
+    DMA_ITConfig(motorMap[2]->DMA_stream, DMA_IT_TC, ENABLE);
     /* Enable DMA TIM Stream */
     DMA_Cmd(motorMap[2]->DMA_stream, ENABLE);
+
+    motorMap[3]->DMA_stream->NDTR = DSHOT_DMA_BUFFER_SIZE;
     /* Enable TIM DMA Requests M4*/
     TIM_DMACmd(motorMap[3]->tim, motorMap[3]->TIM_DMASource, ENABLE);
+    DMA_ITConfig(motorMap[3]->DMA_stream, DMA_IT_TC, ENABLE);
     /* Enable DMA TIM Stream */
     DMA_Cmd(motorMap[3]->DMA_stream, ENABLE);
 }
 #endif
 
 
-// Ithrust is thrust mapped for 65536 <==> 60 grams
+// Ithrust is thrust mapped for 65536 <==> 15 grams (per rotor)
 void motorsSetRatio(uint32_t id, uint16_t ithrust)
 {
   if (isInit) {
@@ -447,15 +497,16 @@ void motorsSetRatio(uint32_t id, uint16_t ithrust)
 
     motorPower[id] = ithrust;
 
-#ifdef ENABLE_THRUST_BAT_COMPENSATED
-    if (motorMap[id]->drvType == BRUSHED)
+    if (batCompensation)
     {
-      // To make sure we provide the correct PWM given current supply voltage
-      // from the battery, we do calculations based on measurements of PWM,
-      // voltage and thrust. See comment at function definition for details.
-      ratio = motorsCompensateBatteryVoltage(ithrust);
+      if (motorMap[id]->drvType == BRUSHED)
+      {
+        // To make sure we provide the correct PWM given current supply voltage
+        // from the battery, we do calculations based on measurements of PWM,
+        // voltage and thrust. See comment at function definition for details.
+        ratio = motorsCompensateBatteryVoltage(ithrust);
+      }
     }
-#endif
 
     motor_ratios[id] = ratio;
     if (motorSetEnable) {
@@ -557,28 +608,67 @@ int motorsGetRatio(uint32_t id)
   return motor_ratios[id];
 }
 
+
+// computes maximum thrust in grams given the current battery state
+float motorsGetMaxThrust()
+{
+  // normalized voltage
+  float v = pmGetBatteryVoltage() / 4.2f;
+  // normalized pwm
+  float pwm = (motor_ratios[0] + motor_ratios[1] + motor_ratios[2] + motor_ratios[3]) / 4.0f / UINT16_MAX;
+
+  maxThrust = clamp(e00 + e10 * pwm + e01 * v, 8, 50);
+
+  return maxThrust;
+}
+
+// set thrust for motor (in grams)
+void motorsSetThrust(uint32_t id, float thrustGram)
+{
+  if (motorMap[id]->drvType == BRUSHED)
+  {
+    if (thrustGram > 0) {
+      // normalized voltage
+      float v = pmGetBatteryVoltage() / 4.2f;
+      // normalized pwm:
+      float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+
+      motor_ratios[id] = pwm * UINT16_MAX;
+    } else {
+      motor_ratios[id] = 0;
+    }
+
+    motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(motor_ratios[id]));
+  } else {
+    ASSERT(false);
+  }
+}
+
 void motorsBeep(int id, bool enable, uint16_t frequency, uint16_t ratio)
 {
   TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
 
   ASSERT(id < NBR_OF_MOTORS);
 
-  TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
-
-  if (enable)
+  if (motorMap[id]->drvType == BRUSHED)
   {
-    TIM_TimeBaseStructure.TIM_Prescaler = (5 - 1);
-    TIM_TimeBaseStructure.TIM_Period = (uint16_t)(MOTORS_TIM_BEEP_CLK_FREQ / frequency);
-  }
-  else
-  {
-    TIM_TimeBaseStructure.TIM_Period = motorMap[id]->timPeriod;
-    TIM_TimeBaseStructure.TIM_Prescaler = motorMap[id]->timPrescaler;
-  }
+    TIM_TimeBaseStructInit(&TIM_TimeBaseStructure);
 
-  // Timer configuration
-  TIM_TimeBaseInit(motorMap[id]->tim, &TIM_TimeBaseStructure);
-  motorMap[id]->setCompare(motorMap[id]->tim, ratio);
+    if (enable)
+    {
+      TIM_TimeBaseStructure.TIM_Prescaler = (5 - 1);
+      TIM_TimeBaseStructure.TIM_Period = (uint16_t)(MOTORS_TIM_BEEP_CLK_FREQ / frequency);
+    }
+    else
+    {
+      TIM_TimeBaseStructure.TIM_Period = motorMap[id]->timPeriod;
+      TIM_TimeBaseStructure.TIM_Prescaler = motorMap[id]->timPrescaler;
+    }
+
+    // Timer configuration
+    TIM_TimeBaseInit(motorMap[id]->tim, &TIM_TimeBaseStructure);
+    motorMap[id]->setCompare(motorMap[id]->tim, ratio);
+  }
 }
 
 
@@ -632,19 +722,19 @@ const MotorHealthTestDef* motorsGetHealthTestSettings(uint32_t id)
 }
 
 #ifdef CONFIG_MOTORS_ESC_PROTOCOL_DSHOT
-void __attribute__((used)) DMA1_Stream1_IRQHandler(void)
+void __attribute__((used)) DMA1_Stream1_IRQHandler(void)  // M4
 {
   TIM_DMACmd(TIM2, TIM_DMA_CC3, DISABLE);
   DMA_ClearITPendingBit(DMA1_Stream1, DMA_IT_TCIF1);
   DMA_ITConfig(DMA1_Stream1, DMA_IT_TC, DISABLE);
 }
-void __attribute__((used)) DMA1_Stream5_IRQHandler(void)
+void __attribute__((used)) DMA1_Stream5_IRQHandler(void)  // M3
 {
   TIM_DMACmd(TIM2, TIM_DMA_CC1, DISABLE);
   DMA_ClearITPendingBit(DMA1_Stream5, DMA_IT_TCIF5);
   DMA_ITConfig(DMA1_Stream5, DMA_IT_TC, DISABLE);
 }
-void __attribute__((used)) DMA1_Stream6_IRQHandler(void)
+void __attribute__((used)) DMA1_Stream6_IRQHandler(void) // M1
 {
   TIM_DMACmd(TIM2, TIM_DMA_CC2, DISABLE);
   DMA_ClearITPendingBit(DMA1_Stream6, DMA_IT_TCIF6);
@@ -654,7 +744,7 @@ void __attribute__((used)) DMA1_Stream6_IRQHandler(void)
   /* Enable DMA TIM Stream */
   DMA_Cmd(motorMap[1]->DMA_stream, ENABLE);
 }
-void __attribute__((used)) DMA1_Stream7_IRQHandler(void)
+void __attribute__((used)) DMA1_Stream7_IRQHandler(void)  // M2
 {
   TIM_DMACmd(TIM2, TIM_DMA_CC4, DISABLE);
   DMA_ClearITPendingBit(DMA1_Stream7, DMA_IT_TCIF7);
@@ -725,15 +815,15 @@ LOG_GROUP_START(pwm)
 /**
  * @brief Current motor 1 PWM output
  */ 
-LOG_ADD(LOG_UINT32, m1_pwm, &motor_ratios[0])
+LOG_ADD(LOG_UINT16, m1_pwm, &motor_ratios[0])
 /**
  * @brief Current motor 2 PWM output
  */ 
-LOG_ADD(LOG_UINT32, m2_pwm, &motor_ratios[1])
+LOG_ADD(LOG_UINT16, m2_pwm, &motor_ratios[1])
 /**
  * @brief Current motor 3 PWM output
  */ 
-LOG_ADD(LOG_UINT32, m3_pwm, &motor_ratios[2])
+LOG_ADD(LOG_UINT16, m3_pwm, &motor_ratios[2])
 /**
  * @brief Current motor 4 PWM output
  */ 
@@ -742,4 +832,23 @@ LOG_ADD(LOG_UINT32, m4_pwm, &motor_ratios[3])
  * @brief Cycle time of M1 output in microseconds
  */
 LOG_ADD(LOG_UINT32, cycletime, &cycleTime)
+
+LOG_ADD(LOG_FLOAT, maxThrust, &maxThrust)
 LOG_GROUP_STOP(pwm)
+
+PARAM_GROUP_START(pwm)
+
+  PARAM_ADD(PARAM_FLOAT, d00, &d00)
+  PARAM_ADD(PARAM_FLOAT, d10, &d10)
+  PARAM_ADD(PARAM_FLOAT, d01, &d01)
+  PARAM_ADD(PARAM_FLOAT, d20, &d20)
+  PARAM_ADD(PARAM_FLOAT, d11, &d11)
+
+  PARAM_ADD(PARAM_FLOAT, e00, &e00)
+  PARAM_ADD(PARAM_FLOAT, e10, &e10)
+  PARAM_ADD(PARAM_FLOAT, e01, &e01)
+  
+  PARAM_ADD(PARAM_UINT8, new_thrust_comp, &new_thrust_comp)
+
+
+PARAM_GROUP_STOP(pwm)

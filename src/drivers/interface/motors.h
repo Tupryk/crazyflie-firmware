@@ -58,11 +58,6 @@
 #define MOTORS_TIM_DBG_CFG        DBGMCU_APB2PeriphConfig
 #define MOTORS_GPIO_AF_CFG(a,b,c) GPIO_PinAFConfig(a,b,c)
 
-// Compensate thrust depending on battery voltage so it will produce about the same
-// amount of thrust independent of the battery voltage. Based on thrust measurement.
-// Not applied for brushless motor setup.
-#define ENABLE_THRUST_BAT_COMPENSATED
-
 #ifdef CONFIG_MOTORS_ESC_PROTOCOL_ONESHOT125
 /**
  * *WARNING* Make sure the brushless driver is configured correctly as on the Crazyflie with normal
@@ -323,6 +318,12 @@ void motorsBurstDshot();
  * Set the PWM ratio of the motor 'id'
  */
 void motorsSetRatio(uint32_t id, uint16_t ratio);
+
+// computes maximum thrust in grams given the current battery state
+float motorsGetMaxThrust();
+
+// set thrust for motor (in grams)
+void motorsSetThrust(uint32_t id, float thrust);
 
 /**
  * Get the PWM ratio of the motor 'id'. Return -1 if wrong ID.
