@@ -2,7 +2,7 @@
 #include "task.h"
 #include "system.h"
 #include "log.h"
-#include "aideck.h"
+#include "cpx_internal_router.h"
 #include "uart1.h"
 #include "usec_time.h"
 #include "debug.h"
