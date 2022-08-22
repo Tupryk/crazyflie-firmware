@@ -9,6 +9,7 @@
 #include "controller_sjc.h"
 #include "controller_mellingerSI.h"
 #include "controller_lee.h"
+#include "controller_lee_payload.h"
 
 #include "autoconf.h"
 
@@ -31,7 +32,8 @@ static ControllerFcns controllerFunctions[] = {
   {.init = controllerINDIInit, .test = controllerINDITest, .update = controllerINDI, .name = "INDI"},
   {.init = controllerSJCInit, .test = controllerSJCTest, .update = controllerSJC, .name = "SJC"},
   {.init = controllerMellingerSIInit, .test = controllerMellingerSITest, .update = controllerMellingerSI, .name = "MellingerSI"},
-  {.init = controllerLeeInit, .test = controllerLeeTest, .update = controllerLee, .name = "Lee"},
+  {.init = controllerLeeFirmwareInit, .test = controllerLeeFirmwareTest, .update = controllerLeeFirmware, .name = "Lee"},
+  {.init = controllerLeePayloadFirmwareInit, .test = controllerLeePayloadFirmwareTest, .update = controllerLeePayloadFirmware, .name = "LeePayload"},
 };
 
 
