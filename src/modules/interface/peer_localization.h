@@ -22,12 +22,13 @@ bool peerLocalizationTest();
 typedef struct peerLocalizationOtherPosition_s {
   uint8_t id;  // CF id
   point_t pos; // position and timestamp (millisecs)
+  float yaw;   // yaw in radians
 } peerLocalizationOtherPosition_t;
 
 // Tell the peer localization system the position of another Crazyflie.
 // Should be called when the position is already known with high accuracy,
 // e.g. when a motion capture measurement packet is received.
-bool peerLocalizationTellPosition(int id, positionMeasurement_t const *pos);
+bool peerLocalizationTellPosition(int id, positionMeasurement_t const *pos, float yaw);
 
 // Returns true if we have a position value for the given radio ID.
 bool peerLocalizationIsIDActive(uint8_t id);

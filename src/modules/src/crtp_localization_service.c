@@ -217,7 +217,11 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       ext_pos.y = item->y / 1000.0f;
       ext_pos.z = item->z / 1000.0f;
       ext_pos.stdDev = extPosStdDev;
-      peerLocalizationTellPosition(item->id, &ext_pos);
+      // add current yaw
+      quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
+      struct quat q = mkquat(ext_pose.quat.x, ext_pose.quat.y, ext_pose.quat.z, ext_pose.quat.w); // prepare quats for convertion to roll, pitch, yaw
+      float yaw = quat2rpy(q).z;   // calc roll, pitch yaw; we only need yaw currently
+      peerLocalizationTellPosition(item->id, &ext_pos, yaw);
     }
   }
 }
@@ -330,7 +334,7 @@ static void extPositionPackedHandler(CRTPPacket* pk)
       tickOfLastPacket = xTaskGetTickCount();
     }
     else {
-      peerLocalizationTellPosition(item->id, &ext_pos);
+      peerLocalizationTellPosition(item->id, &ext_pos, 0.0f); // yaw set to 0.0 since this information is not needed here
     }
   }
 }
