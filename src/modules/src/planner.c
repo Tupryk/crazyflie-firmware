@@ -37,6 +37,7 @@ implementation of planning state machine
 */
 #include <stddef.h>
 #include "planner.h"
+#include "math3d.h"
 
 static struct traj_eval plan_eval(struct planner *p, float t);
 
@@ -178,9 +179,13 @@ int plan_go_to_from(struct planner *p, const struct traj_eval *curr_eval, bool r
 		hover_yaw += curr_eval->yaw;
 	}
 
+	float current_yaw = normalize_radians(curr_eval->yaw);
+	hover_yaw = normalize_radians(hover_yaw);
+	float goal_yaw = current_yaw + shortest_signed_angle_radians(current_yaw, hover_yaw);
+
 	piecewise_plan_7th_order_no_jerk(&p->planned_trajectory, duration,
-		curr_eval->pos, curr_eval->yaw, curr_eval->vel, curr_eval->omega.z, curr_eval->acc,
-		hover_pos,      hover_yaw,      vzero(),        0,                  vzero());
+		curr_eval->pos, current_yaw, curr_eval->vel, curr_eval->omega.z, curr_eval->acc,
+		hover_pos,      goal_yaw,      vzero(),        0,                  vzero());
 
 	p->reversed = false;
 	p->state = TRAJECTORY_STATE_FLYING;

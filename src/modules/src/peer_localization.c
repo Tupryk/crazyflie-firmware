@@ -19,7 +19,7 @@ bool peerLocalizationTest()
 // array of other's position
 static peerLocalizationOtherPosition_t other_positions[PEER_LOCALIZATION_MAX_NEIGHBORS];
 
-bool peerLocalizationTellPosition(int cfid, positionMeasurement_t const *pos)
+bool peerLocalizationTellPosition(int cfid, positionMeasurement_t const *pos, float yaw)
 {
   for (uint8_t i = 0; i < PEER_LOCALIZATION_MAX_NEIGHBORS; ++i) {
     if (other_positions[i].id == 0 || other_positions[i].id == cfid) {
@@ -28,6 +28,7 @@ bool peerLocalizationTellPosition(int cfid, positionMeasurement_t const *pos)
       other_positions[i].pos.y = pos->y;
       other_positions[i].pos.z = pos->z;
       other_positions[i].pos.timestamp = xTaskGetTickCount();
+      other_positions[i].yaw = yaw;    // yaw in radians
       return true;
     }
   }
