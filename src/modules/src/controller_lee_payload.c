@@ -44,8 +44,8 @@ TODO
 static inline struct vec computePlaneNormal(struct vec rpy, float yaw) {
 // Compute the normal of a plane, given the extrinsic roll-pitch-yaw of the z-axis 
 // and the yaw representing the x-axis of the plan's frame
-  struct vec x = mkvec(cosf(yaw), sinf(yaw), 0);
-  struct quat q = rpy2quat(rpy);
+  struct vec x = mkvec(cosf(radians(yaw)), sinf(radians(yaw)), 0);
+  struct quat q = rpy2quat(mkvec(radians(rpy.x), radians(rpy.y), radians(rpy.z)));
   struct mat33 Rq = quat2rotmat(q);
   struct vec e3 = mkvec(0,0,1);
   struct vec z = mvmul(Rq, e3);
@@ -106,13 +106,21 @@ static controllerLeePayload_t g_self = {
   .Komega = {0.0013, 0.0013, 0.002},
   .KI = {0.02, 0.02, 0.05},
   // -----------------------FOR QP----------------------------//
-  // 0 for UAV 1 and, 1 for UAV 2
+  // 0 for UAV 1 and, 1 for UAV 2, 2 for UAV 3
   .value = 0.0,
-  // fixed angle hyperplane in degrees for each UAV
-  .rpyPlane1 = {0,0,0},
-  .yawPlane1 = 0,
-  .rpyPlane2 = {0,0,0},
-  .yawPlane2 = 0,
+  // fixed angle 2 hyperplanes in degrees for each 3 UAVs
+  .rpyPlane11 = {0,0,0},
+  .yawPlane11 = 0,
+  .rpyPlane12 = {0,0,0},
+  .yawPlane12 = 0,
+  .rpyPlane21 = {0,0,0},
+  .yawPlane21 = 0,
+  .rpyPlane22 = {0,0,0},
+  .yawPlane22 = 0,
+  .rpyPlane31 = {0,0,0},
+  .yawPlane31 = 0,
+  .rpyPlane32 = {0,0,0},
+  .yawPlane32 = 0,
 };
 
 static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -207,13 +215,16 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     //------------------------------------------QP------------------------------//
     // The QP will be added here for the desired virtual input (mu_des)
     workspace.settings->warm_start = 0;
-    struct vec n1 = computePlaneNormal(self->rpyPlane1, self->yawPlane1);
-    struct vec n2 = computePlaneNormal(self->rpyPlane2, self->yawPlane2);
-    c_float Ax_new[12] = {1, n1.x, 1, n1.y, 1, n1.z, 1,  n2.x, 1, n2.y, 1, n2.z, };
-    c_int Ax_new_n = 12;
-     
-    c_float l_new[6] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY,};
-    c_float u_new[6] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,};
+    struct vec n1 = computePlaneNormal(self->rpyPlane11, self->yawPlane11);
+    struct vec n2 = computePlaneNormal(self->rpyPlane12, self->yawPlane12);
+    struct vec n3 = computePlaneNormal(self->rpyPlane21, self->yawPlane21);
+    struct vec n4 = computePlaneNormal(self->rpyPlane22, self->yawPlane22);
+    struct vec n5 = computePlaneNormal(self->rpyPlane31, self->yawPlane31);
+    struct vec n6 = computePlaneNormal(self->rpyPlane32, self->yawPlane32);
+    c_float Ax_new[25] = {1, 1, n1.y, n2.y, 1, n1.z, n2.z, 1, n3.x, n4.x, 1, n3.y, n4.y, 1, n3.z, n4.z, 1, n5.x, n6.x, 1, n5.y, n6.y, 1, n5.z, n6.z, };
+    c_int Ax_new_n = 25;
+    c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
+    c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,  0, 0,  0, 0};
 
     osqp_update_A(&workspace, Ax_new, OSQP_NULL, Ax_new_n);    
     osqp_update_lower_bound(&workspace, l_new);
@@ -231,9 +242,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
         self->desVirtInp.y = (&workspace)->solution->x[4];
         self->desVirtInp.z = (&workspace)->solution->x[5];      
       }
-    // printf("workspace status:   %s\n", (&workspace)->info->status);
+      else if (self->value == 2.0f) {
+        self->desVirtInp.x = (&workspace)->solution->x[6];
+        self->desVirtInp.y = (&workspace)->solution->x[7];
+        self->desVirtInp.z = (&workspace)->solution->x[8];
+      }
     // // printf("tick: %f \n uavID: %d solution: %f %f %f %f %f %f\n", tick, self->value, (&workspace)->solution->x[0], (&workspace)->solution->x[1], (&workspace)->solution->x[2], (&workspace)->solution->x[3], (&workspace)->solution->x[4], (&workspace)->solution->x[5]);
-    //  DEBUG_PRINT("value: %f self->desVirtInp: %f %f %f\n", (double) self->value, (double)(self->desVirtInp.x),(double)(self->desVirtInp.y),(double)(self->desVirtInp.z));
+    //  printf("value: %f self->desVirtInp: %f %f %f\n", (double) self->value, (double)(self->desVirtInp.x),(double)(self->desVirtInp.y),(double)(self->desVirtInp.z));
 
     //------------------------------------------QP------------------------------//
     // self->desVirtInp = F_d;  // COMMENT THIS IF YOU ARE USING THE QP 
@@ -480,6 +495,30 @@ PARAM_ADD(PARAM_FLOAT, offsetz, &g_self.offset.z)
 
 //For the QP 
 PARAM_ADD(PARAM_FLOAT, value, &g_self.value)
+PARAM_ADD(PARAM_FLOAT, r11, &g_self.rpyPlane11.x)
+PARAM_ADD(PARAM_FLOAT, p11, &g_self.rpyPlane11.y)
+PARAM_ADD(PARAM_FLOAT, y11, &g_self.rpyPlane11.z)
+PARAM_ADD(PARAM_FLOAT, r12, &g_self.rpyPlane12.x)
+PARAM_ADD(PARAM_FLOAT, p12, &g_self.rpyPlane12.y)
+PARAM_ADD(PARAM_FLOAT, y12, &g_self.rpyPlane12.z)
+PARAM_ADD(PARAM_FLOAT, r21, &g_self.rpyPlane21.x)
+PARAM_ADD(PARAM_FLOAT, p21, &g_self.rpyPlane21.y)
+PARAM_ADD(PARAM_FLOAT, y21, &g_self.rpyPlane21.z)
+PARAM_ADD(PARAM_FLOAT, r22, &g_self.rpyPlane22.x)
+PARAM_ADD(PARAM_FLOAT, p22, &g_self.rpyPlane22.y)
+PARAM_ADD(PARAM_FLOAT, y22, &g_self.rpyPlane22.z)
+PARAM_ADD(PARAM_FLOAT, r31, &g_self.rpyPlane31.x)
+PARAM_ADD(PARAM_FLOAT, p31, &g_self.rpyPlane31.y)
+PARAM_ADD(PARAM_FLOAT, y31, &g_self.rpyPlane31.z)
+PARAM_ADD(PARAM_FLOAT, r32, &g_self.rpyPlane32.x)
+PARAM_ADD(PARAM_FLOAT, p32, &g_self.rpyPlane32.y)
+PARAM_ADD(PARAM_FLOAT, y32, &g_self.rpyPlane32.z)
+PARAM_ADD(PARAM_FLOAT, yawp11, &g_self.yawPlane11)
+PARAM_ADD(PARAM_FLOAT, yawp12, &g_self.yawPlane12)
+PARAM_ADD(PARAM_FLOAT, yawp21, &g_self.yawPlane21)
+PARAM_ADD(PARAM_FLOAT, yawp22, &g_self.yawPlane22)
+PARAM_ADD(PARAM_FLOAT, yawp31, &g_self.yawPlane31)
+PARAM_ADD(PARAM_FLOAT, yawp32, &g_self.yawPlane32)
 
 PARAM_GROUP_STOP(ctrlLeeP)
 
