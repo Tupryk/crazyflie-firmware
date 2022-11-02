@@ -42,6 +42,7 @@
 #include "config.h"
 #include "nvicconf.h"
 #include "static_mem.h"
+#include "debug.h"
 
 /** This uart is conflicting with SPI2 DMA used in sensors_bmi088_spi_bmp388.c
  *  which is used in CF-Bolt. So for other products this can be enabled.
@@ -205,10 +206,10 @@ bool uart1GetDataWithDefaultTimeout(uint8_t *c)
 void uart1SendData(uint32_t size, uint8_t* data)
 {
   uint32_t i;
-
-  if (!isInit)
-    return;
-
+  if (!isInit){
+    DEBUG_PRINT("DO NOT WORK \n");
+    return; 
+  }
   for(i = 0; i < size; i++)
   {
     while (!(UART1_TYPE->SR & USART_FLAG_TXE));

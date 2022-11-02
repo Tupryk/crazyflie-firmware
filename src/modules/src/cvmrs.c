@@ -7,7 +7,6 @@
 #include "usec_time.h"
 #include "debug.h"
 #include "param.h"
-
 #define TASK_FREQ 100
 
 // GAP8 register settings
@@ -17,7 +16,7 @@ static uint8_t aGain;
 static uint8_t dGain;
 static uint16_t exposure;
 static uint8_t trigger = 0;
-
+const uint32_t baudrate_esp32 = 115200;
 
 typedef struct
 {
@@ -66,6 +65,7 @@ void appMain()
     DEBUG_PRINT("Starting CVMRS task\n");
 
     lastWakeTime = xTaskGetTickCount();
+    uart1Init(baudrate_esp32);
     while (1)
     {
         vTaskDelayUntil(&lastWakeTime, F2T(TASK_FREQ));
@@ -76,7 +76,6 @@ void appMain()
         state_packet.y = logGetInt(y_id);
         state_packet.z = logGetInt(z_id);
         state_packet.quat = logGetInt(quat_id);
-
         // cpxSendPacket(&cpx_packet, /*timeout*/ 10 /* ms */);
 
         uint8_t magic = 0xBC;
