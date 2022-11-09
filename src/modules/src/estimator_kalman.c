@@ -237,8 +237,11 @@ static void kalmanTask(void* parameters) {
         STATS_CNT_RATE_EVENT(&predictionCounter);
       }
 
-      nextPrediction = osTick + S2T(1.0f / PREDICT_RATE);
-
+      nextPrediction = nextPrediction + S2T(1.0f / PREDICT_RATE);
+      if (osTick > nextPrediction) {
+        // Overrun
+        nextPrediction = osTick + S2T(1.0f / PREDICT_RATE);
+      }
       if (!rateSupervisorValidate(&rateSupervisorContext, T2M(osTick))) {
         DEBUG_PRINT("WARNING: Kalman prediction rate low (%lu)\n", rateSupervisorLatestCount(&rateSupervisorContext));
       }
@@ -483,10 +486,10 @@ LOG_GROUP_START(kalman)
  */
   LOG_ADD(LOG_FLOAT, stateZ, &coreData.S[KC_STATE_Z])
   /**
- * @brief State position in the global frame PX
- *
- *  Note: This is similar to stateEstimate.x
- */
+  * @brief State velocity in its body frame x
+  *
+  *  Note: This should be part of stateEstimate
+  */
   LOG_ADD(LOG_FLOAT, statePX, &coreData.S[KC_STATE_PX])
   /**
   * @brief State velocity in its body frame y

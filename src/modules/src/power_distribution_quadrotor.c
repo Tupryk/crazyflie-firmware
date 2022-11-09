@@ -66,6 +66,16 @@ static struct vec torque;
 static float thrust_to_torque = 0.006f;
 static float arm_length = 0.046f; // m
 
+int powerDistributionMotorType(uint32_t id)
+{
+  return 1;
+}
+
+uint16_t powerDistributionStopRatio(uint32_t id)
+{
+  return 0;
+}
+  
 void powerDistributionInit(void)
 {
 }

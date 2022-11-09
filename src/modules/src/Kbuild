@@ -44,6 +44,7 @@ obj-y += position_controller_indi.o
 obj-y += position_controller_pid.o
 obj-y += position_estimator_altitude.o
 obj-$(CONFIG_POWER_DISTRIBUTION_QUADROTOR) += power_distribution_quadrotor.o
+obj-$(CONFIG_POWER_DISTRIBUTION_FLAPPER) += power_distribution_flapper.o
 obj-y += pptraj_compressed.o
 obj-y += pptraj.o
 obj-y += queuemonitor.o
@@ -57,7 +58,7 @@ obj-y += static_mem.o
 obj-y += supervisor.o
 obj-y += sysload.o
 obj-y += system.o
-obj-y += tdoaEngineInstance.o
+obj-$(CONFIG_DECK_LOCO) += tdoaEngineInstance.o
 obj-y += vcp_esc_passthrough.o
 obj-y += worker.o
 obj-$(CONFIG_ENABLE_CPX)          += cpx/cpx_external_router.o
@@ -66,6 +67,10 @@ obj-$(CONFIG_ENABLE_CPX_ON_UART2) += cpx/cpx_uart_transport.o
 obj-$(CONFIG_ENABLE_CPX)          += cpx/cpxlink.o
 obj-$(CONFIG_ENABLE_CPX)          += cpx/cpx.o
 
+obj-y += p2pDTR/DTR_handlers.o
+obj-y += p2pDTR/DTR_p2p_interface.o
+obj-y += p2pDTR/queueing.o
+obj-y += p2pDTR/token_ring.o
 # Kalman core
 obj-$(CONFIG_ESTIMATOR_KALMAN_ENABLE) += kalman_core/
 
