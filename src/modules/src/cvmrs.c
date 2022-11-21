@@ -22,10 +22,13 @@ typedef struct
 {
     uint8_t cmd;
     uint64_t timestamp; // usec timestamp from STM32
-    int16_t x;          // compressed [mm]
-    int16_t y;          // compressed [mm]
-    int16_t z;          // compressed [mm]
-    uint32_t quat;      // compressed, see quatcompress.h
+    float x; // m
+    float y; // m
+    float z; // m
+    float qx;
+    float qy;
+    float qz;
+    float qw;
 } __attribute__((packed)) StatePacket_t;
 // static StatePacket_t cf_state;
 static CPXPacket_t cpx_packet;
@@ -48,16 +51,19 @@ void appMain()
     systemWaitStart();
 
 
-    logVarId_t x_id = logGetVarId("stateEstimateZ", "x");
-    logVarId_t y_id = logGetVarId("stateEstimateZ", "y");
-    logVarId_t z_id = logGetVarId("stateEstimateZ", "z");
-    logVarId_t quat_id = logGetVarId("stateEstimateZ", "quat");
+    logVarId_t x_id = logGetVarId("stateEstimate", "x");
+    logVarId_t y_id = logGetVarId("stateEstimate", "y");
+    logVarId_t z_id = logGetVarId("stateEstimate", "z");
+    logVarId_t qx_id = logGetVarId("stateEstimate", "qx");
+    logVarId_t qy_id = logGetVarId("stateEstimate", "qy");
+    logVarId_t qz_id = logGetVarId("stateEstimate", "qz");
+    logVarId_t qw_id = logGetVarId("stateEstimate", "qw");
 
     cpxInitRoute(CPX_T_STM32, CPX_T_GAP8, CPX_F_APP, &cpx_packet.route);
     // cpx_packet.dataLength = sizeof(StatePacket_t);
 
     // StatePacket_t* state_packet = (StatePacket_t*)&cpx_packet.data;
-    state_packet.cmd = 0;
+    state_packet.cmd = 1;
 
     // Delay is only needed for CPX
     // vTaskDelay(60000);
@@ -75,7 +81,10 @@ void appMain()
         state_packet.x = logGetInt(x_id);
         state_packet.y = logGetInt(y_id);
         state_packet.z = logGetInt(z_id);
-        state_packet.quat = logGetInt(quat_id);
+        state_packet.qx = logGetInt(qx_id);
+        state_packet.qy = logGetInt(qy_id);
+        state_packet.qz = logGetInt(qz_id);
+        state_packet.qw = logGetInt(qw_id);
         // cpxSendPacket(&cpx_packet, /*timeout*/ 10 /* ms */);
 
         uint8_t magic = 0xBC;
