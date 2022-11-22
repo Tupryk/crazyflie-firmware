@@ -78,13 +78,13 @@ void appMain()
 
         // Sending current state information to GAP8
         state_packet.timestamp = usecTimestamp();
-        state_packet.x = logGetInt(x_id);
-        state_packet.y = logGetInt(y_id);
-        state_packet.z = logGetInt(z_id);
-        state_packet.qx = logGetInt(qx_id);
-        state_packet.qy = logGetInt(qy_id);
-        state_packet.qz = logGetInt(qz_id);
-        state_packet.qw = logGetInt(qw_id);
+        state_packet.x = logGetFloat(x_id);
+        state_packet.y = logGetFloat(y_id);
+        state_packet.z = logGetFloat(z_id);
+        state_packet.qx = logGetFloat(qx_id);
+        state_packet.qy = logGetFloat(qy_id);
+        state_packet.qz = logGetFloat(qz_id);
+        state_packet.qw = logGetFloat(qw_id);
         // cpxSendPacket(&cpx_packet, /*timeout*/ 10 /* ms */);
 
         uint8_t magic = 0xBC;
