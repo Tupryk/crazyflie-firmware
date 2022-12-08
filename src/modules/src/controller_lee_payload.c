@@ -447,14 +447,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     self->plp_error = plpos_e;
     self->plv_error = plvel_e;
 
-    struct vec F_d =vscl(self->mp ,vadd4(
+    self->F_d =vscl(self->mp ,vadd4(
       plAcc_d,
       veltmul(self->Kpos_P, plpos_e),
       veltmul(self->Kpos_D, plvel_e),
       veltmul(self->Kpos_I, self->i_error_pos)));
 
     // if (RATE_DO_EXECUTE(RATE_100_HZ, tick)) {
-    self->desVirtInp = computeDesiredVirtualInput(self, state, F_d);
+    self->desVirtInp = computeDesiredVirtualInput(self, state, self->F_d);
     // }
 
     //directional unit vector qi and angular velocity wi pointing from UAV to payload
@@ -734,6 +734,31 @@ LOG_ADD(LOG_FLOAT, uz, &g_self.u_i.z)
 LOG_ADD(LOG_FLOAT, n1x, &g_self.n1.x)
 LOG_ADD(LOG_FLOAT, n1y, &g_self.n1.y)
 LOG_ADD(LOG_FLOAT, n1z, &g_self.n1.z)
+
+LOG_ADD(LOG_FLOAT, n2x, &g_self.n2.x)
+LOG_ADD(LOG_FLOAT, n2y, &g_self.n2.y)
+LOG_ADD(LOG_FLOAT, n2z, &g_self.n2.z)
+
+LOG_ADD(LOG_FLOAT, n3x, &g_self.n3.x)
+LOG_ADD(LOG_FLOAT, n3y, &g_self.n3.y)
+LOG_ADD(LOG_FLOAT, n3z, &g_self.n3.z)
+
+LOG_ADD(LOG_FLOAT, n4x, &g_self.n4.x)
+LOG_ADD(LOG_FLOAT, n4y, &g_self.n4.y)
+LOG_ADD(LOG_FLOAT, n4z, &g_self.n4.z)
+
+LOG_ADD(LOG_FLOAT, n5x, &g_self.n5.x)
+LOG_ADD(LOG_FLOAT, n5y, &g_self.n5.y)
+LOG_ADD(LOG_FLOAT, n5z, &g_self.n5.z)
+
+LOG_ADD(LOG_FLOAT, n6x, &g_self.n6.x)
+LOG_ADD(LOG_FLOAT, n6y, &g_self.n6.y)
+LOG_ADD(LOG_FLOAT, n6z, &g_self.n6.z)
+
+// computed desired payload force
+LOG_ADD(LOG_FLOAT, Fdx, &g_self.F_d.x)
+LOG_ADD(LOG_FLOAT, Fdy, &g_self.F_d.y)
+LOG_ADD(LOG_FLOAT, Fdz, &g_self.F_d.z)
 
 // computed virtual input
 LOG_ADD(LOG_FLOAT, desVirtInpx, &g_self.desVirtInp.x)
