@@ -67,9 +67,9 @@ struct QPOutput
 #include "static_mem.h"
 
 
-#define CONTROLLER_LEE_PAYLOAD_QP_TASK_STACKSIZE (2 * configMINIMAL_STACK_SIZE)
+#define CONTROLLER_LEE_PAYLOAD_QP_TASK_STACKSIZE (6 * configMINIMAL_STACK_SIZE)
 #define CONTROLLER_LEE_PAYLOAD_QP_TASK_NAME "LEEQP"
-#define CONTROLLER_LEE_PAYLOAD_QP_TASK_PRI 1
+#define CONTROLLER_LEE_PAYLOAD_QP_TASK_PRI 0
 
 STATIC_MEM_TASK_ALLOC(controllerLeePayloadQPTask, CONTROLLER_LEE_PAYLOAD_QP_TASK_STACKSIZE);
 static void controllerLeePayloadQPTask(void * prm);
@@ -453,7 +453,9 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       veltmul(self->Kpos_D, plvel_e),
       veltmul(self->Kpos_I, self->i_error_pos)));
 
+    // if (RATE_DO_EXECUTE(RATE_100_HZ, tick)) {
     self->desVirtInp = computeDesiredVirtualInput(self, state, F_d);
+    // }
 
     //directional unit vector qi and angular velocity wi pointing from UAV to payload
     struct vec qi = vnormalize(vsub(plStPos, statePos)); 
