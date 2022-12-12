@@ -39,6 +39,7 @@ TODO
 #include "osqp.h"
 extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
+extern OSQPWorkspace workspace_3uav_2hp_rig;
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
