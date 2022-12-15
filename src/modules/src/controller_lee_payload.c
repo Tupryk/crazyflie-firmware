@@ -83,6 +83,8 @@ STATIC_MEM_QUEUE_ALLOC(queueQPInput, 1, sizeof(struct QPInput));
 static QueueHandle_t queueQPOutput;
 STATIC_MEM_QUEUE_ALLOC(queueQPOutput, 1, sizeof(struct QPOutput));
 
+static uint32_t qp_runtime_us = 0;
+
 #endif
 
 // static inline struct vec computePlaneNormal(struct vec rpy, float yaw) {
@@ -430,8 +432,10 @@ void controllerLeePayloadQPTask(void * prm)
     xQueueReceive(queueQPInput, &qpinput, portMAX_DELAY);
 
     // solve the QP
+    uint64_t start = usecTimestamp();
     runQP(&qpinput, &qpoutput);
-
+    uint64_t end = usecTimestamp();
+    qp_runtime_us = end - start;
     // store the result
     xQueueOverwrite(queueQPOutput, &qpoutput);
   }
@@ -913,7 +917,7 @@ LOG_ADD(LOG_FLOAT, desVirtInpx, &g_self.desVirtInp.x)
 LOG_ADD(LOG_FLOAT, desVirtInpy, &g_self.desVirtInp.y)
 LOG_ADD(LOG_FLOAT, desVirtInpz, &g_self.desVirtInp.z)
 
-// LOG_ADD(LOG_UINT32, ticks, &ticks)
+LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
 
 LOG_GROUP_STOP(ctrlLeeP)
 
