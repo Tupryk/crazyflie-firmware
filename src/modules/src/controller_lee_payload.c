@@ -278,7 +278,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     // printf("%f %f %f\n", statePos2.x, statePos2.y, statePos2.z);
     // printf("%f %f %f\n", statePos3.x, statePos3.y, statePos3.z);
 
-    struct vec desVirtInp;
+    struct vec desVirtInp = input->self->desVirtInp;
 
     //------------------------------------------QP------------------------------//
     // The QP will be added here for the desired virtual input (mu_des)
