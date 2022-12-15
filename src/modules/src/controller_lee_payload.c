@@ -332,9 +332,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     c_float l_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
     c_float u_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
 
-    c_float q_new[9] = {desVirt_prev.x,  desVirt_prev.y,  desVirt_prev.z,
-                        desVirt2_prev.x, desVirt2_prev.y, desVirt2_prev.z, 
-                        desVirt3_prev.x, desVirt3_prev.y, desVirt3_prev.z};
+    c_float q_new[9] = {-desVirt_prev.x,  -desVirt_prev.y,  -desVirt_prev.z,
+                        -desVirt2_prev.x, -desVirt2_prev.y, -desVirt2_prev.z, 
+                        -desVirt3_prev.x, -desVirt3_prev.y, -desVirt3_prev.z};
 
     osqp_update_A(workspace, Ax_new, OSQP_NULL, Ax_new_n);    
 
@@ -371,13 +371,13 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       desVirtInp.y = (workspace)->solution->x[1];
       desVirtInp.z = (workspace)->solution->x[2];
       
-      input->self->desVirtInp = desVirtInp;
-      input->self->desVirt2_prev.x =  (workspace)->solution->x[4];
-      input->self->desVirt2_prev.y =  (workspace)->solution->x[5];
-      input->self->desVirt2_prev.z =  (workspace)->solution->x[6];
-      input->self->desVirt3_prev.x =   (workspace)->solution->x[7];
-      input->self->desVirt3_prev.y =   (workspace)->solution->x[8];
-      input->self->desVirt3_prev.z =   (workspace)->solution->x[9];
+      // input->self->desVirtInp = desVirtInp;
+      input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
+      input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
+      input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
+      input->self->desVirt3_prev.x =   (workspace)->solution->x[6];
+      input->self->desVirt3_prev.y =   (workspace)->solution->x[7];
+      input->self->desVirt3_prev.z =   (workspace)->solution->x[8];
     } else {
 #ifdef CRAZYFLIE_FW
       DEBUG_PRINT("QP: %s\n", workspace->info->status);
