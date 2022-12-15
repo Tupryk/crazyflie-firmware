@@ -472,6 +472,7 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   qpinput.self = self;
   // solve the QP
   runQP(&qpinput, &qpoutput);
+
   return qpoutput.desVirtInp;
 }
 
