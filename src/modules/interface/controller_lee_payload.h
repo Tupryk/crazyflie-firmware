@@ -96,6 +96,8 @@ typedef struct controllerLeePayload_s {
     struct vec desVirt2_prev;
     struct vec desVirt3_prev;
 
+    float lambda; // regularization on how close to stay to previous value
+
     struct vec n1;
     struct vec n2;
     struct vec n3;

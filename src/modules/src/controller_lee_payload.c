@@ -213,6 +213,8 @@ static controllerLeePayload_t g_self = {
   .wp_des = {0, 0, 0},
 
   .radius = 0.15,
+
+  .lambda = 1.0,
 };
 
 // static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -332,9 +334,18 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     c_float l_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
     c_float u_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
 
-    c_float q_new[9] = {-desVirt_prev.x,  -desVirt_prev.y,  -desVirt_prev.z,
-                        -desVirt2_prev.x, -desVirt2_prev.y, -desVirt2_prev.z, 
-                        -desVirt3_prev.x, -desVirt3_prev.y, -desVirt3_prev.z};
+    // P = np.eye(9) [can't be changed online]
+    // x^2 + lambda (x^2 - 2xx_d + x_d^2)
+    // => J = (1+lambda) x^2 - 2 * lambda x_d x
+    // =>   = x^2 - 2 * lambda / (1+lambda) x_d x
+    // => q = -2 * lambda / (1+lambda) * x_d
+
+    const float factor = - 2.0f * input->self->lambda / (1.0f + input->self->lambda);
+
+    c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
+                        factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
+                        factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
+
 
     osqp_update_A(workspace, Ax_new, OSQP_NULL, Ax_new_n);    
 
@@ -848,6 +859,10 @@ PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
 PARAM_ADD(PARAM_FLOAT, massP, &g_self.mp)
 
 PARAM_ADD(PARAM_FLOAT, radius, &g_self.radius)
+
+// QP tuning
+
+PARAM_ADD(PARAM_FLOAT, lambda, &g_self.lambda)
 
 // Attachement points rigid body payload
 PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)
