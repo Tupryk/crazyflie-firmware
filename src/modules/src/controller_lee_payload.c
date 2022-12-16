@@ -214,7 +214,7 @@ static controllerLeePayload_t g_self = {
 
   .radius = 0.15,
 
-  .lambda = 1.0,
+  .lambdaa = 0.0,
 };
 
 // static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -317,6 +317,26 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 
     OSQPWorkspace* workspace = &workspace_3uav_2hp_rig;
     workspace->settings->warm_start = 1;
+  // settings = {'eps_abs': 1.0e-5, 'eps_rel' : 1.0e-05,
+  // 'eps_prim_inf' : 1.0e-04, 'eps_dual_inf' : 1.0e-04,'rho' : 1.00e-01,
+  // 'sigma' : 1.00e-06, 'alpha' : 1.60 ,'max_iter': 1000, 
+  // 'verbose': False, 'linsys_solver': 'qdldl', 'check_termination': 25, 'polish': True}
+
+    c_float x_warm[9] = {  desVirt_prev.x,    desVirt_prev.y,    desVirt_prev.z,
+                          desVirt2_prev.x,   desVirt2_prev.y,   desVirt2_prev.z, 
+                          desVirt3_prev.x,   desVirt3_prev.y,   desVirt3_prev.z};
+    osqp_warm_start_x(workspace, x_warm);
+
+    // workspace->settings->eps_abs           = 0.00001f; 
+    // workspace->settings->eps_rel           = 0.00001f;
+    // workspace->settings->eps_prim_inf      = 0.0001f;
+    // workspace->settings->eps_dual_inf      = 0.0001f;
+    // workspace->settings->rho               = 0.1f; 
+    // workspace->settings->sigma             = 0.000001f; 
+    // workspace->settings->alpha             = 1.6f;
+    // workspace->settings->max_iter          = 1000; 
+    // workspace->settings->check_termination = 25; 
+
 
     struct vec n1 = computePlaneNormal(statePos, statePos2, plStPos,  radius, l1, l2);
     struct vec n2 = computePlaneNormal(statePos, statePos3, plStPos,  radius, l1, l3);
@@ -340,7 +360,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     // =>   = x^2 - 2 * lambda / (1+lambda) x_d x
     // => q = -2 * lambda / (1+lambda) * x_d
 
-    const float factor = - 2.0f * input->self->lambda / (1.0f + input->self->lambda);
+    const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
 
     c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
                         factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
