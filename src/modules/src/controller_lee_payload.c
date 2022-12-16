@@ -649,7 +649,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct mat33 skewqi = mcrossmat(qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
 
-    struct vec qdidot = vdiv(vsub(qdi, self->qdi_prev), dt);
+    struct vec qdidot =  vzero(); //vdiv(vsub(qdi, self->qdi_prev), dt);
     self->qdi_prev = qdi;
     struct vec wdi = vcross(qdi, qdidot);
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
@@ -882,7 +882,7 @@ PARAM_ADD(PARAM_FLOAT, radius, &g_self.radius)
 
 // QP tuning
 
-PARAM_ADD(PARAM_FLOAT, lambda, &g_self.lambda)
+PARAM_ADD(PARAM_FLOAT, lambda, &g_self.lambdaa)
 
 // Attachement points rigid body payload
 PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)
