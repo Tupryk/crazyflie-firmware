@@ -141,8 +141,7 @@ static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, stru
   else{
     pos1 = p2_new;
   }
-  // printf("pos1: %f %f %f\n", (double) pos1.x, (double) pos1.y, (double) pos1.z);
-  // printf("pos2: %f %f %f\n", (double) pos2.x, (double) pos2.y, (double) pos2.z);
+  
   struct vec mid = vscl(0.5, vsub(pos2, pos1));
   struct vec rvec = vscl(r, vnormalize(vsub(pos1, pos2)));
   struct vec pr = vadd(pos1, vadd(mid, rvec));
@@ -283,7 +282,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 
       if (num_neighbors == 2) {
         if (!isnanf(input->plStquat.w)) {
-          printf("we are here qp with quat");
           // solve QP for 3 uavs 2 hps and rigid triangle payload
           for (uint8_t i = 0; i < num_neighbors+1; ++i) {
             if (input->self->attachement_points[i].id == input->ids[0]) {
@@ -343,9 +341,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
             input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
             input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
-            input->self->desVirt3_prev.x =   (workspace)->solution->x[6];
-            input->self->desVirt3_prev.y =   (workspace)->solution->x[7];
-            input->self->desVirt3_prev.z =   (workspace)->solution->x[8];
+            input->self->desVirt3_prev.x =  (workspace)->solution->x[6];
+            input->self->desVirt3_prev.y =  (workspace)->solution->x[7];
+            input->self->desVirt3_prev.z =  (workspace)->solution->x[8];
           } else {
           #ifdef CRAZYFLIE_FW
                 DEBUG_PRINT("QP: %s\n", workspace->info->status);
@@ -362,7 +360,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           output->desVirtInp = desVirtInp;
         } else {
           // solve QP for 3 uavs 2 hps and point mass
-          printf("we are here\n");
           OSQPWorkspace* workspace = &workspace_3uav_2hp;
           workspace->settings->warm_start = 1;
           struct vec n1 = computePlaneNormal(statePos, statePos2, plStPos,  radius, l1, l2);
@@ -604,10 +601,16 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       vneg(veltmul(self->Kprot_P, eRp)),
       vneg(veltmul(self->Kprot_D, omega_perror))
     );
-    struct vec F_dP = mvmul(mtranspose(Rp),self->F_d);
+    if (!isnanf(plquat.w)) {
+      struct vec F_dP = mvmul(mtranspose(Rp),self->F_d);
+      self->desVirtInp = computeDesiredVirtualInput(self, state, F_dP, self->M_d);
+    }
+    else{
+      self->desVirtInp = computeDesiredVirtualInput(self, state, self->F_d, self->M_d);
+
+    }
     // computed desired generalized forces in rigid payload case for equation 23 is Pmu_des = [Rp.T@F_d, M_d]
     // if a point mass for the payload is considered then: Pmu_des = F_d
-    self->desVirtInp = computeDesiredVirtualInput(self, state, F_dP, self->M_d);
 
     //directional unit vector qi and angular velocity wi pointing from UAV to payload
     struct vec qi = vnormalize(vsub(plStPos, statePos)); 
