@@ -133,13 +133,12 @@ void collisionAvoidanceUpdateSetpointWrap(
     free(workspace);
 }
 
-void state_set_neighbor_position(state_t *state, int idx, uint8_t id, float x, float y, float z, uint8_t num_neighbors)
+void state_set_neighbor_position(state_t *state, int idx, uint8_t id, float x, float y, float z)
 {
     state->neighbors[idx].id = id;
     state->neighbors[idx].pos.x = x;
     state->neighbors[idx].pos.y = y;
     state->neighbors[idx].pos.z = z;
-    state->num_neighbors = num_neighbors;
 }
 
 void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z)
