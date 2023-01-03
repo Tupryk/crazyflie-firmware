@@ -141,7 +141,7 @@ static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, stru
   else{
     pos1 = p2_new;
   }
-  
+
   struct vec mid = vscl(0.5, vsub(pos2, pos1));
   struct vec rvec = vscl(r, vnormalize(vsub(pos1, pos2)));
   struct vec pr = vadd(pos1, vadd(mid, rvec));
@@ -427,10 +427,16 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   qpinput.M_d = M_d;
   qpinput.plStPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
   qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
+    // We assume that we always have at least 1 neighbor
   qpinput.statePos2 = mkvec(state->neighbors[0].pos.x, state->neighbors[0].pos.y, state->neighbors[0].pos.z);
-  qpinput.statePos3 = mkvec(state->neighbors[1].pos.x, state->neighbors[1].pos.y, state->neighbors[1].pos.z);
   qpinput.ids[0] = state->neighbors[0].id;
-  qpinput.ids[1] = state->neighbors[1].id;
+  qpinput.num_neighbors = state->num_neighbors;
+  if (state->num_neighbors == 2) 
+  {
+    qpinput.statePos3 = mkvec(state->neighbors[1].pos.x, state->neighbors[1].pos.y, state->neighbors[1].pos.z);
+    qpinput.ids[1] = state->neighbors[1].id;
+  }  
+
   qpinput.self = self;
   xQueueOverwrite(queueQPInput, &qpinput);
 
