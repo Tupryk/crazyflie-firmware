@@ -870,7 +870,7 @@ PARAM_ADD(PARAM_FLOAT, radius, &g_self.radius)
 
 // QP tuning
 
-PARAM_ADD(PARAM_FLOAT, lambda, &g_self.lambda)
+PARAM_ADD(PARAM_FLOAT, lambda, &g_self.lambdaa)
 
 // Attachement points rigid body payload
 PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)
