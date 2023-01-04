@@ -90,33 +90,6 @@ static uint32_t qp_runtime_us = 0;
 
 #endif
 
-// static inline struct vec computePlaneNormal(struct vec rpy, float yaw) {
-// // Compute the normal of a plane, given the extrinsic roll-pitch-yaw of the z-axis 
-// // and the yaw representing the x-axis of the plan's frame
-//   struct vec x = mkvec(cosf(yaw), sinf(yaw), 0);
-//   struct quat q = rpy2quat(rpy);
-//   struct mat33 Rq = quat2rotmat(q);
-//   struct vec e3 = mkvec(0,0,1);
-//   struct vec z = mvmul(Rq, e3);
-//   struct vec xcrossz = vcross(x,z);
-//   struct vec ni = vnormalize(xcrossz);
-//   return ni;
-// }
-static inline struct mat33 skew(struct vec w) {
-  struct mat33 m;
-  m.m[0][0] =   0;
-  m.m[0][1] = -w.z;
-  m.m[0][2] =  w.y;
-
-  m.m[1][0] =  w.z;
-  m.m[1][1] =  0;
-  m.m[1][2] = -w.x;
-
-  m.m[2][0] = -w.y;
-  m.m[2][1] =  w.x;
-  m.m[2][2] =  0;
-  return m;
-}
 static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, struct vec pload, float r, float l1, float l2) {
 // Compute the normal of a plane, given the minimum desired distance r
 // NEEDs TESTING!!!
@@ -250,18 +223,18 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             attPoint = input->self->attachement_points[i].point;
           }
         }
-        
-        struct vec n1 = computePlaneNormal(statePos, statePos2, plStPos, radius, l1, l2);
-        struct vec n2 = computePlaneNormal(statePos2, statePos, plStPos, radius, l2, l1);
+        struct vec plSt_att = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint));
+        struct vec plSt_att2 = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint2));
+        struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
+        struct vec n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
         
         struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
 
-        struct mat33 attPR0t = mmul(skew(attPoint), R0t);
-        struct mat33 attP2R0t = mmul(skew(attPoint2), R0t);
+        struct mat33 attPR0t = mmul(mcrossmat(attPoint), R0t);
+        struct mat33 attP2R0t = mmul(mcrossmat(attPoint2), R0t);
 
         OSQPWorkspace* workspace = &workspace_2uav_1hp_rod;
         workspace->settings->warm_start = 1;
-        
         
         c_float Ax_new[48] = {
         R0t.m[0][0], R0t.m[1][0], R0t.m[2][0],  attPR0t.m[0][0],  attPR0t.m[1][0],  attPR0t.m[2][0], n1.x, 0,
@@ -369,12 +342,16 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
                                 desVirt2_prev.x,   desVirt2_prev.y,   desVirt2_prev.z, 
                                 desVirt3_prev.x,   desVirt3_prev.y,   desVirt3_prev.z};
           osqp_warm_start_x(workspace, x_warm);
-          struct vec n1 = computePlaneNormal(statePos, statePos2, plStPos,  radius, l1, l2);
-          struct vec n2 = computePlaneNormal(statePos, statePos3, plStPos,  radius, l1, l3);
-          struct vec n3 = computePlaneNormal(statePos2, statePos, plStPos,  radius, l2, l1);
-          struct vec n4 = computePlaneNormal(statePos2, statePos3, plStPos, radius, l2, l3);
-          struct vec n5 = computePlaneNormal(statePos3, statePos, plStPos,  radius, l3, l1);
-          struct vec n6 = computePlaneNormal(statePos3, statePos2, plStPos, radius, l3, l2);
+          struct vec plSt_att = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint));
+          struct vec plSt_att2 = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint2));
+          struct vec plSt_att3 = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint3));
+
+          struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att,  radius, l1, l2);
+          struct vec n2 = computePlaneNormal(statePos, statePos3, plSt_att,  radius, l1, l3);
+          struct vec n3 = computePlaneNormal(statePos2, statePos, plSt_att2,  radius, l2, l1);
+          struct vec n4 = computePlaneNormal(statePos2, statePos3, plSt_att2, radius, l2, l3);
+          struct vec n5 = computePlaneNormal(statePos3, statePos, plSt_att3,  radius, l3, l1);
+          struct vec n6 = computePlaneNormal(statePos3, statePos2, plSt_att3, radius, l3, l2);
 
           c_float Ax_new[45] = {
             1, attPoint.z, -attPoint.y, n1.x, n2.x, 1, -attPoint.z, attPoint.x, n1.y, n2.y, 1, attPoint.y, -attPoint.x, n1.z, n2.z,
@@ -642,6 +619,41 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // rotational states of the payload
     struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
     struct vec plomega = mkvec(state->payload_omega.x, state->payload_omega.y, state->payload_omega.z);
+
+    if (!isnanf(plquat.w)) {
+      struct vec attPoint = mkvec(0, 0, 0);
+      attPoint = self->attachement_points[0].point;
+      if (state->num_neighbors >= 1) {
+        if (state->num_neighbors == 1) {
+          uint8_t ids[1];
+          ids[0] = state->neighbors[0].id;
+          for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
+            if (self->attachement_points[i].id == ids[0]) {
+            true;
+            } else {
+              attPoint = self->attachement_points[i].point;
+            }
+          }
+        } else if (state->num_neighbors >= 2) {
+          if (state->num_neighbors == 2) {
+            uint8_t ids[2];
+            ids[0] = state->neighbors[0].id;
+            ids[1] = state->neighbors[0].id;
+            for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
+              if (self->attachement_points[i].id == ids[0]) {
+                true;
+              } else if (self->attachement_points[i].id == ids[1]) {
+                true;
+              } else {
+                attPoint = self->attachement_points[i].point;
+              }
+            }
+          }
+        }
+      }
+      // If the payload is a rigid body then the the attachment point should be added to PlStPos
+      plStPos = vadd(plStPos, mvmul(quat2rotmat(plquat), attPoint));
+    }
     float l = vmag(vsub(plStPos, statePos));
 
     // errors
@@ -683,7 +695,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     }
     else{
       self->desVirtInp = computeDesiredVirtualInput(self, state, self->F_d, self->M_d);
-
     }
     // computed desired generalized forces in rigid payload case for equation 23 is Pmu_des = [Rp.T@F_d, M_d]
     // if a point mass for the payload is considered then: Pmu_des = F_d
@@ -713,8 +724,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
 
     struct vec u_perpind = vsub(
-      vscl(self->mass*l, mvmul(skewqi, vsub(vsub(vneg(veltmul(self->K_q, eq)), veltmul(self->K_w, ew)), 
-      vscl(vdot(qi, wdi), qidot)))),
+      vscl(self->mass*l, mvmul(skewqi, vadd3(vneg(veltmul(self->K_q, eq)), vneg(veltmul(self->K_w, ew)), 
+      vneg(vscl(vdot(qi, wdi), qidot))))),
       vscl(self->mass, mvmul(skewqi2, acc_))
     );
 
