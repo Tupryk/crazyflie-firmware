@@ -40,6 +40,7 @@ TODO
 extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp_rig;
+extern OSQPWorkspace workspace_2uav_1hp_rod;
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
@@ -101,6 +102,21 @@ static uint32_t qp_runtime_us = 0;
 //   struct vec ni = vnormalize(xcrossz);
 //   return ni;
 // }
+static inline struct mat33 skew(struct vec w) {
+  struct mat33 m;
+  m.m[0][0] =   0;
+  m.m[0][1] = -w.z;
+  m.m[0][2] =  w.y;
+
+  m.m[1][0] =  w.z;
+  m.m[1][1] =  0;
+  m.m[1][2] = -w.x;
+
+  m.m[2][0] = -w.y;
+  m.m[2][1] =  w.x;
+  m.m[2][2] =  0;
+  return m;
+}
 static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, struct vec pload, float r, float l1, float l2) {
 // Compute the normal of a plane, given the minimum desired distance r
 // NEEDs TESTING!!!
@@ -234,6 +250,60 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             attPoint = input->self->attachement_points[i].point;
           }
         }
+        
+        struct vec n1 = computePlaneNormal(statePos, statePos2, plStPos, radius, l1, l2);
+        struct vec n2 = computePlaneNormal(statePos2, statePos, plStPos, radius, l2, l1);
+        
+        struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
+
+        struct mat33 attPR0t = mmul(skew(attPoint), R0t);
+        struct mat33 attP2R0t = mmul(skew(attPoint2), R0t);
+
+        OSQPWorkspace* workspace = &workspace_2uav_1hp_rod;
+        workspace->settings->warm_start = 1;
+        
+        
+        c_float Ax_new[48] = {
+        R0t.m[0][0], R0t.m[1][0], R0t.m[2][0],  attPR0t.m[0][0],  attPR0t.m[1][0],  attPR0t.m[2][0], n1.x, 0,
+        R0t.m[0][1], R0t.m[1][1], R0t.m[2][1],  attPR0t.m[0][1],  attPR0t.m[1][1],  attPR0t.m[2][1], n1.y, 0,
+        R0t.m[0][2], R0t.m[1][2], R0t.m[2][2],  attPR0t.m[0][2],  attPR0t.m[1][2],  attPR0t.m[2][2], n1.z, 0,
+        R0t.m[0][0], R0t.m[1][0], R0t.m[2][0], attP2R0t.m[0][0], attP2R0t.m[1][0], attP2R0t.m[2][0], 0, n2.x,
+        R0t.m[0][1], R0t.m[1][1], R0t.m[2][1], attP2R0t.m[0][1], attP2R0t.m[1][1], attP2R0t.m[2][1], 0, n2.y,
+        R0t.m[0][2], R0t.m[1][2], R0t.m[2][2], attP2R0t.m[0][2], attP2R0t.m[1][2], attP2R0t.m[2][2], 0, n2.z,
+        };
+        c_float Ax_new_n = 48;
+
+        c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
+        c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, M_d.x, M_d.y, M_d.z, 0, 0,};
+
+        const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+        c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
+                            factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
+                          };
+
+        osqp_update_A(workspace, Ax_new, OSQP_NULL, Ax_new_n);    
+        osqp_update_lin_cost(workspace, q_new);
+        osqp_update_lower_bound(workspace, l_new);
+        osqp_update_upper_bound(workspace, u_new);
+        osqp_solve(workspace);
+        if (workspace->info->status_val == OSQP_SOLVED) {
+          desVirtInp.x = (workspace)->solution->x[0];
+          desVirtInp.y = (workspace)->solution->x[1];
+          desVirtInp.z = (workspace)->solution->x[2];
+          input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
+          input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
+          input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
+        } else {
+        #ifdef CRAZYFLIE_FW
+              DEBUG_PRINT("QP: %s\n", workspace->info->status);
+        #else
+              printf("QP: %s\n", workspace->info->status);
+        #endif
+            }
+        input->self->n1 = n1;
+        input->self->n2 = n2;
+        output->desVirtInp = desVirtInp; 
+
       } else {
         // Solve QP for 2 uavs 1 hp point mass
         OSQPWorkspace* workspace = &workspace_2uav_2hp;
@@ -637,7 +707,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct mat33 skewqi = mcrossmat(qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
 
-    struct vec qdidot = vdiv(vsub(qdi, self->qdi_prev), dt);
+    struct vec qdidot = vzero();//vdiv(vsub(qdi, self->qdi_prev), dt);
     self->qdi_prev = qdi;
     struct vec wdi = vcross(qdi, qdidot);
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
