@@ -223,8 +223,10 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             attPoint = input->self->attachement_points[i].point;
           }
         }
-        struct vec plSt_att = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint));
-        struct vec plSt_att2 = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint2));
+        struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
+        struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
+        l1 = vmag(vsub(plSt_att, statePos));
+        l2 = vmag(vsub(plSt_att2, statePos2));
         struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
         struct vec n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
         
@@ -342,9 +344,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
                                 desVirt2_prev.x,   desVirt2_prev.y,   desVirt2_prev.z, 
                                 desVirt3_prev.x,   desVirt3_prev.y,   desVirt3_prev.z};
           osqp_warm_start_x(workspace, x_warm);
-          struct vec plSt_att = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint));
-          struct vec plSt_att2 = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint2));
-          struct vec plSt_att3 = vadd(plStPos, mvmul(quat2rotmat(input->plStquat), attPoint3));
+          struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
+          struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
+          struct vec plSt_att3 = vadd(plStPos, qvrot(input->plStquat, attPoint3));
+          l1 = vmag(vsub(plSt_att, statePos));
+          l2 = vmag(vsub(plSt_att2, statePos2));
+          l3 = vmag(vsub(plSt_att3, statePos3));
 
           struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att,  radius, l1, l2);
           struct vec n2 = computePlaneNormal(statePos, statePos3, plSt_att,  radius, l1, l3);
@@ -652,7 +657,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
         }
       }
       // If the payload is a rigid body then the the attachment point should be added to PlStPos
-      plStPos = vadd(plStPos, mvmul(quat2rotmat(plquat), attPoint));
+      plStPos = vadd(plStPos, qvrot(plquat, attPoint));
     }
     float l = vmag(vsub(plStPos, statePos));
 
