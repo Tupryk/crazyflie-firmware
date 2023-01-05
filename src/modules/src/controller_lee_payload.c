@@ -203,6 +203,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
   float radius = input->self->radius;
   struct vec desVirtInp   = input->self->desVirtInp;
   struct vec desVirt_prev = input->self->desVirtInp;
+
+  bool is_rigid_body = !isnanf(input->plStquat.w);
   
   if (num_neighbors >= 1) {
    // declare additional variables
@@ -213,7 +215,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     struct vec desVirt2_prev = input->self->desVirt2_prev;
 
     if (num_neighbors == 1) {
-      if (!isnanf(input->plStquat.w)) {
+      if (is_rigid_body) {
         // QP for 2 uavs 1 hp, rigid rod will be added it here!
         // Set corresponding attachment points
         for (uint8_t i = 0; i < num_neighbors+1; ++i) {
@@ -225,8 +227,10 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         }
         struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
         struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
+        
         l1 = vmag(vsub(plSt_att, statePos));
         l2 = vmag(vsub(plSt_att2, statePos2));
+
         struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
         struct vec n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
         
@@ -279,7 +283,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         input->self->n2 = n2;
         output->desVirtInp = desVirtInp; 
 
-      } else {
+      } else /* point mass case */ {
         // Solve QP for 2 uavs 1 hp point mass
         OSQPWorkspace* workspace = &workspace_2uav_2hp;
         workspace->settings->warm_start = 1;
@@ -326,7 +330,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       struct vec desVirt3_prev = input->self->desVirt3_prev;
 
       if (num_neighbors == 2) {
-        if (!isnanf(input->plStquat.w)) {
+        if (is_rigid_body) {
           // solve QP for 3 uavs 2 hps and rigid triangle payload
           for (uint8_t i = 0; i < num_neighbors+1; ++i) {
             if (input->self->attachement_points[i].id == input->ids[0]) {
@@ -410,7 +414,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           input->self->n5 = n5;
           input->self->n6 = n6;
           output->desVirtInp = desVirtInp;
-        } else {
+        } else /* point mass case */ {
           // solve QP for 3 uavs 2 hps and point mass
           OSQPWorkspace* workspace = &workspace_3uav_2hp;
           workspace->settings->warm_start = 1;
@@ -478,6 +482,7 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   qpinput.F_d = F_d;
   qpinput.M_d = M_d;
   qpinput.plStPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
+  qpinput.plStquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
   qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
     // We assume that we always have at least 1 neighbor
   qpinput.statePos2 = mkvec(state->neighbors[0].pos.x, state->neighbors[0].pos.y, state->neighbors[0].pos.z);
