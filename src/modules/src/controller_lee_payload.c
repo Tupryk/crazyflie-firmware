@@ -1034,6 +1034,10 @@ LOG_ADD(LOG_FLOAT, Fdx, &g_self.F_d.x)
 LOG_ADD(LOG_FLOAT, Fdy, &g_self.F_d.y)
 LOG_ADD(LOG_FLOAT, Fdz, &g_self.F_d.z)
 
+LOG_ADD(LOG_FLOAT, Mdx, &g_self.M_d.x)
+LOG_ADD(LOG_FLOAT, Mdy, &g_self.M_d.y)
+LOG_ADD(LOG_FLOAT, Mdz, &g_self.M_d.z)
+
 // computed virtual input
 LOG_ADD(LOG_FLOAT, desVirtInpx, &g_self.desVirtInp.x)
 LOG_ADD(LOG_FLOAT, desVirtInpy, &g_self.desVirtInp.y)
