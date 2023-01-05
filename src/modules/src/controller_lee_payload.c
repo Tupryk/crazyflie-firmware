@@ -625,6 +625,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
     struct vec plomega = mkvec(state->payload_omega.x, state->payload_omega.y, state->payload_omega.z);
 
+    // errors
+    struct vec plpos_e = vclampnorm(vsub(plPos_d, plStPos), self->Kpos_P_limit);
+    struct vec plvel_e = vclampnorm(vsub(plVel_d, plStVel), self->Kpos_D_limit);
+    self->i_error_pos = vclampnorm(vadd(self->i_error_pos, vscl(dt, plpos_e)), self->Kpos_I_limit);
+
     if (!isnanf(plquat.w)) {
       struct vec attPoint = mkvec(0, 0, 0);
       attPoint = self->attachement_points[0].point;
@@ -661,10 +666,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     }
     float l = vmag(vsub(plStPos, statePos));
 
-    // errors
-    struct vec plpos_e = vclampnorm(vsub(plPos_d, plStPos), self->Kpos_P_limit);
-    struct vec plvel_e = vclampnorm(vsub(plVel_d, plStVel), self->Kpos_D_limit);
-    self->i_error_pos = vclampnorm(vadd(self->i_error_pos, vscl(dt, plpos_e)), self->Kpos_I_limit);
 
     // payload orientation errors
     // payload quat to R 
