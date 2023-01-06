@@ -952,18 +952,21 @@ static inline struct quat qslerp(struct quat a, struct quat b, float t)
 	}
 }
 
-// numerically estimate angular velocity from two quaternions
+// numerically estimate angular velocity from two quaternions, in body frame
+// where q0 is the rotation at time t, and q1 is the rotation at time t+dt
 // see e.g., https://fgiesen.wordpress.com/2012/08/24/quaternion-differentiation/
+// https://math.stackexchange.com/questions/2282938/converting-from-quaternion-to-angular-velocity-then-back-to-quaternion
+// https://faculty.sites.iastate.edu/jia/files/inline-files/quaternion.pdf (eq. 30)
 static inline struct vec quat2omega(struct quat q0, struct quat q1, float dt)
 {
 	// omega = vectorpart_of(2 * qdot * q_inv)
 	struct quat q_dot = mkquat(
-		(q0.x - q1.x) / dt,
-		(q0.y - q1.y) / dt,
-		(q0.z - q1.z) / dt,
-		(q0.w - q1.w) / dt);
+		(q1.x - q0.x) / dt,
+		(q1.y - q0.y) / dt,
+		(q1.z - q0.z) / dt,
+		(q1.w - q0.w) / dt);
 
-	struct quat q_inv = qinv(q1);
+	struct quat q_inv = qinv(q0);
 
 	struct quat r = qqmul(q_dot, q_inv);
 	struct vec omega = vscl(2, quatimagpart(r));
