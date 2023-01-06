@@ -711,22 +711,22 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // if a point mass for the payload is considered then: Pmu_des = F_d
 
     //directional unit vector qi and angular velocity wi pointing from UAV to payload
-    struct vec qi = vnormalize(vsub(plStPos, statePos)); 
+    self->qi = vnormalize(vsub(plStPos, statePos)); 
   
-    struct vec qidot = vdiv(vsub(plStVel, stateVel), vmag(vsub(plStPos, statePos)));
-    struct vec wi = vcross(qi, qidot);
-    struct mat33 qiqiT = vecmult(qi);
+    self->qidot = vdiv(vsub(plStVel, stateVel), vmag(vsub(plStPos, statePos)));
+    struct vec wi = vcross(self->qi, self->qidot);
+    struct mat33 qiqiT = vecmult(self->qi);
     struct vec virtualInp = mvmul(qiqiT,self->desVirtInp);
 
     
     // Compute parallel component
     struct vec acc_ = plAcc_d; 
-    struct vec u_parallel = vadd3(virtualInp, vscl(self->mass*l*vmag2(wi), qi), vscl(self->mass, mvmul(qiqiT, acc_)));
+    struct vec u_parallel = vadd3(virtualInp, vscl(self->mass*l*vmag2(wi), self->qi), vscl(self->mass, mvmul(qiqiT, acc_)));
     
     // Compute Perpindicular Component
     struct vec qdi = vneg(vnormalize(self->desVirtInp));
-    struct vec eq  = vcross(qdi, qi);
-    struct mat33 skewqi = mcrossmat(qi);
+    struct vec eq  = vcross(qdi, self->qi);
+    struct mat33 skewqi = mcrossmat(self->qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
 
     struct vec qdidot = vzero();//vdiv(vsub(qdi, self->qdi_prev), dt);
@@ -736,7 +736,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     struct vec u_perpind = vsub(
       vscl(self->mass*l, mvmul(skewqi, vadd3(vneg(veltmul(self->K_q, eq)), vneg(veltmul(self->K_w, ew)), 
-      vneg(vscl(vdot(qi, wdi), qidot))))),
+      vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
       vscl(self->mass, mvmul(skewqi2, acc_))
     );
 
@@ -1014,6 +1014,15 @@ LOG_ADD(LOG_FLOAT, omegarz, &g_self.omega_r.z)
 LOG_ADD(LOG_FLOAT, ux, &g_self.u_i.x)
 LOG_ADD(LOG_FLOAT, uy, &g_self.u_i.y)
 LOG_ADD(LOG_FLOAT, uz, &g_self.u_i.z)
+// Cable States
+LOG_ADD(LOG_FLOAT, qix, &g_self.qi.x)
+LOG_ADD(LOG_FLOAT, qiy, &g_self.qi.y)
+LOG_ADD(LOG_FLOAT, qiz, &g_self.qi.z)
+
+LOG_ADD(LOG_FLOAT, qidotx, &g_self.qidot.x)
+LOG_ADD(LOG_FLOAT, qidoty, &g_self.qidot.y)
+LOG_ADD(LOG_FLOAT, qidotz, &g_self.qidot.z)
+
 
 // hyperplanes
 LOG_ADD(LOG_FLOAT, n1x, &g_self.n1.x)
