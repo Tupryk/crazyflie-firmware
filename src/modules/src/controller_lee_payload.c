@@ -230,7 +230,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         
         l1 = vmag(vsub(plSt_att, statePos));
         l2 = vmag(vsub(plSt_att2, statePos2));
-
+        M_d = mkvec(M_d.x, 0, M_d.z);
         struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
         struct vec n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
         
