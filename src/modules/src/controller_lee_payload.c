@@ -41,6 +41,7 @@ extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp_rig;
 extern OSQPWorkspace workspace_2uav_1hp_rod;
+extern OSQPWorkspace workspace_hyperplane;
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
