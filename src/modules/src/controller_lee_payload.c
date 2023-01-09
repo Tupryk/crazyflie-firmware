@@ -638,8 +638,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec plvel_e = vclampnorm(vsub(plVel_d, plStVel), self->Kpos_D_limit);
     self->i_error_pos = vclampnorm(vadd(self->i_error_pos, vscl(dt, plpos_e)), self->Kpos_I_limit);
 
+    struct vec attPoint = mkvec(0, 0, 0);
     if (!isnanf(plquat.w)) {
-      struct vec attPoint = mkvec(0, 0, 0);
       attPoint = self->attachement_points[0].point;
       if (state->num_neighbors >= 1) {
         if (state->num_neighbors == 1) {
@@ -723,7 +723,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     
     // Compute parallel component
-    struct vec acc_ = plAcc_d; 
+    struct vec acc_ = plAcc_d;
+    if (!isnanf(plquat.w)) {
+    struct vec acc_ = vadd(plAcc_d, mvmul(mmul(quat2rotmat(plquat), mmul(mcrossmat(plomega), mcrossmat(plomega))), attPoint));
+    } 
     struct vec u_parallel = vadd3(virtualInp, vscl(self->mass*l*vmag2(wi), self->qi), vscl(self->mass, mvmul(qiqiT, acc_)));
     
     // Compute Perpindicular Component
@@ -774,7 +777,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     if (self->thrustSI > 0) {
       zdes = vnormalize(Fd_);
     } 
-    struct vec xcdes = mkvec(cosf(desiredYaw), sinf(desiredYaw), 0); 
+    // struct vec xcdes = mkvec(cosf(desiredYaw), sinf(desiredYaw), 0); 
+    struct vec xcdes = mkvec(1, 0, 0); 
     struct vec zcrossx = vcross(zdes, xcdes);
     float normZX = vmag(zcrossx);
 
