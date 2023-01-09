@@ -90,6 +90,7 @@ typedef struct controllerLeePayload_s {
     struct vec M_d; // control moments of the payload
     struct quat qp_des; // desired quaternion orientation for the payload
     struct vec wp_des;  // desired omega for the payload
+    struct vec omega_pr;
     struct vec qi;
     struct vec qidot;
     struct vec qdi;
