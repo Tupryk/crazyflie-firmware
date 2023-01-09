@@ -180,6 +180,8 @@ static controllerLeePayload_t g_self = {
   .qp_des = {0, 0, 0, 1},
   .wp_des = {0, 0, 0},
 
+  .en_qdidot = 0,
+
   .radius = 0.15,
 
   .lambdaa = 0.0,
@@ -730,7 +732,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct mat33 skewqi = mcrossmat(self->qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
 
-    struct vec qdidot = vzero();//vdiv(vsub(qdi, self->qdi_prev), dt);
+    struct vec qdidot = vzero();
+    if (self->en_qdidot) {
+      qdidot = vdiv(vsub(qdi, self->qdi_prev), dt);
+    }
+
     self->qdi_prev = qdi;
     struct vec wdi = vcross(qdi, qdidot);
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
@@ -955,6 +961,8 @@ PARAM_ADD(PARAM_FLOAT, Kqz, &g_self.K_q.z)
 PARAM_ADD(PARAM_FLOAT, Kwx, &g_self.K_w.x)
 PARAM_ADD(PARAM_FLOAT, Kwy, &g_self.K_w.y)
 PARAM_ADD(PARAM_FLOAT, Kwz, &g_self.K_w.z)
+
+PARAM_ADD(PARAM_UINT8, en_qdidot, &g_self.en_qdidot)
 
 PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
 PARAM_ADD(PARAM_FLOAT, massP, &g_self.mp)

@@ -258,7 +258,7 @@ static c_float work_D_temp[3];
 static c_float work_D_temp_A[3];
 static c_float work_E_temp[2];
 
-OSQPWorkspace hyperplane = {
+OSQPWorkspace workspace_hyperplane = {
 &data, (LinSysSolver *)&linsys_solver,
 work_rho_vec, work_rho_inv_vec,
 work_constr_type,
