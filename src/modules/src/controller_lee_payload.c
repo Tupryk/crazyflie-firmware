@@ -171,6 +171,7 @@ static controllerLeePayload_t g_self = {
   // Cables PD
   .K_q = {25, 25, 25},
   .K_w = {24, 24, 24},
+  .K_q_I = {0, 0, 0},
 
   //Attitude PID 
   .KR = {0.008, 0.008, 0.01},
@@ -181,6 +182,7 @@ static controllerLeePayload_t g_self = {
   .wp_des = {0, 0, 0},
 
   .en_qdidot = 0,
+  .en_accrb = 1,
 
   .radius = 0.15,
 
@@ -559,6 +561,7 @@ void controllerLeePayloadReset(controllerLeePayload_t* self)
 {
   self->i_error_pos = vzero();
   self->i_error_att = vzero();
+  self->i_error_q = vzero();
   self->qi_prev = mkvec(0,0,-1);
   self->qidot_prev = vzero();
   self->acc_prev   = vzero();
@@ -640,33 +643,20 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     struct vec attPoint = mkvec(0, 0, 0);
     if (!isnanf(plquat.w)) {
-      attPoint = self->attachement_points[0].point;
-      if (state->num_neighbors >= 1) {
-        if (state->num_neighbors == 1) {
-          uint8_t ids[1];
-          ids[0] = state->neighbors[0].id;
-          for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
-            if (self->attachement_points[i].id == ids[0]) {
-            true;
-            } else {
-              attPoint = self->attachement_points[i].point;
-            }
+      
+      // find the attachment point for this UAV (the one, which doesn't have any neighbor associated with it)
+      for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
+        bool found = false;
+        for (uint8_t j = 0; j < state->num_neighbors; ++j) {
+          if (self->attachement_points[i].id == state->neighbors[j].id) {
+            // this attachement point belongs to a neighbor
+            found = true;
+            break;
           }
-        } else if (state->num_neighbors >= 2) {
-          if (state->num_neighbors == 2) {
-            uint8_t ids[2];
-            ids[0] = state->neighbors[0].id;
-            ids[1] = state->neighbors[0].id;
-            for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
-              if (self->attachement_points[i].id == ids[0]) {
-                true;
-              } else if (self->attachement_points[i].id == ids[1]) {
-                true;
-              } else {
-                attPoint = self->attachement_points[i].point;
-              }
-            }
-          }
+        }
+        if (!found) {
+          attPoint = self->attachement_points[i].point;
+          break;
         }
       }
       // If the payload is a rigid body then the the attachment point should be added to PlStPos
@@ -725,13 +715,16 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // Compute parallel component
     struct vec acc_ = plAcc_d;
     if (!isnanf(plquat.w)) {
-    struct vec acc_ = vadd(plAcc_d, mvmul(mmul(quat2rotmat(plquat), mmul(mcrossmat(plomega), mcrossmat(plomega))), attPoint));
+      if (self->en_accrb) {
+        acc_ = vadd(plAcc_d, qvrot(plquat, mvmul(mmul(mcrossmat(plomega), mcrossmat(plomega)), attPoint)));
+      }
     } 
     struct vec u_parallel = vadd3(virtualInp, vscl(self->mass*l*vmag2(wi), self->qi), vscl(self->mass, mvmul(qiqiT, acc_)));
     
     // Compute Perpindicular Component
     struct vec qdi = vneg(vnormalize(self->desVirtInp));
     struct vec eq  = vcross(qdi, self->qi);
+    self->i_error_q = vadd(self->i_error_q, vscl(dt, eq));
     struct mat33 skewqi = mcrossmat(self->qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
 
@@ -745,8 +738,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
 
     struct vec u_perpind = vsub(
-      vscl(self->mass*l, mvmul(skewqi, vadd3(vneg(veltmul(self->K_q, eq)), vneg(veltmul(self->K_w, ew)), 
-      vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
+      vscl(self->mass*l, mvmul(skewqi, vadd4(
+        vneg(veltmul(self->K_q, eq)),
+        vneg(veltmul(self->K_w, ew)),
+        vneg(veltmul(self->K_q_I, self->i_error_q)), 
+        vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
       vscl(self->mass, mvmul(skewqi2, acc_))
     );
 
@@ -966,7 +962,13 @@ PARAM_ADD(PARAM_FLOAT, Kwx, &g_self.K_w.x)
 PARAM_ADD(PARAM_FLOAT, Kwy, &g_self.K_w.y)
 PARAM_ADD(PARAM_FLOAT, Kwz, &g_self.K_w.z)
 
+// Cable I
+PARAM_ADD(PARAM_FLOAT, KqIx, &g_self.K_q_I.x)
+PARAM_ADD(PARAM_FLOAT, KqIy, &g_self.K_q_I.y)
+PARAM_ADD(PARAM_FLOAT, KqIz, &g_self.K_q_I.z)
+
 PARAM_ADD(PARAM_UINT8, en_qdidot, &g_self.en_qdidot)
+PARAM_ADD(PARAM_UINT8, en_accrb, &g_self.en_accrb)
 
 PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
 PARAM_ADD(PARAM_FLOAT, massP, &g_self.mp)

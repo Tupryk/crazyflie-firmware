@@ -56,10 +56,12 @@ typedef struct controllerLeePayload_s {
 
     struct vec i_error_pos;
     struct vec i_error_att;
+    struct vec i_error_q; // cable
 
    // Cable PD 
     struct vec K_q;
     struct vec K_w;
+    struct vec K_q_I;
 
    // Cable errors
     struct vec plp_error;
@@ -94,6 +96,7 @@ typedef struct controllerLeePayload_s {
     struct vec qidot;
     struct vec qdi;
     uint8_t en_qdidot; // 0: use qdidot = vzero(), 1: estimate numerically
+    uint8_t en_accrb;
     struct vec qdidot;
     // desired value from the QP
     struct vec desVirtInp;
