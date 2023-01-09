@@ -677,8 +677,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec eRp = vscl(0.5f, mkvec(eRMp.m[2][1], eRMp.m[0][2], eRMp.m[1][0]));
 
     self->wp_des = mkvec(setpoint->attitudeRate.roll, setpoint->attitudeRate.pitch, setpoint->attitudeRate.yaw);
-    struct vec omega_pr = mvmul(mmul(mtranspose(Rp), Rp_des), self->wp_des);
-    struct vec omega_perror = vsub(plomega, omega_pr);
+    self->omega_pr = mvmul(mmul(mtranspose(Rp), Rp_des), self->wp_des);
+    struct vec omega_perror = vsub(plomega, self->omega_pr);
 
     self->plp_error = plpos_e;
     self->plv_error = plvel_e;
@@ -1015,6 +1015,11 @@ LOG_ADD(LOG_FLOAT, rpyz, &g_self.rpy.z)
 LOG_ADD(LOG_FLOAT, rpydx, &g_self.rpy_des.x)
 LOG_ADD(LOG_FLOAT, rpydy, &g_self.rpy_des.y)
 LOG_ADD(LOG_FLOAT, rpydz, &g_self.rpy_des.z)
+
+// desired omega for payload
+LOG_ADD(LOG_FLOAT, omega_prx, &g_self.omega_pr.x)
+LOG_ADD(LOG_FLOAT, omega_pry, &g_self.omega_pr.y)
+LOG_ADD(LOG_FLOAT, omega_prz, &g_self.omega_pr.z)
 
 // omega
 LOG_ADD(LOG_FLOAT, omegax, &g_self.omega.x)
