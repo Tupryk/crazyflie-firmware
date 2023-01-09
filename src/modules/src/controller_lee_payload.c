@@ -732,13 +732,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct mat33 skewqi = mcrossmat(self->qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
 
-    struct vec qdidot = vzero();
+    self->qdidot = vzero();
     if (self->en_qdidot) {
-      qdidot = vdiv(vsub(qdi, self->qdi_prev), dt);
+      self->qdidot = vdiv(vsub(qdi, self->qdi_prev), dt);
     }
 
     self->qdi_prev = qdi;
-    struct vec wdi = vcross(qdi, qdidot);
+    struct vec wdi = vcross(qdi, self->qdidot);
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
 
     struct vec u_perpind = vsub(
@@ -1032,6 +1032,9 @@ LOG_ADD(LOG_FLOAT, qidotx, &g_self.qidot.x)
 LOG_ADD(LOG_FLOAT, qidoty, &g_self.qidot.y)
 LOG_ADD(LOG_FLOAT, qidotz, &g_self.qidot.z)
 
+LOG_ADD(LOG_FLOAT, qdidotx, &g_self.qdidot.x)
+LOG_ADD(LOG_FLOAT, qdidoty, &g_self.qdidot.y)
+LOG_ADD(LOG_FLOAT, qdidotz, &g_self.qdidot.z)
 
 // hyperplanes
 LOG_ADD(LOG_FLOAT, n1x, &g_self.n1.x)

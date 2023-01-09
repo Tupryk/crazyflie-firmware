@@ -94,6 +94,7 @@ typedef struct controllerLeePayload_s {
     struct vec qidot;
     struct vec qdi;
     uint8_t en_qdidot; // 0: use qdidot = vzero(), 1: estimate numerically
+    struct vec qdidot;
     // desired value from the QP
     struct vec desVirtInp;
     struct vec desVirt2_prev;
