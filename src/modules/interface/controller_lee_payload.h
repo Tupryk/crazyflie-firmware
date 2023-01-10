@@ -75,6 +75,7 @@ typedef struct controllerLeePayload_s {
     // Logging variables
     struct vec qi_prev;
     struct vec qdi_prev;
+    uint32_t qdi_prev_tick;
     struct vec payload_vel_prev;
     struct vec rpy;
     struct vec rpy_des;
@@ -103,6 +104,7 @@ typedef struct controllerLeePayload_s {
     struct vec desVirtInp;
     struct vec desVirt2_prev;
     struct vec desVirt3_prev;
+    uint32_t desVirtInp_tick;
 
     float lambdaa; // regularization on how close to stay to previous value
 

@@ -58,11 +58,13 @@ struct QPInput
   uint8_t num_neighbors;
   uint8_t ids[2]; // ids for statePos2, statePos3
   controllerLeePayload_t* self;
+  uint32_t timestamp; // ticks, i.e., ms
 };
 
 struct QPOutput
 {
   struct vec desVirtInp;
+  uint32_t timestamp; // ticks (copied from input)
 };
 
 
@@ -208,6 +210,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
   float radius = input->self->radius;
   struct vec desVirtInp   = input->self->desVirtInp;
   struct vec desVirt_prev = input->self->desVirtInp;
+
+  output->timestamp = input->timestamp;
 
   bool is_rigid_body = !isnanf(input->plStquat.w);
   
@@ -478,7 +482,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 }
 #ifdef CRAZYFLIE_FW
 
-static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d)
+static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d, uint32_t* ticks)
 {
   struct QPInput qpinput;
   struct QPOutput qpoutput;
@@ -506,10 +510,13 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   }  
 
   qpinput.self = self;
+  qpinput.timestamp = *ticks;
   xQueueOverwrite(queueQPInput, &qpinput);
 
   // get the latest result from the async computation (wait until at least one computation has been made)
   xQueuePeek(queueQPOutput, &qpoutput, portMAX_DELAY);
+
+  *ticks = qpoutput.timestamp;
   return qpoutput.desVirtInp;
 }
 
@@ -533,7 +540,7 @@ void controllerLeePayloadQPTask(void * prm)
 }
 #else
 
-static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d)
+static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d, uint32_t* ticks)
 {
   struct QPInput qpinput;
   struct QPOutput qpoutput;
@@ -560,9 +567,11 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
     qpinput.ids[1] = state->neighbors[1].id;
   }  
   qpinput.self = self;
+  qpinput.timestamp = *ticks;
   // solve the QP
   runQP(&qpinput, &qpoutput);
 
+  *ticks = qpoutput.timestamp;
   return qpoutput.desVirtInp;
 }
 
@@ -711,11 +720,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       vneg(veltmul(self->Kprot_D, omega_perror))
     );
     if (!isnanf(plquat.w)) {
+      // TODO: move that into the QP
       struct vec F_dP = mvmul(mtranspose(Rp),self->F_d);
-      self->desVirtInp = computeDesiredVirtualInput(self, state, F_dP, self->M_d);
+      self->desVirtInp_tick = tick;
+      self->desVirtInp = computeDesiredVirtualInput(self, state, F_dP, self->M_d, &self->desVirtInp_tick);
     }
     else{
-      self->desVirtInp = computeDesiredVirtualInput(self, state, self->F_d, self->M_d);
+      self->desVirtInp_tick = tick;
+      self->desVirtInp = computeDesiredVirtualInput(self, state, self->F_d, self->M_d, &self->desVirtInp_tick);
     }
     // computed desired generalized forces in rigid payload case for equation 23 is Pmu_des = [Rp.T@F_d, M_d]
     // if a point mass for the payload is considered then: Pmu_des = F_d
@@ -724,9 +736,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     self->qi = vnormalize(vsub(plStPos, statePos)); 
 
     // from the text between (2) and (3) in Lee's paper
-    // qi_dot = (x0_dot + R0_dot rho_i - xi_dot)/l1
-    struct mat33 R0_dot = mmul(Rp, mcrossmat(plomega));
-    self->qidot = vdiv(vsub(vadd(plStVel, mvmul(R0_dot, attPoint)), stateVel), l);
+    // qi_dot = (x0_dot + R0_dot rho_i - xi_dot)/li
+    if (!isnanf(plquat.w)) {
+      struct mat33 R0_dot = mmul(Rp, mcrossmat(plomega));
+      self->qidot = vdiv(vsub(vadd(plStVel, mvmul(R0_dot, attPoint)), stateVel), l);
+    } else {
+      self->qidot = vdiv(vsub(plStVel, stateVel), l);
+    }
 
     struct vec wi = vcross(self->qi, self->qidot);
     struct mat33 qiqiT = vecmult(self->qi);
@@ -751,10 +767,16 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     self->qdidot = vzero();
     if (self->en_qdidot) {
-      self->qdidot = vdiv(vsub(qdi, self->qdi_prev), dt);
+      float qdi_dt = (self->desVirtInp_tick - self->qdi_prev_tick) / 1000.0f;
+      if (qdi_dt > 0) {
+        self->qdidot = vdiv(vsub(qdi, self->qdi_prev), qdi_dt);
+      }
     }
 
-    self->qdi_prev = qdi;
+    if (self->desVirtInp_tick != self->qdi_prev_tick) {
+      self->qdi_prev = qdi;
+      self->qdi_prev_tick = self->desVirtInp_tick;
+    }
     struct vec wdi = vcross(qdi, self->qdidot);
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
 
@@ -1036,6 +1058,12 @@ LOG_ADD(LOG_FLOAT, rpyz, &g_self.rpy.z)
 LOG_ADD(LOG_FLOAT, rpydx, &g_self.rpy_des.x)
 LOG_ADD(LOG_FLOAT, rpydy, &g_self.rpy_des.y)
 LOG_ADD(LOG_FLOAT, rpydz, &g_self.rpy_des.z)
+
+// desired quat for the payload
+LOG_ADD(LOG_FLOAT, qp_desx, &g_self.qp_des.x)
+LOG_ADD(LOG_FLOAT, qp_desy, &g_self.qp_des.y)
+LOG_ADD(LOG_FLOAT, qp_desz, &g_self.qp_des.z)
+LOG_ADD(LOG_FLOAT, qp_desw, &g_self.qp_des.w)
 
 // desired omega for payload
 LOG_ADD(LOG_FLOAT, omega_prx, &g_self.omega_pr.x)
