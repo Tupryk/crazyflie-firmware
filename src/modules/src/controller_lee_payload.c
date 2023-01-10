@@ -488,6 +488,12 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   qpinput.M_d = M_d;
   qpinput.plStPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
   qpinput.plStquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
+  if (state->num_neighbors == 1) {
+    struct vec rpy = quat2rpy(qpinput.plStquat);
+    rpy.y = 0;
+    qpinput.plStquat = rpy2quat(rpy);
+  }
+
   qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
     // We assume that we always have at least 1 neighbor
   qpinput.statePos2 = mkvec(state->neighbors[0].pos.x, state->neighbors[0].pos.y, state->neighbors[0].pos.z);
@@ -537,6 +543,11 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   qpinput.M_d = M_d; 
   qpinput.plStPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
   qpinput.plStquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
+  if (state->num_neighbors == 1) {
+    struct vec rpy = quat2rpy(qpinput.plStquat);
+    rpy.y = 0;
+    qpinput.plStquat = rpy2quat(rpy);
+  }
   qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
 
   // We assume that we always have at least 1 neighbor
@@ -635,6 +646,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // rotational states of the payload
     struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
     struct vec plomega = mkvec(state->payload_omega.x, state->payload_omega.y, state->payload_omega.z);
+    if (state->num_neighbors == 1) {
+      struct vec rpy = quat2rpy(plquat);
+      rpy.y = 0;
+      plquat = rpy2quat(rpy);
+      plomega.y = 0;
+    }
 
     // errors
     struct vec plpos_e = vclampnorm(vsub(plPos_d, plStPos), self->Kpos_P_limit);
@@ -676,7 +693,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct mat33 eRMp =  msub(mmul(mtranspose(Rp_des), Rp), mmul(mtranspose(Rp), Rp_des));
     struct vec eRp = vscl(0.5f, mkvec(eRMp.m[2][1], eRMp.m[0][2], eRMp.m[1][0]));
 
-    self->wp_des = mkvec(setpoint->attitudeRate.roll, setpoint->attitudeRate.pitch, setpoint->attitudeRate.yaw);
+    self->wp_des = mkvec(radians(setpoint->attitudeRate.roll), radians(setpoint->attitudeRate.pitch), radians(setpoint->attitudeRate.yaw));
     self->omega_pr = mvmul(mmul(mtranspose(Rp), Rp_des), self->wp_des);
     struct vec omega_perror = vsub(plomega, self->omega_pr);
 
@@ -705,8 +722,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     //directional unit vector qi and angular velocity wi pointing from UAV to payload
     self->qi = vnormalize(vsub(plStPos, statePos)); 
-  
-    self->qidot = vdiv(vsub(plStVel, stateVel), vmag(vsub(plStPos, statePos)));
+
+    // from the text between (2) and (3) in Lee's paper
+    // qi_dot = (x0_dot + R0_dot rho_i - xi_dot)/l1
+    struct mat33 R0_dot = mmul(Rp, mcrossmat(plomega));
+    self->qidot = vdiv(vsub(vadd(plStVel, mvmul(R0_dot, attPoint)), stateVel), l);
+
     struct vec wi = vcross(self->qi, self->qidot);
     struct mat33 qiqiT = vecmult(self->qi);
     struct vec virtualInp = mvmul(qiqiT,self->desVirtInp);
