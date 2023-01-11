@@ -169,6 +169,8 @@ static controllerLeePayload_t g_self = {
   .Kprot_P_limit = 100,
   .Kprot_D = {0.005, 0.005, 0.005},
   .Kprot_D_limit = 100,
+  .Kprot_I = {0.0, 0.0, 0.0},
+  .Kprot_I_limit = 100,
 
   // Cables PD
   .K_q = {25, 25, 25},
@@ -582,6 +584,7 @@ void controllerLeePayloadReset(controllerLeePayload_t* self)
   self->i_error_pos = vzero();
   self->i_error_att = vzero();
   self->i_error_q = vzero();
+  self->i_error_pl_att = vzero();
   self->qi_prev = mkvec(0,0,-1);
   self->qidot_prev = vzero();
   self->acc_prev   = vzero();
@@ -625,18 +628,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
   // uint64_t startTime = usecTimestamp();
 
   float dt = (float)(1.0f/ATTITUDE_RATE);
-  // Address inconsistency in firmware where we need to compute our own desired yaw angle
-  // Rate-controlled YAW is moving YAW angle setpoint
-  float desiredYaw = 0; //rad
-  if (setpoint->mode.yaw == modeVelocity) {
-    desiredYaw = radians(state->attitude.yaw + setpoint->attitudeRate.yaw * dt);
-  } else if (setpoint->mode.yaw == modeAbs) {
-    desiredYaw = radians(setpoint->attitude.yaw);
-  } else if (setpoint->mode.quat == modeAbs) {
-    struct quat setpoint_quat = mkquat(setpoint->attitudeQuaternion.x, setpoint->attitudeQuaternion.y, setpoint->attitudeQuaternion.z, setpoint->attitudeQuaternion.w);
-    self->rpy_des = quat2rpy(setpoint_quat);
-    desiredYaw = self->rpy_des.z;
-  }
 
   // Position controller
   if (   setpoint->mode.x == modeAbs
@@ -695,12 +686,26 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // payload quat to R 
     struct mat33 Rp = quat2rotmat(plquat);
     // define desired payload Rp_des = eye(3) (i.e., qp_des = [0,0,0,1] (x,y,z,w))
-    self->qp_des = mkquat(setpoint->attitudeQuaternion.x, setpoint->attitudeQuaternion.y, setpoint->attitudeQuaternion.z, setpoint->attitudeQuaternion.w);
+
+    // Address inconsistency in firmware where we need to compute our own desired yaw angle
+    // Rate-controlled YAW is moving YAW angle setpoint
+    if (setpoint->mode.yaw == modeVelocity) {
+      float desiredYaw = radians(state->attitude.yaw + setpoint->attitudeRate.yaw * dt);
+      self->qp_des = rpy2quat(mkvec(0,0,desiredYaw));
+    } else if (setpoint->mode.yaw == modeAbs) {
+      float desiredYaw = radians(setpoint->attitude.yaw);
+      self->qp_des = rpy2quat(mkvec(0,0,desiredYaw));
+    } else if (setpoint->mode.quat == modeAbs) {
+      self->qp_des = mkquat(setpoint->attitudeQuaternion.x, setpoint->attitudeQuaternion.y, setpoint->attitudeQuaternion.z, setpoint->attitudeQuaternion.w);
+    }
+  
     struct mat33 Rp_des = quat2rotmat(self->qp_des); 
     // define orientation error     
     // eRp =  msub(mmul(mtranspose(self->R_des), self->R), mmul(mtranspose(self->R), self->R_des));
     struct mat33 eRMp =  msub(mmul(mtranspose(Rp_des), Rp), mmul(mtranspose(Rp), Rp_des));
     struct vec eRp = vscl(0.5f, mkvec(eRMp.m[2][1], eRMp.m[0][2], eRMp.m[1][0]));
+    
+    self->i_error_pl_att = vclampnorm(vadd(self->i_error_pl_att, vscl(dt, eRp)), self->Kprot_I_limit);
 
     self->wp_des = mkvec(radians(setpoint->attitudeRate.roll), radians(setpoint->attitudeRate.pitch), radians(setpoint->attitudeRate.yaw));
     self->omega_pr = mvmul(mmul(mtranspose(Rp), Rp_des), self->wp_des);
@@ -715,9 +720,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       veltmul(self->Kpos_D, plvel_e),
       veltmul(self->Kpos_I, self->i_error_pos)));
 
-    self->M_d = vadd(
+    if (tick % 1000 == 0) {
+      DEBUG_PRINT("iep %f\n", (double)self->i_error_pos.z);
+    }
+
+    self->M_d = vadd3(
       vneg(veltmul(self->Kprot_P, eRp)),
-      vneg(veltmul(self->Kprot_D, omega_perror))
+      vneg(veltmul(self->Kprot_D, omega_perror)),
+      vneg(veltmul(self->Kprot_I, self->i_error_pl_att))
     );
     if (!isnanf(plquat.w)) {
       // TODO: move that into the QP
@@ -765,15 +775,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct mat33 skewqi = mcrossmat(self->qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
 
-    self->qdidot = vzero();
-    if (self->en_qdidot) {
-      float qdi_dt = (self->desVirtInp_tick - self->qdi_prev_tick) / 1000.0f;
-      if (qdi_dt > 0) {
-        self->qdidot = vdiv(vsub(qdi, self->qdi_prev), qdi_dt);
-      }
-    }
-
     if (self->desVirtInp_tick != self->qdi_prev_tick) {
+      if (self->en_qdidot) {
+        float qdi_dt = (self->desVirtInp_tick - self->qdi_prev_tick) / 1000.0f;
+        self->qdidot = vdiv(vsub(qdi, self->qdi_prev), qdi_dt);
+      } else {
+        self->qdidot = vzero();
+      }
       self->qdi_prev = qdi;
       self->qdi_prev_tick = self->desVirtInp_tick;
     }
@@ -840,14 +848,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
           return;
       }
     }
-    // On CF2, thrust is mapped 65536 <==> 4 * 12 grams
-    const float max_thrust = 70.0f / 1000.0f * 9.81f; // N
-    control->thrustSI = setpoint->thrust / UINT16_MAX * max_thrust;
-
-    self->qr = mkvec(
-      radians(setpoint->attitude.roll),
-      -radians(setpoint->attitude.pitch), // This is in the legacy coordinate system where pitch is inverted
-      desiredYaw);
   }
 
   // Attitude controller
@@ -979,6 +979,11 @@ PARAM_ADD(PARAM_FLOAT, Kprot_Dx, &g_self.Kprot_D.x)
 PARAM_ADD(PARAM_FLOAT, Kprot_Dy, &g_self.Kprot_D.y)
 PARAM_ADD(PARAM_FLOAT, Kprot_Dz, &g_self.Kprot_D.z)
 PARAM_ADD(PARAM_FLOAT, Kprot_D_limit, &g_self.Kprot_D_limit)
+// Attitude Payload I
+PARAM_ADD(PARAM_FLOAT, Kprot_Ix, &g_self.Kprot_I.x)
+PARAM_ADD(PARAM_FLOAT, Kprot_Iy, &g_self.Kprot_I.y)
+PARAM_ADD(PARAM_FLOAT, Kprot_Iz, &g_self.Kprot_I.z)
+PARAM_ADD(PARAM_FLOAT, Kprot_I_limit, &g_self.Kprot_I_limit)
 
 // Attitude P
 PARAM_ADD(PARAM_FLOAT, KRx, &g_self.KR.x)

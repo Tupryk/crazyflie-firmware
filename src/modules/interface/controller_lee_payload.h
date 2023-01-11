@@ -53,10 +53,13 @@ typedef struct controllerLeePayload_s {
     float Kprot_P_limit;
     struct vec Kprot_D;
     float Kprot_D_limit;
+    struct vec Kprot_I;
+    float Kprot_I_limit;
 
     struct vec i_error_pos;
     struct vec i_error_att;
     struct vec i_error_q; // cable
+    struct vec i_error_pl_att; // payload attitude
 
    // Cable PD 
     struct vec K_q;
@@ -79,7 +82,6 @@ typedef struct controllerLeePayload_s {
     struct vec payload_vel_prev;
     struct vec rpy;
     struct vec rpy_des;
-    struct vec qr;
     struct mat33 R_des;
     struct quat q;
     struct mat33 R;
