@@ -148,7 +148,7 @@ static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, stru
   return n_sol;
 }
 
-static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec pload, float r, float l1, float l2, struct vec* n1, struct vec* n2) {
+static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec pload, float r, float l1, float l2, float lambda_svm, struct vec Fd, struct vec* n1, struct vec* n2) {
   // relative coordinates
   struct vec p1_r = vsub(p1, pload);
   struct vec p2_r = vsub(p2, pload);
@@ -156,26 +156,49 @@ static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec 
   // run QP to find separating hyperplane
   OSQPWorkspace* workspace = &workspace_hyperplane;
 
+  // need to adjust P for lambda_svm
+  c_float Px_new[1] = {2 * lambda_svm};
+  c_int Px_new_idx[1] = {3};
+  osqp_update_P(workspace, Px_new, Px_new_idx, 1);
+
   // need to adjust A
-  c_float A[6] = {
-    p1_r.x, -p2_r.x, p1_r.y, -p2_r.y, p1_r.z, -p2_r.z
+  c_float A[10] = {
+    Fd.x, p1_r.x, -p2_r.x,
+    Fd.y, p1_r.y, -p2_r.y,
+    Fd.z, p1_r.z, -p2_r.z,
+    -1,
   };
-  c_float A_n = 6;
-  osqp_update_A(workspace, A, OSQP_NULL, A_n);
+  c_float A_n = 10;
+  osqp_update_A(workspace, A, OSQP_NULL, A_n); // WARNING: if OSQP_NULL is passed, *all* elements of A need to be provided!
   osqp_solve(workspace);
   if (workspace->info->status_val == OSQP_SOLVED) {
     struct vec n = vloadf(workspace->solution->x);
 
     // now rotate the hyperplane in two directions to compute the two resulting hyperplanes
     struct vec axis = vcross(n, mkvec(0,0,1));
-    float angle1 = asinf(r / l1);
-    struct quat q1 = qaxisangle(axis, angle1);
-    *n1 = qvrot(q1, n);
 
-    float angle2 = asinf(r / l2);
-    struct quat q2 = qaxisangle(axis, -angle2);
-    *n2 = qvrot(q2, n);
+    if (r > 2.0f * l1) {
+      *n1 = n;
+    } else {
+      float angle1 = 2 * asinf(r / (2.0f * l1));
+      struct quat q1 = qaxisangle(axis, angle1);
+      *n1 = qvrot(q1, n);
+    }
+
+    if (r > 2.0f * l2) {
+      *n2 = n;
+    } else {
+      float angle2 = 2 * asinf(r / (2.0f * l2));
+      struct quat q2 = qaxisangle(axis, -angle2);
+      *n2 = vneg(qvrot(q2, n));
+    }
   } else {
+  #ifdef CRAZYFLIE_FW
+        DEBUG_PRINT("QPsvm: %s\n", workspace->info->status);
+  #else
+        printf("QPsvm: %s\n", workspace->info->status);
+  #endif
+
     *n1 = vzero();
     *n2 = vzero();
   }
@@ -227,6 +250,7 @@ static controllerLeePayload_t g_self = {
   .radius = 0.15,
 
   .lambdaa = 0.0,
+  .lambda_svm = 0.0,
   .gen_hp = 0,
 };
 
@@ -342,7 +366,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           n1 = computePlaneNormal(statePos, statePos2, plStPos, radius, l1, l2);
           n2 = computePlaneNormal(statePos2, statePos, plStPos, radius, l2, l1);
         } else {
-          computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, &n1, &n2);
+          computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, input->self->lambda_svm, F_d, &n1, &n2);
         }
        
         c_float Ax_new[12] = {1, n1.x, 1, n1.y, 1, n1.z, 1,  n2.x, 1, n2.y, 1, n2.z};  
@@ -1080,6 +1104,7 @@ PARAM_ADD(PARAM_FLOAT, radius, &g_self.radius)
 // QP tuning
 
 PARAM_ADD(PARAM_FLOAT, lambda, &g_self.lambdaa)
+PARAM_ADD(PARAM_FLOAT, lambda_svm, &g_self.lambda_svm)
 
 PARAM_ADD(PARAM_UINT8, gen_hp, &g_self.gen_hp)
 

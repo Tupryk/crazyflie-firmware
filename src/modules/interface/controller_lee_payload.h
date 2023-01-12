@@ -109,6 +109,7 @@ typedef struct controllerLeePayload_s {
     uint32_t desVirtInp_tick;
 
     float lambdaa; // regularization on how close to stay to previous value
+    float lambda_svm; // regularization value on how close the hyperplane should be to Fd
 
     uint8_t gen_hp; // 0: "old" geometric method, 1: "new" SVM method
 
