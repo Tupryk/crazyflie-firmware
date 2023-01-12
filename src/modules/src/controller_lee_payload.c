@@ -74,6 +74,7 @@ struct QPOutput
 #include "task.h"
 #include "queue.h"
 #include "static_mem.h"
+#include "eventtrigger.h"
 
 
 #define CONTROLLER_LEE_PAYLOAD_QP_TASK_STACKSIZE (6 * configMINIMAL_STACK_SIZE)
@@ -90,6 +91,8 @@ static QueueHandle_t queueQPOutput;
 STATIC_MEM_QUEUE_ALLOC(queueQPOutput, 1, sizeof(struct QPOutput));
 
 static uint32_t qp_runtime_us = 0;
+
+EVENTTRIGGER(qpSolved)
 
 #endif
 
@@ -145,6 +148,39 @@ static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, stru
   return n_sol;
 }
 
+static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec pload, float r, float l1, float l2, struct vec* n1, struct vec* n2) {
+  // relative coordinates
+  struct vec p1_r = vsub(p1, pload);
+  struct vec p2_r = vsub(p2, pload);
+
+  // run QP to find separating hyperplane
+  OSQPWorkspace* workspace = &workspace_hyperplane;
+
+  // need to adjust A
+  c_float A[6] = {
+    p1_r.x, -p2_r.x, p1_r.y, -p2_r.y, p1_r.z, -p2_r.z
+  };
+  c_float A_n = 6;
+  osqp_update_A(workspace, A, OSQP_NULL, A_n);
+  osqp_solve(workspace);
+  if (workspace->info->status_val == OSQP_SOLVED) {
+    struct vec n = vloadf(workspace->solution->x);
+
+    // now rotate the hyperplane in two directions to compute the two resulting hyperplanes
+    struct vec axis = vcross(n, mkvec(0,0,1));
+    float angle1 = asinf(r / l1);
+    struct quat q1 = qaxisangle(axis, angle1);
+    *n1 = qvrot(q1, n);
+
+    float angle2 = asinf(r / l2);
+    struct quat q2 = qaxisangle(axis, -angle2);
+    *n2 = qvrot(q2, n);
+  } else {
+    *n1 = vzero();
+    *n2 = vzero();
+  }
+}
+
 
 static controllerLeePayload_t g_self = {
   .mass = 0.034,
@@ -191,6 +227,7 @@ static controllerLeePayload_t g_self = {
   .radius = 0.15,
 
   .lambdaa = 0.0,
+  .gen_hp = 0,
 };
 
 // static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -298,8 +335,15 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         // Solve QP for 2 uavs 1 hp point mass
         OSQPWorkspace* workspace = &workspace_2uav_2hp;
         workspace->settings->warm_start = 1;
-        struct vec n1 = computePlaneNormal(statePos, statePos2, plStPos, radius, l1, l2);
-        struct vec n2 = computePlaneNormal(statePos2, statePos, plStPos, radius, l2, l1);
+
+        struct vec n1;
+        struct vec n2;
+        if (input->self->gen_hp == 0) {
+          n1 = computePlaneNormal(statePos, statePos2, plStPos, radius, l1, l2);
+          n2 = computePlaneNormal(statePos2, statePos, plStPos, radius, l2, l1);
+        } else {
+          computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, &n1, &n2);
+        }
        
         c_float Ax_new[12] = {1, n1.x, 1, n1.y, 1, n1.z, 1,  n2.x, 1, n2.y, 1, n2.z};  
         c_int Ax_new_n = 12;
@@ -481,6 +525,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       }
     }
   }
+#ifdef CRAZYFLIE_FW
+  eventTrigger(&eventTrigger_qpSolved);
+#endif
 }
 #ifdef CRAZYFLIE_FW
 
@@ -515,8 +562,8 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   qpinput.timestamp = *ticks;
   xQueueOverwrite(queueQPInput, &qpinput);
 
-  // get the latest result from the async computation (wait until at least one computation has been made)
-  xQueuePeek(queueQPOutput, &qpoutput, portMAX_DELAY);
+  // get the latest result from the async computation, do not wait to not block the main loop
+  xQueuePeek(queueQPOutput, &qpoutput, 0);
 
   *ticks = qpoutput.timestamp;
   return qpoutput.desVirtInp;
@@ -603,6 +650,12 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
 
     queueQPInput = STATIC_MEM_QUEUE_CREATE(queueQPInput);
     queueQPOutput = STATIC_MEM_QUEUE_CREATE(queueQPOutput);
+
+    struct QPOutput qpoutput;
+    memset(&qpoutput, 0, sizeof(qpoutput));
+    // qpoutput.timestamp = 0;
+    // qpoutput.desVirtInput = vzero();
+    xQueueOverwrite(queueQPOutput, &qpoutput);
 
     taskInitialized = true;
   }
@@ -720,10 +773,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       veltmul(self->Kpos_D, plvel_e),
       veltmul(self->Kpos_I, self->i_error_pos)));
 
-    if (tick % 1000 == 0) {
-      DEBUG_PRINT("iep %f\n", (double)self->i_error_pos.z);
-    }
-
     self->M_d = vadd3(
       vneg(veltmul(self->Kprot_P, eRp)),
       vneg(veltmul(self->Kprot_D, omega_perror)),
@@ -738,6 +787,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     else{
       self->desVirtInp_tick = tick;
       self->desVirtInp = computeDesiredVirtualInput(self, state, self->F_d, self->M_d, &self->desVirtInp_tick);
+    }
+
+    // if we don't have a desVirtInp (yet), skip this round
+    if (vmag2(self->desVirtInp) == 0) {
+      return;
     }
     // computed desired generalized forces in rigid payload case for equation 23 is Pmu_des = [Rp.T@F_d, M_d]
     // if a point mass for the payload is considered then: Pmu_des = F_d
@@ -1026,6 +1080,8 @@ PARAM_ADD(PARAM_FLOAT, radius, &g_self.radius)
 // QP tuning
 
 PARAM_ADD(PARAM_FLOAT, lambda, &g_self.lambdaa)
+
+PARAM_ADD(PARAM_UINT8, gen_hp, &g_self.gen_hp)
 
 // Attachement points rigid body payload
 PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)

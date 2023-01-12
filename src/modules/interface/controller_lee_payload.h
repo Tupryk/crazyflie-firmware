@@ -110,6 +110,8 @@ typedef struct controllerLeePayload_s {
 
     float lambdaa; // regularization on how close to stay to previous value
 
+    uint8_t gen_hp; // 0: "old" geometric method, 1: "new" SVM method
+
     struct vec n1;
     struct vec n2;
     struct vec n3;
