@@ -120,6 +120,11 @@ typedef struct controllerLeePayload_s {
     struct vec n5;
     struct vec n6;
     float radius;
+
+    // set to <= 0 to compute automatically based on the measurements
+    float l1;
+    float l2;
+    float l3;
 } controllerLeePayload_t;
 
 

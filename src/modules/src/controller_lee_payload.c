@@ -252,6 +252,11 @@ static controllerLeePayload_t g_self = {
   .lambdaa = 0.0,
   .lambda_svm = 0.0,
   .gen_hp = 0,
+
+  // automatically compute by default
+  .l1 = -1,
+  .l2 = -1,
+  .l3 = -1,
 };
 
 // static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -269,7 +274,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
   struct vec statePos = input->statePos;
   struct vec plStPos = input->plStPos;
   // struct quat plStquat = input->plStquat;
-  float l1 = vmag(vsub(plStPos, statePos));
   float radius = input->self->radius;
   struct vec desVirtInp   = input->self->desVirtInp;
   struct vec desVirt_prev = input->self->desVirtInp;
@@ -281,7 +285,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
   if (num_neighbors >= 1) {
    // declare additional variables
     struct vec statePos2 = input->statePos2;
-    float l2 = vmag(vsub(plStPos, statePos2));
     struct vec attPoint = input->self->attachement_points[0].point;
     struct vec attPoint2 = input->self->attachement_points[1].point;
     struct vec desVirt2_prev = input->self->desVirt2_prev;
@@ -300,8 +303,14 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
         struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
         
-        l1 = vmag(vsub(plSt_att, statePos));
-        l2 = vmag(vsub(plSt_att2, statePos2));
+        float l1 = input->self->l1;
+        if (l1 <= 0) {
+          l1 = vmag(vsub(plSt_att, statePos));
+        }
+        float l2 = input->self->l2;
+        if (l2 <= 0) {
+          l2 = vmag(vsub(plSt_att2, statePos2));
+        }
         M_d = mkvec(M_d.x, 0, M_d.z);
         struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
         struct vec n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
@@ -356,6 +365,15 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         output->desVirtInp = desVirtInp; 
 
       } else /* point mass case */ {
+        float l1 = input->self->l1;
+        if (l1 <= 0) {
+          l1 = vmag(vsub(plStPos, statePos));
+        }
+        float l2 = input->self->l2;
+        if (l2 <= 0) {
+          l2 = vmag(vsub(plStPos, statePos2));
+        }
+
         // Solve QP for 2 uavs 1 hp point mass
         OSQPWorkspace* workspace = &workspace_2uav_2hp;
         workspace->settings->warm_start = 1;
@@ -404,7 +422,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     } else if (num_neighbors >= 2) {
      // declare additional variables
       struct vec statePos3 = input->statePos3;     
-      float l3 = vmag(vsub(plStPos, statePos3));
       struct vec attPoint3 = input->self->attachement_points[2].point;  
       struct vec desVirt3_prev = input->self->desVirt3_prev;
 
@@ -430,9 +447,19 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
           struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
           struct vec plSt_att3 = vadd(plStPos, qvrot(input->plStquat, attPoint3));
-          l1 = vmag(vsub(plSt_att, statePos));
-          l2 = vmag(vsub(plSt_att2, statePos2));
-          l3 = vmag(vsub(plSt_att3, statePos3));
+
+          float l1 = input->self->l1;
+          if (l1 <= 0) {
+            l1 = vmag(vsub(plSt_att, statePos));
+          }
+          float l2 = input->self->l2;
+          if (l2 <= 0) {
+            l2 = vmag(vsub(plSt_att2, statePos2));
+          }
+          float l3 = input->self->l3;
+          if (l3 <= 0) {
+            l3 = vmag(vsub(plSt_att3, statePos3));
+          }
 
           struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att,  radius, l1, l2);
           struct vec n2 = computePlaneNormal(statePos, statePos3, plSt_att,  radius, l1, l3);
@@ -494,6 +521,19 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           input->self->n6 = n6;
           output->desVirtInp = desVirtInp;
         } else /* point mass case */ {
+          float l1 = input->self->l1;
+          if (l1 <= 0) {
+            l1 = vmag(vsub(plStPos, statePos));
+          }
+          float l2 = input->self->l2;
+          if (l2 <= 0) {
+            l2 = vmag(vsub(plStPos, statePos2));
+          }
+          float l3 = input->self->l3;
+          if (l3 <= 0) {
+            l3 = vmag(vsub(plStPos, statePos3));
+          }
+
           // solve QP for 3 uavs 2 hps and point mass
           OSQPWorkspace* workspace = &workspace_3uav_2hp;
           workspace->settings->warm_start = 1;
@@ -1124,6 +1164,9 @@ PARAM_ADD(PARAM_FLOAT, ap2x, &g_self.attachement_points[2].point.x)
 PARAM_ADD(PARAM_FLOAT, ap2y, &g_self.attachement_points[2].point.y)
 PARAM_ADD(PARAM_FLOAT, ap2z, &g_self.attachement_points[2].point.z)
 
+PARAM_ADD(PARAM_FLOAT, l1, &g_self.l1)
+PARAM_ADD(PARAM_FLOAT, l2, &g_self.l2)
+PARAM_ADD(PARAM_FLOAT, l3, &g_self.l3)
 
 PARAM_GROUP_STOP(ctrlLeeP)
 
