@@ -254,9 +254,9 @@ static controllerLeePayload_t g_self = {
   .gen_hp = 0,
 
   // automatically compute by default
-  .l1 = -1,
-  .l2 = -1,
-  .l3 = -1,
+  .attachement_points[0].l = -1,
+  .attachement_points[1].l = -1,
+  .attachement_points[2].l = -1,
 };
 
 // static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -290,24 +290,28 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     struct vec desVirt2_prev = input->self->desVirt2_prev;
 
     if (num_neighbors == 1) {
+
+      float l1 = -1;
+      float l2 = -1;
+      // Set corresponding attachment points
+      for (uint8_t i = 0; i < num_neighbors+1; ++i) {
+        if (input->self->attachement_points[i].id == input->ids[0]) {
+          attPoint2 = input->self->attachement_points[i].point;
+          l2 = input->self->attachement_points[i].l;
+        } else {
+          attPoint = input->self->attachement_points[i].point;
+          l1 = input->self->attachement_points[i].l;
+        }
+      }
+
       if (is_rigid_body) {
         // QP for 2 uavs 1 hp, rigid rod will be added it here!
-        // Set corresponding attachment points
-        for (uint8_t i = 0; i < num_neighbors+1; ++i) {
-          if (input->self->attachement_points[i].id == input->ids[0]) {
-            attPoint2 = input->self->attachement_points[i].point;
-          } else {
-            attPoint = input->self->attachement_points[i].point;
-          }
-        }
         struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
         struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
-        
-        float l1 = input->self->l1;
+        // automatically compute cable length, if desired
         if (l1 <= 0) {
           l1 = vmag(vsub(plSt_att, statePos));
         }
-        float l2 = input->self->l2;
         if (l2 <= 0) {
           l2 = vmag(vsub(plSt_att2, statePos2));
         }
@@ -365,15 +369,13 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         output->desVirtInp = desVirtInp; 
 
       } else /* point mass case */ {
-        float l1 = input->self->l1;
+        // automatically compute cable length, if desired
         if (l1 <= 0) {
           l1 = vmag(vsub(plStPos, statePos));
         }
-        float l2 = input->self->l2;
         if (l2 <= 0) {
           l2 = vmag(vsub(plStPos, statePos2));
         }
-
         // Solve QP for 2 uavs 1 hp point mass
         OSQPWorkspace* workspace = &workspace_2uav_2hp;
         workspace->settings->warm_start = 1;
@@ -425,18 +427,26 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       struct vec attPoint3 = input->self->attachement_points[2].point;  
       struct vec desVirt3_prev = input->self->desVirt3_prev;
 
+      float l1 = -1;
+      float l2 = -1;
+      float l3 = -1;
+      // Set corresponding attachment points
+      for (uint8_t i = 0; i < num_neighbors+1; ++i) {
+        if (input->self->attachement_points[i].id == input->ids[0]) {
+          attPoint2 = input->self->attachement_points[i].point;
+          l2 = input->self->attachement_points[i].l;
+        } else if (input->self->attachement_points[i].id == input->ids[1]) {
+          attPoint3 = input->self->attachement_points[i].point;
+          l3 = input->self->attachement_points[i].l;
+        } else {
+          attPoint = input->self->attachement_points[i].point;
+          l1 = input->self->attachement_points[i].l;
+        }
+      }
+
       if (num_neighbors == 2) {
         if (is_rigid_body) {
           // solve QP for 3 uavs 2 hps and rigid triangle payload
-          for (uint8_t i = 0; i < num_neighbors+1; ++i) {
-            if (input->self->attachement_points[i].id == input->ids[0]) {
-              attPoint2 = input->self->attachement_points[i].point;
-            } else if (input->self->attachement_points[i].id == input->ids[1]) {
-              attPoint3 = input->self->attachement_points[i].point;
-            } else {
-              attPoint = input->self->attachement_points[i].point;
-            }
-          }
           OSQPWorkspace* workspace = &workspace_3uav_2hp_rig;
           workspace->settings->warm_start = 1;
 
@@ -447,16 +457,14 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
           struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
           struct vec plSt_att3 = vadd(plStPos, qvrot(input->plStquat, attPoint3));
-
-          float l1 = input->self->l1;
+          
+          // automatically compute cable length, if desired
           if (l1 <= 0) {
             l1 = vmag(vsub(plSt_att, statePos));
           }
-          float l2 = input->self->l2;
           if (l2 <= 0) {
             l2 = vmag(vsub(plSt_att2, statePos2));
           }
-          float l3 = input->self->l3;
           if (l3 <= 0) {
             l3 = vmag(vsub(plSt_att3, statePos3));
           }
@@ -521,15 +529,13 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           input->self->n6 = n6;
           output->desVirtInp = desVirtInp;
         } else /* point mass case */ {
-          float l1 = input->self->l1;
+          // automatically compute cable length, if desired
           if (l1 <= 0) {
             l1 = vmag(vsub(plStPos, statePos));
           }
-          float l2 = input->self->l2;
           if (l2 <= 0) {
             l2 = vmag(vsub(plStPos, statePos2));
           }
-          float l3 = input->self->l3;
           if (l3 <= 0) {
             l3 = vmag(vsub(plStPos, statePos3));
           }
@@ -784,28 +790,33 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     self->i_error_pos = vclampnorm(vadd(self->i_error_pos, vscl(dt, plpos_e)), self->Kpos_I_limit);
 
     struct vec attPoint = mkvec(0, 0, 0);
-    if (!isnanf(plquat.w)) {
-      
-      // find the attachment point for this UAV (the one, which doesn't have any neighbor associated with it)
-      for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
-        bool found = false;
-        for (uint8_t j = 0; j < state->num_neighbors; ++j) {
-          if (self->attachement_points[i].id == state->neighbors[j].id) {
-            // this attachement point belongs to a neighbor
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          attPoint = self->attachement_points[i].point;
+    float l = -1;
+    // find the attachment point for this UAV (the one, which doesn't have any neighbor associated with it)
+    for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
+      bool found = false;
+      for (uint8_t j = 0; j < state->num_neighbors; ++j) {
+        if (self->attachement_points[i].id == state->neighbors[j].id) {
+          // this attachement point belongs to a neighbor
+          found = true;
           break;
         }
       }
+      if (!found) {
+        attPoint = self->attachement_points[i].point;
+        l = self->attachement_points[i].l;
+        break;
+      }
+    }
+
+    if (!isnanf(plquat.w)) {
       // If the payload is a rigid body then the the attachment point should be added to PlStPos
       plStPos = vadd(plStPos, qvrot(plquat, attPoint));
     }
-    float l = vmag(vsub(plStPos, statePos));
 
+    // automatically compute cable length, if desired
+    if (l <= 0) {
+      l = vmag(vsub(plStPos, statePos));
+    }
 
     // payload orientation errors
     // payload quat to R 
@@ -1161,20 +1172,19 @@ PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)
 PARAM_ADD(PARAM_FLOAT, ap0x, &g_self.attachement_points[0].point.x)
 PARAM_ADD(PARAM_FLOAT, ap0y, &g_self.attachement_points[0].point.y)
 PARAM_ADD(PARAM_FLOAT, ap0z, &g_self.attachement_points[0].point.z)
+PARAM_ADD(PARAM_FLOAT, ap0l, &g_self.attachement_points[0].l)
 
 PARAM_ADD(PARAM_UINT8, ap1id, &g_self.attachement_points[1].id)
 PARAM_ADD(PARAM_FLOAT, ap1x, &g_self.attachement_points[1].point.x)
 PARAM_ADD(PARAM_FLOAT, ap1y, &g_self.attachement_points[1].point.y)
 PARAM_ADD(PARAM_FLOAT, ap1z, &g_self.attachement_points[1].point.z)
+PARAM_ADD(PARAM_FLOAT, ap1l, &g_self.attachement_points[1].l)
 
 PARAM_ADD(PARAM_UINT8, ap2id, &g_self.attachement_points[2].id)
 PARAM_ADD(PARAM_FLOAT, ap2x, &g_self.attachement_points[2].point.x)
 PARAM_ADD(PARAM_FLOAT, ap2y, &g_self.attachement_points[2].point.y)
 PARAM_ADD(PARAM_FLOAT, ap2z, &g_self.attachement_points[2].point.z)
-
-PARAM_ADD(PARAM_FLOAT, l1, &g_self.l1)
-PARAM_ADD(PARAM_FLOAT, l2, &g_self.l2)
-PARAM_ADD(PARAM_FLOAT, l3, &g_self.l3)
+PARAM_ADD(PARAM_FLOAT, ap2l, &g_self.attachement_points[2].l)
 
 PARAM_GROUP_STOP(ctrlLeeP)
 

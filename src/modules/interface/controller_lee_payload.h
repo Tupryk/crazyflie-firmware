@@ -38,6 +38,7 @@ typedef struct controllerLeePayload_s {
     struct {
         uint8_t id;
         struct vec point;
+        float l; // cable length; set to <= 0 to compute automatically based on the measurements
     } attachement_points[3];
     
     //Position PID
@@ -121,10 +122,6 @@ typedef struct controllerLeePayload_s {
     struct vec n6;
     float radius;
 
-    // set to <= 0 to compute automatically based on the measurements
-    float l1;
-    float l2;
-    float l3;
 } controllerLeePayload_t;
 
 
