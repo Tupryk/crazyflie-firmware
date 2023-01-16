@@ -537,12 +537,20 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           // solve QP for 3 uavs 2 hps and point mass
           OSQPWorkspace* workspace = &workspace_3uav_2hp;
           workspace->settings->warm_start = 1;
-          struct vec n1 = computePlaneNormal(statePos, statePos2, plStPos,  radius, l1, l2);
-          struct vec n2 = computePlaneNormal(statePos, statePos3, plStPos,  radius, l1, l3);
-          struct vec n3 = computePlaneNormal(statePos2, statePos, plStPos,  radius, l2, l1);
-          struct vec n4 = computePlaneNormal(statePos2, statePos3, plStPos, radius, l2, l3);
-          struct vec n5 = computePlaneNormal(statePos3, statePos, plStPos,  radius, l3, l1);
-          struct vec n6 = computePlaneNormal(statePos3, statePos2, plStPos, radius, l3, l2);
+
+          struct vec n1, n2, n3, n4, n5, n6;
+          if (input->self->gen_hp == 0) {
+            n1 = computePlaneNormal(statePos, statePos2, plStPos,  radius, l1, l2); // 1 v 2
+            n2 = computePlaneNormal(statePos, statePos3, plStPos,  radius, l1, l3); // 1 v 3
+            n3 = computePlaneNormal(statePos2, statePos, plStPos,  radius, l2, l1); // 2 v 1
+            n4 = computePlaneNormal(statePos2, statePos3, plStPos, radius, l2, l3); // 2 v 3
+            n5 = computePlaneNormal(statePos3, statePos, plStPos,  radius, l3, l1); // 3 v 1
+            n6 = computePlaneNormal(statePos3, statePos2, plStPos, radius, l3, l2); // 3 v 2
+          } else {
+            computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, input->self->lambda_svm, F_d, &n1, &n3); // 1 v 2, 2 v 1
+            computePlaneNormals(statePos, statePos3, plStPos, radius, l1, l3, input->self->lambda_svm, F_d, &n2, &n5); // 1 v 3, 3 v 1
+            computePlaneNormals(statePos2, statePos3, plStPos, radius, l2, l3, input->self->lambda_svm, F_d, &n4, &n6); // 2 v 3, 3 v 2
+          }
 
           c_float Ax_new[27] = {1, n1.x, n2.x, 1, n1.y, n2.y, 1, n1.z, n2.z, 1, n3.x, n4.x, 1, n3.y, n4.y, 1, n3.z, n4.z, 1, n5.x, n6.x, 1, n5.y, n6.y, 1, n5.z, n6.z, };
           c_int Ax_new_n = 27;
