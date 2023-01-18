@@ -37,6 +37,7 @@ TODO
 // QP
 // #include "workspace_2uav_2hp.h"
 #include "osqp.h"
+#include "scaling.h"
 extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp_rig;
@@ -94,6 +95,57 @@ STATIC_MEM_QUEUE_ALLOC(queueQPOutput, 1, sizeof(struct QPOutput));
 static uint32_t qp_runtime_us = 0;
 
 EVENTTRIGGER(qpSolved)
+
+#else
+
+void print_csc_matrix(csc *M, const char *name)
+{
+  c_int j, i, row_start, row_stop;
+  c_int k = 0;
+
+  // Print name
+  printf("%s :\n", name);
+
+  for (j = 0; j < M->n; j++) {
+    row_start = M->p[j];
+    row_stop  = M->p[j + 1];
+
+    if (row_start == row_stop) continue;
+    else {
+      for (i = row_start; i < row_stop; i++) {
+        printf("\t[%3u,%3u] = %.3g\n", (int)M->i[i], (int)j, M->x[k++]);
+      }
+    }
+  }
+}
+
+void print_dns_matrix(c_float *M, c_int m, c_int n, const char *name)
+{
+  c_int i, j;
+
+  printf("%s : \n\t", name);
+
+  for (i = 0; i < m; i++) {   // Cycle over rows
+    for (j = 0; j < n; j++) { // Cycle over columns
+      if (j < n - 1)
+        // c_print("% 14.12e,  ", M[j*m+i]);
+        printf("% .3g,  ", M[j * m + i]);
+
+      else
+        // c_print("% 14.12e;  ", M[j*m+i]);
+        printf("% .3g;  ", M[j * m + i]);
+    }
+
+    if (i < m - 1) {
+      printf("\n\t");
+    }
+  }
+  printf("\n");
+}
+
+void print_vec(c_float *v, c_int n, const char *name) {
+  print_dns_matrix(v, 1, n, name);
+}
 
 #endif
 
@@ -246,6 +298,13 @@ static inline void computePlaneNormals_rb(
   float l2, float lambda_svm, struct vec Fd1, struct vec Fd2,
   struct vec* n1, struct vec* n2) {
 
+  // TODO: relative to payload to aid warm start!
+
+  // p1 = vadd(p1, mkvec(0.1,0,0));
+  // p2 = vadd(p2, mkvec(0.1,0,0));
+  // p1_attached = vadd(p1_attached, mkvec(0.1,0,0));
+  // p2_attached = vadd(p2_attached, mkvec(0.1,0,0));
+
   // run QP to find separating hyperplane
   OSQPWorkspace* workspace = &workspace_hyperplane_rb;
 
@@ -264,10 +323,21 @@ static inline void computePlaneNormals_rb(
   };
   c_int Ax_new_idx[18] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};
   osqp_update_A(workspace, Ax_new, Ax_new_idx, 18); // WARNING: if OSQP_NULL is passed, *all* elements of A need to be provided!
+
+  // unscale_data(workspace);
+  // print_csc_matrix(workspace->data->P, "P");
+  // print_csc_matrix(workspace->data->A, "A");
+  // print_vec(workspace->data->q, workspace->data->n, "q");
+  // print_vec(workspace->data->u, workspace->data->n, "u");
+  // print_vec(workspace->data->l, workspace->data->n, "l");
+  // scale_data(workspace);
+
+
   osqp_solve(workspace);
   if (workspace->info->status_val == OSQP_SOLVED/* || workspace->info->status_val == OSQP_SOLVED_INACCURATE || workspace->info->status_val == OSQP_MAX_ITER_REACHED*/) {
     struct vec n = vloadf(workspace->solution->x);
-    float a = workspace->solution->x[3];
+    // TODO: the generated QP adds eranous decision variables...
+    float a = workspace->solution->x[5];
 
     // For UAV1, compute the resulting intersection plane
     struct vec center;
@@ -298,6 +368,7 @@ static inline void computePlaneNormals_rb(
         *n1 = vneg(qvrot(q1, n1_untilted));
       }
     } else {
+      //printf("no int 1\n");
       // the plane is so far, that we don't need a safety hyperplane!
       *n1 = vzero();
     }
@@ -329,6 +400,9 @@ static inline void computePlaneNormals_rb(
         *n2 = qvrot(q1, n2_untilted);
       }
     } else {
+      // printf("no int 2 %f %f %f %f\n", p2_attached.x, p2_attached.y, p2_attached.z, l2);
+      // printf("no int 2b %f %f %f %f\n", n.x, n.y, n.z, a);
+
       // the plane is so far, that we don't need a safety hyperplane!
       *n2 = vzero();
     }
