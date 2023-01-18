@@ -33,6 +33,7 @@ if __name__ == "__main__":
             start_time = min(start_time, data['timestamp'][0])
 
     # new figure
+    plt.rcParams.update({'font.size': 8})
     fig, ax = plt.subplots(len(data_usd.keys()),1,sharex=True,squeeze=False)
 
     for k, (event_name, data) in enumerate(data_usd.items()):
