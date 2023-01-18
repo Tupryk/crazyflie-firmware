@@ -42,6 +42,7 @@ extern OSQPWorkspace workspace_3uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp_rig;
 extern OSQPWorkspace workspace_2uav_1hp_rod;
 extern OSQPWorkspace workspace_hyperplane;
+extern OSQPWorkspace workspace_hyperplane_rb;
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
@@ -204,6 +205,153 @@ static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec 
   }
 }
 
+// Computes the circle that is created when intersecting a plane given as (n.p = a)
+// with a sphere at center c with radius r
+// See https://math.stackexchange.com/questions/943383/determine-circle-of-intersection-of-plane-and-sphere
+static void plane_sphere_intersection(struct vec n, float a, struct vec c, float r, struct vec* result_center, float* result_radius)
+{
+  // compute signed distance sphere -> hyperplane
+  float length = vmag(n);
+  float dist = (vdot(n, c) - a) / length;
+
+  // if the minimum distance is greater than r, there is no intersection
+  if (fabsf(dist) > r) {
+    *result_center = vzero();
+    *result_radius = -1;
+    return;
+  }
+  // otherwise, compute the center point (on the plane) and radius of the resulting circle
+  *result_center = vsub(c, vscl(dist / length, n));
+  *result_radius = sqrtf(r*r - dist*dist);
+}
+
+// projects point p onto plane (given by n.p = a)
+static struct vec project_point_on_plane(struct vec n, float a, struct vec p)
+{
+    // compute signed distance sphere -> hyperplane
+    float length = vmag(n);
+    float dist = (vdot(n, p) - a) / length;
+
+    struct vec p_on_plane = vsub(p, vscl(dist / length, n));
+    return p_on_plane;
+}
+
+static inline void computePlaneNormals_rb(
+  struct vec p1,
+  struct vec p2,
+  struct vec p1_attached,
+  struct vec p2_attached,
+  float r,
+  float l1,
+  float l2, float lambda_svm, struct vec Fd1, struct vec Fd2,
+  struct vec* n1, struct vec* n2) {
+
+  // run QP to find separating hyperplane
+  OSQPWorkspace* workspace = &workspace_hyperplane_rb;
+
+  // need to adjust P for lambda_svm
+  c_float Px_new[2] = {2 * lambda_svm, 2 * lambda_svm};
+  c_int Px_new_idx[2] = {3, 4};
+  osqp_update_P(workspace, Px_new, Px_new_idx, 2);
+
+  struct vec Fd1t = vadd(Fd1, p1_attached);
+  struct vec Fd2t = vadd(Fd2, p2_attached);
+
+  c_float Ax_new[18] = {
+    Fd1t.x, Fd2t.x, p1.x, p1_attached.x, -p2.x, -p2_attached.x,
+    Fd1t.y, Fd2t.y, p1.y, p1_attached.y, -p2.y, -p2_attached.y,
+    Fd1t.z, Fd2t.z, p1.z, p1_attached.z, -p2.z, -p2_attached.z,
+  };
+  c_int Ax_new_idx[18] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};
+  osqp_update_A(workspace, Ax_new, Ax_new_idx, 18); // WARNING: if OSQP_NULL is passed, *all* elements of A need to be provided!
+  osqp_solve(workspace);
+  if (workspace->info->status_val == OSQP_SOLVED/* || workspace->info->status_val == OSQP_SOLVED_INACCURATE || workspace->info->status_val == OSQP_MAX_ITER_REACHED*/) {
+    struct vec n = vloadf(workspace->solution->x);
+    float a = workspace->solution->x[3];
+
+    // For UAV1, compute the resulting intersection plane
+    struct vec center;
+    float radius;
+    plane_sphere_intersection(n, a, p1_attached, l1, &center, &radius);
+
+    if (radius >= 0) {
+      // compute the intersection point with the highest z-value
+      struct vec point_on_plane = project_point_on_plane(n, a, vadd(center, mkvec(0,0,1)));
+      struct vec dir = vnormalize(vsub(point_on_plane, center));
+      struct vec intersection_high_z = vadd(center, vscl(radius, dir));
+
+      // the updated plane connects three points (where p1 == new relative coordinate system)
+      struct vec point0 = p1_attached;
+      struct vec point1 = vadd(p1_attached, vcross(n, mkvec(0,0,1)));
+      struct vec point2 = intersection_high_z;
+
+      struct vec n1_untilted = vcross(vsub(point0, point1), vsub(point0, point2));
+
+      // now rotate the hyperplane to compute the two resulting hyperplane
+      struct vec axis = vcross(n, mkvec(0,0,1));
+
+      if (r > 2.0f * l1) {
+        *n1 = n1_untilted;
+      } else {
+        float angle1 = 2 * asinf(r / (2.0f * l1));
+        struct quat q1 = qaxisangle(axis, angle1);
+        *n1 = vneg(qvrot(q1, n1_untilted));
+      }
+    } else {
+      // the plane is so far, that we don't need a safety hyperplane!
+      *n1 = vzero();
+    }
+
+    // For UAV2, compute the resulting intersection plane
+    plane_sphere_intersection(n, a, p2_attached, l2, &center, &radius);
+
+    if (radius >= 0) {
+      // compute the intersection point with the highest z-value
+      struct vec point_on_plane = project_point_on_plane(n, a, vadd(center, mkvec(0,0,1)));
+      struct vec dir = vnormalize(vsub(point_on_plane, center));
+      struct vec intersection_high_z = vadd(center, vscl(radius, dir));
+
+      // the updated plane connects three points (where p2 == new relative coordinate system)
+      struct vec point0 = p2_attached;
+      struct vec point1 = vadd(p2_attached, vcross(n, mkvec(0,0,1)));
+      struct vec point2 = intersection_high_z;
+
+      struct vec n2_untilted = vcross(vsub(point0, point1), vsub(point0, point2));
+
+      // now rotate the hyperplane to compute the two resulting hyperplane
+      struct vec axis = vcross(n, mkvec(0,0,1));
+
+      if (r > 2.0f * l1) {
+        *n2 = n2_untilted;
+      } else {
+        float angle1 = 2 * asinf(r / (2.0f * l1));
+        struct quat q1 = qaxisangle(axis, -angle1);
+        *n2 = qvrot(q1, n2_untilted);
+      }
+    } else {
+      // the plane is so far, that we don't need a safety hyperplane!
+      *n2 = vzero();
+    }
+
+  } else {
+  #ifdef CRAZYFLIE_FW
+        DEBUG_PRINT("QPsvm: %s\n", workspace->info->status);
+  #else
+        printf("QPsvm: %s %d %f\n", workspace->info->status, workspace->info->iter, workspace->info->obj_val);
+        printf("p1 = %f, %f, %f\n", p1.x, p1.y, p1.z);
+        printf("p2 = %f, %f, %f\n", p2.x, p2.y, p2.z);
+        printf("p1a = %f, %f, %f\n", p1_attached.x, p1_attached.y, p1_attached.z);
+        printf("p2a = %f, %f, %f\n", p2_attached.x, p2_attached.y, p2_attached.z);
+        printf("Fd1t = %f, %f, %f\n", Fd1t.x, Fd1t.y, Fd1t.z);
+        printf("Fd2t = %f, %f, %f\n", Fd2t.x, Fd2t.y, Fd2t.z);
+        printf("lambda_svm = %f\n", lambda_svm);
+  #endif
+
+    *n1 = vzero();
+    *n2 = vzero();
+  }
+}
+
 
 static controllerLeePayload_t g_self = {
   .mass = 0.034,
@@ -316,8 +464,17 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           l2 = vmag(vsub(plSt_att2, statePos2));
         }
         M_d = mkvec(M_d.x, 0, M_d.z);
-        struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
-        struct vec n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
+
+        struct vec n1;
+        struct vec n2;
+        if (input->self->gen_hp == 0) {
+          n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
+          n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
+        } else {
+          struct vec Fd1 = vscl(0.5f, F_d);
+          struct vec Fd2 = vscl(0.5f, F_d);
+          computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2);
+        }
         
         struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
 

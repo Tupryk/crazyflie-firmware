@@ -61,3 +61,4 @@ obj-y += osqp/src/osqp/workspace_3uav_2hp.o
 obj-y += osqp/src/osqp/workspace_3uav_2hp_rig.o
 obj-y += osqp/src/osqp/workspace_2uav_1hp_rod.o
 obj-y += osqp/src/osqp/workspace_hyperplane.o
+obj-y += osqp/src/osqp/workspace_hyperplane_rb.o
