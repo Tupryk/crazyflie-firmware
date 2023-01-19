@@ -80,7 +80,7 @@
 
 #else
 #include "deck_spi.h"
-#define USD_CS_PIN    DECK_GPIO_IO4
+#define USD_CS_PIN    DECK_GPIO_IO3
 
 #define SPI_BEGIN               spiBegin
 #define USD_SPI_BAUDRATE_2MHZ   SPI_BAUDRATE_2MHZ
@@ -1067,7 +1067,7 @@ static const DeckDriver usd_deck = {
     .vid = 0xBC,
     .pid = 0x08,
     .name = "bcUSD",
-    .usedGpio = DECK_USING_IO_4,
+    .usedGpio = DECK_USING_IO_3,
     .usedPeriph = DECK_USING_SPI,
     .init = usdInit,
     .test = usdTest,
