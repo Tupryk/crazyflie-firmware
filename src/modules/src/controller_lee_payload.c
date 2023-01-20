@@ -708,8 +708,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             n5 = computePlaneNormal(statePos3, statePos, plSt_att3,  radius, l3, l1);
             n6 = computePlaneNormal(statePos3, statePos2, plSt_att3, radius, l3, l2);
           } else {
-              struct vec Fd1 = vscl(0.3f, F_d);
-              struct vec Fd2 = vscl(0.3f, F_d);        
+              struct vec Fd1 = vscl(0.5f, F_d);
+              struct vec Fd2 = vscl(0.5f, F_d);        
               computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
               computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
               computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
