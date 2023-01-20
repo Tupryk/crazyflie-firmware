@@ -27,11 +27,13 @@
 #include <stdbool.h>
 #include "usec_time.h"
 #include "cfassert.h"
+#include "param.h"
 
 #include "nvicconf.h"
 #include "stm32fxxx.h"
 
 static bool isInit = false;
+static uint8_t reset = 0;
 static uint32_t usecTimerHighCount;
 
 void initUsecTimer(void)
@@ -106,3 +108,20 @@ void __attribute__((used)) TIM7_IRQHandler(void)
 
   __sync_fetch_and_add(&usecTimerHighCount, 1);
 }
+
+/**
+ * Parameters to synchronize time
+ * */
+
+static void resetParamCallback(void)
+{
+  if (reset) {
+    usecTimerReset();
+    reset = 0;
+  }
+}
+
+
+PARAM_GROUP_START(usec)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, reset, &reset, &resetParamCallback)
+PARAM_GROUP_STOP(usec)
