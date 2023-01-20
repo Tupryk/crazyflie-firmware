@@ -717,10 +717,10 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           OSQPWorkspace* workspace = &workspace_3uav_2hp_rig;
           workspace->settings->warm_start = 1;
 
-          c_float x_warm[9] = {  desVirt_prev.x,    desVirt_prev.y,    desVirt_prev.z,
-                                desVirt2_prev.x,   desVirt2_prev.y,   desVirt2_prev.z, 
-                                desVirt3_prev.x,   desVirt3_prev.y,   desVirt3_prev.z};
-          osqp_warm_start_x(workspace, x_warm);
+          // c_float x_warm[9] = {  desVirt_prev.x,    desVirt_prev.y,    desVirt_prev.z,
+          //                       desVirt2_prev.x,   desVirt2_prev.y,   desVirt2_prev.z, 
+          //                       desVirt3_prev.x,   desVirt3_prev.y,   desVirt3_prev.z};
+          // osqp_warm_start_x(workspace, x_warm);
           struct vec plSt_att = vadd(plStPos, qvrot(input->plStquat, attPoint));
           struct vec plSt_att2 = vadd(plStPos, qvrot(input->plStquat, attPoint2));
           struct vec plSt_att3 = vadd(plStPos, qvrot(input->plStquat, attPoint3));
@@ -735,20 +735,42 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           if (l3 <= 0) {
             l3 = vmag(vsub(plSt_att3, statePos3));
           }
+          struct vec n1, n2, n3, n4, n5, n6;
+          if (input->self->gen_hp == 0) {
+            n1 = computePlaneNormal(statePos, statePos2, plSt_att,  radius, l1, l2);
+            n2 = computePlaneNormal(statePos, statePos3, plSt_att,  radius, l1, l3);
+            n3 = computePlaneNormal(statePos2, statePos, plSt_att2,  radius, l2, l1);
+            n4 = computePlaneNormal(statePos2, statePos3, plSt_att2, radius, l2, l3);
+            n5 = computePlaneNormal(statePos3, statePos, plSt_att3,  radius, l3, l1);
+            n6 = computePlaneNormal(statePos3, statePos2, plSt_att3, radius, l3, l2);
+          } else {
+              struct vec Fd1 = vscl(0.5f, F_d);
+              struct vec Fd2 = vscl(0.5f, F_d);        
+              computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
+              computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
+              computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
+            }
+          struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
 
-          struct vec n1 = computePlaneNormal(statePos, statePos2, plSt_att,  radius, l1, l2);
-          struct vec n2 = computePlaneNormal(statePos, statePos3, plSt_att,  radius, l1, l3);
-          struct vec n3 = computePlaneNormal(statePos2, statePos, plSt_att2,  radius, l2, l1);
-          struct vec n4 = computePlaneNormal(statePos2, statePos3, plSt_att2, radius, l2, l3);
-          struct vec n5 = computePlaneNormal(statePos3, statePos, plSt_att3,  radius, l3, l1);
-          struct vec n6 = computePlaneNormal(statePos3, statePos2, plSt_att3, radius, l3, l2);
+          struct mat33 attPR0t  = mmul(mcrossmat(attPoint),  R0t);
+          struct mat33 attP2R0t = mmul(mcrossmat(attPoint2), R0t);
+          struct mat33 attP3R0t = mmul(mcrossmat(attPoint3), R0t);
 
-          c_float Ax_new[45] = {
-            1, attPoint.z, -attPoint.y, n1.x, n2.x, 1, -attPoint.z, attPoint.x, n1.y, n2.y, 1, attPoint.y, -attPoint.x, n1.z, n2.z,
-            1, attPoint2.z, -attPoint2.y, n3.x, n4.x, 1, -attPoint2.z, attPoint2.x, n3.y, n4.y, 1, attPoint2.y, -attPoint2.x, n3.z, n4.z,
-            1, attPoint3.z, -attPoint3.y, n5.x, n6.x, 1, -attPoint3.z, attPoint3.x, n5.y, n6.y, 1, attPoint3.y, -attPoint3.x, n5.z, n6.z,
+          c_float Ax_new[108] = {
+          R0t.m[0][0], R0t.m[1][0], R0t.m[2][0],  attPR0t.m[0][0],  attPR0t.m[1][0],  attPR0t.m[2][0], n1.x, n2.x,   0,   0,    0,    0, 
+          R0t.m[0][1], R0t.m[1][1], R0t.m[2][1],  attPR0t.m[0][1],  attPR0t.m[1][1],  attPR0t.m[2][1], n1.y, n2.y,   0,   0,    0,    0, 
+          R0t.m[0][2], R0t.m[1][2], R0t.m[2][2],  attPR0t.m[0][2],  attPR0t.m[1][2],  attPR0t.m[2][2], n1.z, n2.z,   0,   0,    0,    0, 
+          
+          R0t.m[0][0], R0t.m[1][0], R0t.m[2][0], attP2R0t.m[0][0], attP2R0t.m[1][0], attP2R0t.m[2][0], 0,     0,   n3.x, n4.x,  0,    0,
+          R0t.m[0][1], R0t.m[1][1], R0t.m[2][1], attP2R0t.m[0][1], attP2R0t.m[1][1], attP2R0t.m[2][1], 0,     0,   n3.y, n4.y,  0,    0,
+          R0t.m[0][2], R0t.m[1][2], R0t.m[2][2], attP2R0t.m[0][2], attP2R0t.m[1][2], attP2R0t.m[2][2], 0,     0,   n3.z, n4.z,  0,    0,
+          
+          R0t.m[0][0], R0t.m[1][0], R0t.m[2][0], attP3R0t.m[0][0], attP3R0t.m[1][0], attP3R0t.m[2][0], 0,     0,    0,    0,   n5.x,  n6.x,
+          R0t.m[0][1], R0t.m[1][1], R0t.m[2][1], attP3R0t.m[0][1], attP3R0t.m[1][1], attP3R0t.m[2][1], 0,     0,    0,    0,   n5.y,  n6.y,
+          R0t.m[0][2], R0t.m[1][2], R0t.m[2][2], attP3R0t.m[0][2], attP3R0t.m[1][2], attP3R0t.m[2][2], 0,     0,    0,    0,   n5.z,  n6.z,
           };
-          c_int Ax_new_n = 45;
+
+          c_int Ax_new_n = 108;
           c_float l_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
 
