@@ -545,8 +545,44 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           n1 = computePlaneNormal(statePos, statePos2, plSt_att, radius, l1, l2);
           n2 = computePlaneNormal(statePos2, statePos, plSt_att2, radius, l2, l1);
         } else {
-          struct vec Fd1 = vscl(0.5f, F_d);
-          struct vec Fd2 = vscl(0.5f, F_d);
+          struct vec Fd1;
+          struct vec Fd2;
+          // basic method
+          if (input->self->gen_hp == 1) {
+            Fd1 = vscl(0.5f, F_d);
+            Fd2 = vscl(0.5f, F_d);
+          }
+          else {
+            // advanced method
+            // F_d = mkvec(0,0.1,0.5);
+            // M_d = mkvec(0.5,0,0);
+            struct mat33 Rp = quat2rotmat(input->plStquat);
+            struct mat66 R_blockdiag = zero66();
+            for (int i = 0; i < 3; ++i) {
+              for (int j = 0; j < 3; ++j) {
+                R_blockdiag.m[i][j] = Rp.m[i][j];
+                R_blockdiag.m[3+i][3+j] = Rp.m[i][j];
+              }
+            }
+            struct vec Fdr = mvmul(mtranspose(Rp), F_d);
+            struct mat66 R_blockdiag_times_Pinv= mmul66(R_blockdiag, input->self->Pinv01);
+
+            float v[6] = {Fdr.x, Fdr.y, Fdr.z, M_d.x, M_d.y, M_d.z};
+            Fd1 = vzero();
+            Fd2 = vzero();
+            for (int j=0; j < 6; ++j) {
+              Fd1.x += R_blockdiag_times_Pinv.m[0][j] * v[j];
+              Fd1.y += R_blockdiag_times_Pinv.m[1][j] * v[j];
+              Fd1.z += R_blockdiag_times_Pinv.m[2][j] * v[j];
+              Fd2.x += R_blockdiag_times_Pinv.m[3][j] * v[j];
+              Fd2.y += R_blockdiag_times_Pinv.m[4][j] * v[j];
+              Fd2.z += R_blockdiag_times_Pinv.m[5][j] * v[j];
+            }
+
+            // printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
+            // printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
+          }
+
           computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2);
         }
         

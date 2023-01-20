@@ -148,6 +148,11 @@ void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int id
     self->attachement_points[idx].point.y = y;
     self->attachement_points[idx].point.z = z;
 }
+
+void controller_lee_payload_set_Pinv01(controllerLeePayload_t* self, int row, int column, float value)
+{
+    self->Pinv01.m[row][column] = value;
+}
 %}
 
 %pythoncode %{

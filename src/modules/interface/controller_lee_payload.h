@@ -40,6 +40,10 @@ typedef struct controllerLeePayload_s {
         struct vec point;
         float l; // cable length; set to <= 0 to compute automatically based on the measurements
     } attachement_points[3];
+
+    struct mat66 Pinv01; // pseudo inverse of P for attachement points 0 and 1
+    struct mat66 Pinv02; // pseudo inverse of P for attachement points 0 and 2
+    struct mat66 Pinv12; // pseudo inverse of P for attachement points 1 and 1
     
     //Position PID
     struct vec Kpos_P;

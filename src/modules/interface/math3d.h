@@ -397,6 +397,21 @@ static inline struct mat66 zero66(void) {
 	return m;
 }
 
+// multiply two matrices.
+static inline struct mat66 mmul66(struct mat66 a, struct mat66 b) {
+	struct mat66 ab;
+	for (int i = 0; i < 6; ++i) {
+		for (int j = 0; j < 6; ++j) {
+			float accum = 0;
+			for (int k = 0; k < 6; ++k) {
+				accum += a.m[i][k] * b.m[k][j];
+			}
+			ab.m[i][j] = accum;
+		}
+	}
+	return ab;
+}
+
 static inline struct mat66 eye66(void) {
   struct mat66 P = zero66();
   P.m[0][0] = 1;
@@ -426,6 +441,14 @@ static inline struct vec6 zero6() {
 	vector.y = 0;
 	vector.z = 0;
 	return vector;
+}
+
+// multiply a matrix by a vector.
+static inline struct vec mvmul6(struct mat66 a, struct vec6 v) {
+	float x = a.m[0][0] * v.x + a.m[0][1] * v.y + a.m[0][2] * v.z;
+	float y = a.m[1][0] * v.x + a.m[1][1] * v.y + a.m[1][2] * v.z;
+	float z = a.m[2][0] * v.x + a.m[2][1] * v.y + a.m[2][2] * v.z;
+	return mkvec(x, y, z);
 }
 
 // ---------------------------- 3x3 matrices ------------------------------
