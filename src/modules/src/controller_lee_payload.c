@@ -68,6 +68,7 @@ struct QPOutput
 {
   struct vec desVirtInp;
   uint32_t timestamp; // ticks (copied from input)
+  bool success;
 };
 
 
@@ -553,6 +554,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
   struct vec desVirt_prev = input->self->desVirtInp;
 
   output->timestamp = input->timestamp;
+  output->success = false;
 
   bool is_rigid_body = !isnanf(input->plStquat.w);
   
@@ -661,8 +663,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         osqp_finalize_update(workspace);
 
         // update q, l, and u (after finalize update!)
-        c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
-        c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, M_d.x, M_d.y, M_d.z, 0, 0,};
+        struct vec F_dP = mvmul(R0t, F_d);
+        c_float l_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
+        c_float u_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
 
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
         c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
@@ -680,6 +683,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
           input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
           input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
+          output->success = true;
         } else {
         #ifdef CRAZYFLIE_FW
               DEBUG_PRINT("QP: %s\n", workspace->info->status);
@@ -742,6 +746,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
           input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
           input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
+          output->success = true;
         } else {
         #ifdef CRAZYFLIE_FW
               DEBUG_PRINT("QP: %s\n", workspace->info->status);
@@ -900,9 +905,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 
           osqp_finalize_update(workspace);
           // update q, l, and u (after finalize update!)
-
-          c_float l_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
-          c_float u_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
+          struct vec F_dP = mvmul(R0t, F_d);
+          c_float l_new[12] =  {F_dP.x,	F_dP.y,	F_dP.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
+          c_float u_new[12] =  {F_dP.x,	F_dP.y,	F_dP.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
 
           /* P = np.eye(9) [can't be changed online]
              x^2 + lambda (x^2 - 2xx_d + x_d^2)
@@ -932,6 +937,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             input->self->desVirt3_prev.x =  (workspace)->solution->x[6];
             input->self->desVirt3_prev.y =  (workspace)->solution->x[7];
             input->self->desVirt3_prev.z =  (workspace)->solution->x[8];
+            output->success = true;
           } else {
           #ifdef CRAZYFLIE_FW
                 DEBUG_PRINT("QP: %s\n", workspace->info->status);
@@ -1017,6 +1023,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             input->self->desVirt3_prev.x =   (workspace)->solution->x[6];
             input->self->desVirt3_prev.y =   (workspace)->solution->x[7];
             input->self->desVirt3_prev.z =   (workspace)->solution->x[8];
+            output->success = true;
           } else {
           #ifdef CRAZYFLIE_FW
                 DEBUG_PRINT("QP: %s\n", workspace->info->status);
@@ -1039,9 +1046,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
   eventTrigger(&eventTrigger_qpSolved);
 #endif
 }
-#ifdef CRAZYFLIE_FW
 
-static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d, uint32_t* ticks)
+static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d, uint32_t tick_in, struct vec* result, uint32_t* tick_out)
 {
   struct QPInput qpinput;
   struct QPOutput qpoutput;
@@ -1069,15 +1075,26 @@ static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const
   }  
 
   qpinput.self = self;
-  qpinput.timestamp = *ticks;
+  qpinput.timestamp = tick_in;
+
+#ifdef CRAZYFLIE_FW
   xQueueOverwrite(queueQPInput, &qpinput);
-
   // get the latest result from the async computation, do not wait to not block the main loop
-  xQueuePeek(queueQPOutput, &qpoutput, 0);
+  BaseType_t qr = xQueuePeek(queueQPOutput, &qpoutput, 0);
 
-  *ticks = qpoutput.timestamp;
-  return qpoutput.desVirtInp;
+  // also mark as not successful, if queue was empty for some reason
+  qpoutput.success &= (qr == pdTRUE);
+#else
+  // solve the QP
+  runQP(&qpinput, &qpoutput);
+#endif
+  if (qpoutput.success) {
+    *tick_out = qpoutput.timestamp;
+    *result = qpoutput.desVirtInp;
+  }
 }
+
+#ifdef CRAZYFLIE_FW
 
 void controllerLeePayloadQPTask(void * prm)
 {
@@ -1097,43 +1114,6 @@ void controllerLeePayloadQPTask(void * prm)
     xQueueOverwrite(queueQPOutput, &qpoutput);
   }
 }
-#else
-
-static struct vec computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d, uint32_t* ticks)
-{
-  struct QPInput qpinput;
-  struct QPOutput qpoutput;
-
-  // push the latest change to the QP
-  qpinput.F_d = F_d;
-  qpinput.M_d = M_d; 
-  qpinput.plStPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
-  qpinput.plStquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
-  if (state->num_neighbors == 1) {
-    struct vec rpy = quat2rpy(qpinput.plStquat);
-    rpy.y = 0;
-    qpinput.plStquat = rpy2quat(rpy);
-  }
-  qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
-
-  // We assume that we always have at least 1 neighbor
-  qpinput.statePos2 = mkvec(state->neighbors[0].pos.x, state->neighbors[0].pos.y, state->neighbors[0].pos.z);
-  qpinput.ids[0] = state->neighbors[0].id;
-  qpinput.num_neighbors = state->num_neighbors;
-  if (state->num_neighbors == 2) 
-  {
-    qpinput.statePos3 = mkvec(state->neighbors[1].pos.x, state->neighbors[1].pos.y, state->neighbors[1].pos.z);
-    qpinput.ids[1] = state->neighbors[1].id;
-  }  
-  qpinput.self = self;
-  qpinput.timestamp = *ticks;
-  // solve the QP
-  runQP(&qpinput, &qpoutput);
-
-  *ticks = qpoutput.timestamp;
-  return qpoutput.desVirtInp;
-}
-
 #endif
 
 void controllerLeePayloadReset(controllerLeePayload_t* self)
@@ -1293,16 +1273,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       vneg(veltmul(self->Kprot_D, omega_perror)),
       vneg(veltmul(self->Kprot_I, self->i_error_pl_att))
     );
-    if (!isnanf(plquat.w)) {
-      // TODO: move that into the QP
-      struct vec F_dP = mvmul(mtranspose(Rp),self->F_d);
-      self->desVirtInp_tick = tick;
-      self->desVirtInp = computeDesiredVirtualInput(self, state, F_dP, self->M_d, &self->desVirtInp_tick);
-    }
-    else{
-      self->desVirtInp_tick = tick;
-      self->desVirtInp = computeDesiredVirtualInput(self, state, self->F_d, self->M_d, &self->desVirtInp_tick);
-    }
+
+    computeDesiredVirtualInput(self, state, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
 
     // if we don't have a desVirtInp (yet), skip this round
     if (vmag2(self->desVirtInp) == 0) {
