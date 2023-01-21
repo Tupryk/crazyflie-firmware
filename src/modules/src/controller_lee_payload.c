@@ -38,6 +38,7 @@ TODO
 // #include "workspace_2uav_2hp.h"
 #include "osqp.h"
 #include "scaling.h"
+#include "auxil.h"
 extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp_rig;
@@ -149,6 +150,38 @@ void print_vec(c_float *v, c_int n, const char *name) {
 
 #endif
 
+// helper function similar as first part of osqp_update_A and osqp_update_P
+// to make updating entries more time and memory efficient
+static void osqp_prepare_update(OSQPWorkspace *work)
+{
+  if (work->settings->scaling) {
+    // Unscale data
+    unscale_data(work);
+  }
+}
+
+// helper function similar as first part of osqp_update_A and osqp_update_P
+// to make updating entries more time and memory efficient
+static c_int osqp_finalize_update(OSQPWorkspace *work)
+{
+  c_int exitflag; // Exit flag
+
+  if (work->settings->scaling) {
+    // Scale data
+    scale_data(work);
+  }
+
+  // Update linear system structure with new data
+  exitflag = work->linsys_solver->update_matrices(work->linsys_solver,
+                                                  work->data->P,
+                                                  work->data->A);
+
+  // Reset solver information
+  reset_info(work->info);
+
+  return exitflag;
+}
+
 static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, struct vec pload, float r, float l1, float l2) {
 // Compute the normal of a plane, given the minimum desired distance r
 // NEEDs TESTING!!!
@@ -209,20 +242,24 @@ static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec 
   // run QP to find separating hyperplane
   OSQPWorkspace* workspace = &workspace_hyperplane;
 
-  // need to adjust P for lambda_svm
-  c_float Px_new[1] = {2 * lambda_svm};
-  c_int Px_new_idx[1] = {3};
-  osqp_update_P(workspace, Px_new, Px_new_idx, 1);
+  osqp_prepare_update(workspace);
 
-  // need to adjust A
-  c_float A[10] = {
-    Fd.x, p1_r.x, -p2_r.x,
-    Fd.y, p1_r.y, -p2_r.y,
-    Fd.z, p1_r.z, -p2_r.z,
-    -1,
-  };
-  c_float A_n = 10;
-  osqp_update_A(workspace, A, OSQP_NULL, A_n); // WARNING: if OSQP_NULL is passed, *all* elements of A need to be provided!
+  // Update P
+  workspace->data->P->x[3] = 2 * lambda_svm;
+
+  // Update A
+  workspace->data->A->x[0] = Fd.x;
+  workspace->data->A->x[1] = p1_r.x;
+  workspace->data->A->x[2] = -p2_r.x;
+  workspace->data->A->x[3] = Fd.y;
+  workspace->data->A->x[4] = p1_r.y;
+  workspace->data->A->x[5] = -p2_r.y;
+  workspace->data->A->x[6] = Fd.z;
+  workspace->data->A->x[7] = p1_r.z;
+  workspace->data->A->x[8] = -p2_r.z;
+
+  osqp_finalize_update(workspace);
+
   osqp_solve(workspace);
   if (workspace->info->status_val == OSQP_SOLVED) {
     struct vec n = vloadf(workspace->solution->x);
@@ -308,32 +345,47 @@ static inline void computePlaneNormals_rb(
   // run QP to find separating hyperplane
   OSQPWorkspace* workspace = &workspace_hyperplane_rb;
 
-  // need to adjust P for lambda_svm
-  c_float Px_new[2] = {2 * lambda_svm, 2 * lambda_svm};
-  c_int Px_new_idx[2] = {3, 4};
-  osqp_update_P(workspace, Px_new, Px_new_idx, 2);
+  osqp_prepare_update(workspace);
+
+  // Update P
+  workspace->data->P->x[3] = 2 * lambda_svm;
+  workspace->data->P->x[4] = 2 * lambda_svm;
 
   struct vec Fd1t = vadd(Fd1, p1_attached);
   struct vec Fd2t = vadd(Fd2, p2_attached);
 
-  c_float Ax_new[18] = {
-    Fd1t.x, Fd2t.x, p1.x, p1_attached.x, -p2.x, -p2_attached.x,
-    Fd1t.y, Fd2t.y, p1.y, p1_attached.y, -p2.y, -p2_attached.y,
-    Fd1t.z, Fd2t.z, p1.z, p1_attached.z, -p2.z, -p2_attached.z,
-  };
-  c_int Ax_new_idx[18] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17};
-  osqp_update_A(workspace, Ax_new, Ax_new_idx, 18); // WARNING: if OSQP_NULL is passed, *all* elements of A need to be provided!
+  // Update A
+  workspace->data->A->x[0] = Fd1t.x;
+  workspace->data->A->x[1] = Fd2t.x;
+  workspace->data->A->x[2] = p1.x;
+  workspace->data->A->x[3] = p1_attached.x;
+  workspace->data->A->x[4] = -p2.x;
+  workspace->data->A->x[5] = -p2_attached.x;
 
-  // unscale_data(workspace);
+  workspace->data->A->x[6] = Fd1t.y;
+  workspace->data->A->x[7] = Fd2t.y;
+  workspace->data->A->x[8] = p1.y;
+  workspace->data->A->x[9] = p1_attached.y;
+  workspace->data->A->x[10] = -p2.y;
+  workspace->data->A->x[11] = -p2_attached.y;
+
+  workspace->data->A->x[12] = Fd1t.z;
+  workspace->data->A->x[13] = Fd2t.z;
+  workspace->data->A->x[14] = p1.z;
+  workspace->data->A->x[15] = p1_attached.z;
+  workspace->data->A->x[16] = -p2.z;
+  workspace->data->A->x[17] = -p2_attached.z;
+
   // print_csc_matrix(workspace->data->P, "P");
   // print_csc_matrix(workspace->data->A, "A");
   // print_vec(workspace->data->q, workspace->data->n, "q");
   // print_vec(workspace->data->u, workspace->data->n, "u");
   // print_vec(workspace->data->l, workspace->data->n, "l");
-  // scale_data(workspace);
 
+  osqp_finalize_update(workspace);
 
   osqp_solve(workspace);
+
   if (workspace->info->status_val == OSQP_SOLVED/* || workspace->info->status_val == OSQP_SOLVED_INACCURATE || workspace->info->status_val == OSQP_MAX_ITER_REACHED*/) {
     struct vec n = vloadf(workspace->solution->x);
     // TODO: the generated QP adds eranous decision variables...
@@ -593,17 +645,22 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 
         OSQPWorkspace* workspace = &workspace_2uav_1hp_rod;
         workspace->settings->warm_start = 1;
-        
-        c_float Ax_new[48] = {
-        R0t.m[0][0], R0t.m[1][0], R0t.m[2][0],  attPR0t.m[0][0],  attPR0t.m[1][0],  attPR0t.m[2][0], n1.x, 0,
-        R0t.m[0][1], R0t.m[1][1], R0t.m[2][1],  attPR0t.m[0][1],  attPR0t.m[1][1],  attPR0t.m[2][1], n1.y, 0,
-        R0t.m[0][2], R0t.m[1][2], R0t.m[2][2],  attPR0t.m[0][2],  attPR0t.m[1][2],  attPR0t.m[2][2], n1.z, 0,
-        R0t.m[0][0], R0t.m[1][0], R0t.m[2][0], attP2R0t.m[0][0], attP2R0t.m[1][0], attP2R0t.m[2][0], 0, n2.x,
-        R0t.m[0][1], R0t.m[1][1], R0t.m[2][1], attP2R0t.m[0][1], attP2R0t.m[1][1], attP2R0t.m[2][1], 0, n2.y,
-        R0t.m[0][2], R0t.m[1][2], R0t.m[2][2], attP2R0t.m[0][2], attP2R0t.m[1][2], attP2R0t.m[2][2], 0, n2.z,
-        };
-        c_float Ax_new_n = 48;
 
+        osqp_prepare_update(workspace);
+
+        // Update A
+        c_float* x = workspace->data->A->x;
+        x[0 ] = R0t.m[0][0]; x[1 ] = R0t.m[1][0]; x[ 2] = R0t.m[2][0]; x[3 ] =  attPR0t.m[0][0]; x[4 ] =  attPR0t.m[1][0];  x[5 ] =  attPR0t.m[2][0]; x[6 ] = n1.x;
+        x[7 ] = R0t.m[0][1]; x[8 ] = R0t.m[1][1]; x[ 9] = R0t.m[2][1]; x[10] =  attPR0t.m[0][1]; x[11] =  attPR0t.m[1][1];  x[12] =  attPR0t.m[2][1]; x[13] = n1.y;
+        x[14] = R0t.m[0][2]; x[15] = R0t.m[1][2]; x[16] = R0t.m[2][2]; x[17] =  attPR0t.m[0][2]; x[18] =  attPR0t.m[1][2];  x[19] =  attPR0t.m[2][2]; x[20] = n1.z;
+
+        x[21] = R0t.m[0][0]; x[22] = R0t.m[1][0]; x[23] = R0t.m[2][0]; x[24] = attP2R0t.m[0][0]; x[25] = attP2R0t.m[1][0];  x[26] = attP2R0t.m[2][0]; x[27] = n2.x;
+        x[28] = R0t.m[0][1]; x[29] = R0t.m[1][1]; x[30] = R0t.m[2][1]; x[31] = attP2R0t.m[0][1]; x[32] = attP2R0t.m[1][1];  x[33] = attP2R0t.m[2][1]; x[34] = n2.y;
+        x[35] = R0t.m[0][2]; x[36] = R0t.m[1][2]; x[37] = R0t.m[2][2]; x[38] = attP2R0t.m[0][2]; x[39] = attP2R0t.m[1][2];  x[40] = attP2R0t.m[2][2]; x[41] = n2.z;
+
+        osqp_finalize_update(workspace);
+
+        // update q, l, and u (after finalize update!)
         c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
         c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, M_d.x, M_d.y, M_d.z, 0, 0,};
 
@@ -612,7 +669,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
                             factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
                           };
 
-        osqp_update_A(workspace, Ax_new, OSQP_NULL, Ax_new_n);    
         osqp_update_lin_cost(workspace, q_new);
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
@@ -655,17 +711,26 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         } else {
           computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, input->self->lambda_svm, F_d, &n1, &n2);
         }
-       
-        c_float Ax_new[12] = {1, n1.x, 1, n1.y, 1, n1.z, 1,  n2.x, 1, n2.y, 1, n2.z};  
-        c_int Ax_new_n = 12;
+
+        osqp_prepare_update(workspace);
+
+        // Update A
+        workspace->data->A->x[1] = n1.x;
+        workspace->data->A->x[3] = n1.y;
+        workspace->data->A->x[5] = n1.z;
+        workspace->data->A->x[7] = n2.x;
+        workspace->data->A->x[9] = n2.y;
+        workspace->data->A->x[11] = n2.z;
+
+        osqp_finalize_update(workspace);
+
+        // update q, l, and u (after finalize update!)
         c_float l_new[6] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY,};
         c_float u_new[6] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,};
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
         c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
                             factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
                           };
-        
-        osqp_update_A(workspace, Ax_new, OSQP_NULL, Ax_new_n);    
         osqp_update_lin_cost(workspace, q_new);
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
@@ -756,21 +821,86 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           struct mat33 attP2R0t = mmul(mcrossmat(attPoint2), R0t);
           struct mat33 attP3R0t = mmul(mcrossmat(attPoint3), R0t);
 
-          c_float Ax_new[108] = {
-          R0t.m[0][0], R0t.m[1][0], R0t.m[2][0],  attPR0t.m[0][0],  attPR0t.m[1][0],  attPR0t.m[2][0], n1.x, n2.x,   0,   0,    0,    0, 
-          R0t.m[0][1], R0t.m[1][1], R0t.m[2][1],  attPR0t.m[0][1],  attPR0t.m[1][1],  attPR0t.m[2][1], n1.y, n2.y,   0,   0,    0,    0, 
-          R0t.m[0][2], R0t.m[1][2], R0t.m[2][2],  attPR0t.m[0][2],  attPR0t.m[1][2],  attPR0t.m[2][2], n1.z, n2.z,   0,   0,    0,    0, 
-          
-          R0t.m[0][0], R0t.m[1][0], R0t.m[2][0], attP2R0t.m[0][0], attP2R0t.m[1][0], attP2R0t.m[2][0], 0,     0,   n3.x, n4.x,  0,    0,
-          R0t.m[0][1], R0t.m[1][1], R0t.m[2][1], attP2R0t.m[0][1], attP2R0t.m[1][1], attP2R0t.m[2][1], 0,     0,   n3.y, n4.y,  0,    0,
-          R0t.m[0][2], R0t.m[1][2], R0t.m[2][2], attP2R0t.m[0][2], attP2R0t.m[1][2], attP2R0t.m[2][2], 0,     0,   n3.z, n4.z,  0,    0,
-          
-          R0t.m[0][0], R0t.m[1][0], R0t.m[2][0], attP3R0t.m[0][0], attP3R0t.m[1][0], attP3R0t.m[2][0], 0,     0,    0,    0,   n5.x,  n6.x,
-          R0t.m[0][1], R0t.m[1][1], R0t.m[2][1], attP3R0t.m[0][1], attP3R0t.m[1][1], attP3R0t.m[2][1], 0,     0,    0,    0,   n5.y,  n6.y,
-          R0t.m[0][2], R0t.m[1][2], R0t.m[2][2], attP3R0t.m[0][2], attP3R0t.m[1][2], attP3R0t.m[2][2], 0,     0,    0,    0,   n5.z,  n6.z,
-          };
+          osqp_prepare_update(workspace);
 
-          c_int Ax_new_n = 108;
+          // Update A
+          c_float* x = workspace->data->A->x;
+          x[0 ] = R0t.m[0][0];
+          x[1 ] = R0t.m[1][0];
+          x[2 ] = R0t.m[2][0];
+          x[3 ] = attPR0t.m[0][0];
+          x[4 ] = attPR0t.m[1][0];
+          x[5 ] = attPR0t.m[2][0];
+          x[6 ] = n1.x;
+          x[7 ] = n2.x;
+          x[8 ] = R0t.m[0][1];
+          x[9 ] = R0t.m[1][1];
+          x[10] = R0t.m[2][1];
+          x[11] = attPR0t.m[0][1];
+          x[12] = attPR0t.m[1][1];
+          x[13] = attPR0t.m[2][1];
+          x[14] = n1.y;
+          x[15] = n2.y;
+          x[16] = R0t.m[0][2];
+          x[17] = R0t.m[1][2];
+          x[18] = R0t.m[2][2];
+          x[19] = attPR0t.m[0][2];
+          x[20] = attPR0t.m[1][2];
+          x[21] = attPR0t.m[2][2];
+          x[22] = n1.z;
+          x[23] = n2.z;
+          x[24] = R0t.m[0][0];
+          x[25] = R0t.m[1][0];
+          x[26] = R0t.m[2][0];
+          x[27] = attP2R0t.m[0][0];
+          x[28] = attP2R0t.m[1][0];
+          x[29] = attP2R0t.m[2][0];
+          x[30] = n3.x;
+          x[31] = n4.x;
+          x[32] = R0t.m[0][1];
+          x[33] = R0t.m[1][1];
+          x[34] = R0t.m[2][1];
+          x[35] = attP2R0t.m[0][1];
+          x[36] = attP2R0t.m[1][1];
+          x[37] = attP2R0t.m[2][1];
+          x[38] = n3.y;
+          x[39] = n4.y;
+          x[40] = R0t.m[0][2];
+          x[41] = R0t.m[1][2];
+          x[42] = R0t.m[2][2];
+          x[43] = attP2R0t.m[0][2];
+          x[44] = attP2R0t.m[1][2];
+          x[45] = attP2R0t.m[2][2];
+          x[46] = n3.z;
+          x[47] = n4.z;
+          x[48] = R0t.m[0][0];
+          x[49] = R0t.m[1][0];
+          x[50] =  R0t.m[2][0];
+          x[51] =  attP3R0t.m[0][0];
+          x[52] =  attP3R0t.m[1][0];
+          x[53] =  attP3R0t.m[2][0];
+          x[54] = n5.x;
+          x[55] = n6.x;
+          x[56] = R0t.m[0][1];
+          x[57] = R0t.m[1][1];
+          x[58] =  R0t.m[2][1];
+          x[59] =  attP3R0t.m[0][1];
+          x[60] =  attP3R0t.m[1][1];
+          x[61] =  attP3R0t.m[2][1];
+          x[62] = n5.y;
+          x[63] = n6.y;
+          x[64] = R0t.m[0][2];
+          x[65] = R0t.m[1][2];
+          x[66] =  R0t.m[2][2];
+          x[67] =  attP3R0t.m[0][2];
+          x[68] =  attP3R0t.m[1][2];
+          x[69] =  attP3R0t.m[2][2];
+          x[70] = n5.z;
+          x[71] = n6.z;
+
+          osqp_finalize_update(workspace);
+          // update q, l, and u (after finalize update!)
+
           c_float l_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[12] =  {F_d.x,	F_d.y,	F_d.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
 
@@ -786,7 +916,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
                               factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
                               factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
 
-          osqp_update_A(workspace, Ax_new, OSQP_NULL, Ax_new_n);    
           osqp_update_lin_cost(workspace, q_new);
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
@@ -847,8 +976,23 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             computePlaneNormals(statePos2, statePos3, plStPos, radius, l2, l3, input->self->lambda_svm, F_d, &n4, &n6); // 2 v 3, 3 v 2
           }
 
-          c_float Ax_new[27] = {1, n1.x, n2.x, 1, n1.y, n2.y, 1, n1.z, n2.z, 1, n3.x, n4.x, 1, n3.y, n4.y, 1, n3.z, n4.z, 1, n5.x, n6.x, 1, n5.y, n6.y, 1, n5.z, n6.z, };
-          c_int Ax_new_n = 27;
+          osqp_prepare_update(workspace);
+          c_float* x = workspace->data->A->x;
+          x[1] = n1.x; x[2] = n2.x;
+          x[4] = n1.y; x[5] = n2.y;
+          x[7] = n1.z; x[8] = n2.z;
+
+          x[10] = n3.x; x[11] = n4.x;
+          x[13] = n3.y; x[14] = n4.y;
+          x[16] = n3.z; x[17] = n4.z;
+
+          x[19] = n5.x; x[20] = n6.x;
+          x[22] = n5.y; x[23] = n6.y;
+          x[25] = n5.z; x[26] = n6.z;
+
+          osqp_finalize_update(workspace);
+
+          // update q, l, and u (after finalize update!)
           c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,  0, 0,  0, 0};
           const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
@@ -857,7 +1001,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
                               factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
                               factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
 
-          osqp_update_A(workspace, Ax_new, OSQP_NULL, Ax_new_n);    
           osqp_update_lin_cost(workspace, q_new);
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
