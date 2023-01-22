@@ -149,9 +149,11 @@ void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int id
     self->attachement_points[idx].point.z = z;
 }
 
-void controller_lee_payload_set_Pinv01(controllerLeePayload_t* self, int row, int column, float value)
+void controller_lee_payload_set_Pinv(controllerLeePayload_t* self, int idx, int id1, int id2, int row, int column, float value)
 {
-    self->Pinv01.m[row][column] = value;
+    self->Pinvs[idx].id1 = id1;
+    self->Pinvs[idx].id2 = id2;
+    self->Pinvs[idx].Pinv.m[row][column] = value;
 }
 %}
 

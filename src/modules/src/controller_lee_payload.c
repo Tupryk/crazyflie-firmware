@@ -479,6 +479,73 @@ static inline void computePlaneNormals_rb(
   }
 }
 
+static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, struct vec attPoint2, struct vec F_d, struct vec M_d, struct vec* F_d1, struct vec* F_d2)
+{
+  printf("\nFd: %f %f %f\n", F_d.x, F_d.y, F_d.z);
+  printf("Md: %f %f %f\n", M_d.x, M_d.y, M_d.z);
+  printf("q: %f %f %f %f\n", payload_quat.x, payload_quat.y, payload_quat.z, payload_quat.w);
+  printf("ap1: %f %f %f\n", attPoint1.x, attPoint1.y, attPoint1.z);
+  printf("ap2: %f %f %f\n", attPoint2.x, attPoint2.y, attPoint2.z);
+
+
+
+
+  struct mat33 R0t = mtranspose(quat2rotmat(payload_quat));
+
+  struct mat33 attPR0t = mmul(mcrossmat(attPoint1), R0t);
+  struct mat33 attP2R0t = mmul(mcrossmat(attPoint2), R0t);
+
+  OSQPWorkspace* workspace = &workspace_2uav_1hp_rod;
+
+  osqp_prepare_update(workspace);
+
+  // Update A
+  c_float* x = workspace->data->A->x;
+  x[0 ] = R0t.m[0][0]; x[1 ] = R0t.m[1][0]; x[ 2] = R0t.m[2][0]; x[3 ] =  attPR0t.m[0][0]; x[4 ] =  attPR0t.m[1][0];  x[5 ] =  attPR0t.m[2][0]; x[6 ] = 0;
+  x[7 ] = R0t.m[0][1]; x[8 ] = R0t.m[1][1]; x[ 9] = R0t.m[2][1]; x[10] =  attPR0t.m[0][1]; x[11] =  attPR0t.m[1][1];  x[12] =  attPR0t.m[2][1]; x[13] = 0;
+  x[14] = R0t.m[0][2]; x[15] = R0t.m[1][2]; x[16] = R0t.m[2][2]; x[17] =  attPR0t.m[0][2]; x[18] =  attPR0t.m[1][2];  x[19] =  attPR0t.m[2][2]; x[20] = 0;
+
+  x[21] = R0t.m[0][0]; x[22] = R0t.m[1][0]; x[23] = R0t.m[2][0]; x[24] = attP2R0t.m[0][0]; x[25] = attP2R0t.m[1][0];  x[26] = attP2R0t.m[2][0]; x[27] = 0;
+  x[28] = R0t.m[0][1]; x[29] = R0t.m[1][1]; x[30] = R0t.m[2][1]; x[31] = attP2R0t.m[0][1]; x[32] = attP2R0t.m[1][1];  x[33] = attP2R0t.m[2][1]; x[34] = 0;
+  x[35] = R0t.m[0][2]; x[36] = R0t.m[1][2]; x[37] = R0t.m[2][2]; x[38] = attP2R0t.m[0][2]; x[39] = attP2R0t.m[1][2];  x[40] = attP2R0t.m[2][2]; x[41] = 0;
+
+  osqp_finalize_update(workspace);
+
+  // update q, l, and u (after finalize update!)
+  struct vec F_dP = mvmul(R0t, F_d);
+  c_float l_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
+  c_float u_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
+
+  c_float q_new[6] = {0, 0, 0, 0, 0, 0 };
+
+  osqp_update_lin_cost(workspace, q_new);
+  osqp_update_lower_bound(workspace, l_new);
+  osqp_update_upper_bound(workspace, u_new);
+  osqp_solve(workspace);
+  if (workspace->info->status_val == OSQP_SOLVED) {
+    F_d1->x = (workspace)->solution->x[0];
+    F_d1->y = (workspace)->solution->x[1];
+    F_d1->z = (workspace)->solution->x[2];
+    F_d2->x =  (workspace)->solution->x[3];
+    F_d2->y =  (workspace)->solution->x[4];
+    F_d2->z =  (workspace)->solution->x[5];
+
+    printf("Fd1: %f %f %f\n", F_d1->x, F_d1->y, F_d1->z);
+    printf("Fd2: %f %f %f\n", F_d2->x, F_d2->y, F_d2->z);
+
+
+
+    return true;
+  } else {
+  #ifdef CRAZYFLIE_FW
+        DEBUG_PRINT("QPp: %s\n", workspace->info->status);
+  #else
+        printf("QPp: %s\n", workspace->info->status);
+  #endif
+  }
+  return false;
+}
+
 
 static controllerLeePayload_t g_self = {
   .mass = 0.034,
@@ -606,7 +673,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             Fd1 = vscl(0.5f, F_d);
             Fd2 = vscl(0.5f, F_d);
           }
-          else {
+          else if (input->self->gen_hp == 2) {
             // advanced method
             // F_d = mkvec(0,0.1,0.5);
             // M_d = mkvec(0.5,0,0);
@@ -619,7 +686,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
               }
             }
             struct vec Fdr = mvmul(mtranspose(Rp), F_d);
-            struct mat66 R_blockdiag_times_Pinv= mmul66(R_blockdiag, input->self->Pinv01);
+            struct mat66 R_blockdiag_times_Pinv= mmul66(R_blockdiag, input->self->Pinvs[0].Pinv);
 
             float v[6] = {Fdr.x, Fdr.y, Fdr.z, M_d.x, M_d.y, M_d.z};
             Fd1 = vzero();
@@ -633,8 +700,21 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
               Fd2.z += R_blockdiag_times_Pinv.m[5][j] * v[j];
             }
 
-            // printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
-            // printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
+
+            if (input->self->Pinvs[0].id1 == input->ids[0]) {
+              // Pinv was with respect to other robot -> swap result
+              struct vec tmp;
+              tmp = Fd2;
+              Fd2 = Fd1;
+              Fd1 = tmp;
+            }
+
+            printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
+            printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
+          } else if (input->self->gen_hp == 3) {
+            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint2, F_d, M_d, &Fd1, &Fd2);
+            printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
+            printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
           }
 
           computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2);
@@ -767,6 +847,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       float l1 = -1;
       float l2 = -1;
       float l3 = -1;
+      uint8_t myid = 0;
       // Set corresponding attachment points
       for (uint8_t i = 0; i < num_neighbors+1; ++i) {
         if (input->self->attachement_points[i].id == input->ids[0]) {
@@ -778,6 +859,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         } else {
           attPoint = input->self->attachement_points[i].point;
           l1 = input->self->attachement_points[i].l;
+          myid = input->self->attachement_points[i].id;
         }
       }
 
@@ -813,13 +895,152 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             n4 = computePlaneNormal(statePos2, statePos3, plSt_att2, radius, l2, l3);
             n5 = computePlaneNormal(statePos3, statePos, plSt_att3,  radius, l3, l1);
             n6 = computePlaneNormal(statePos3, statePos2, plSt_att3, radius, l3, l2);
-          } else {
+          } else if (input->self->gen_hp == 1) {
               struct vec Fd1 = vscl(0.5f, F_d);
               struct vec Fd2 = vscl(0.5f, F_d);        
               computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
               computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
               computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
+          } else if (input->self->gen_hp == 2) {
+            struct vec Fd1, Fd2;
+
+            // advanced method
+            // F_d = mkvec(0,0.1,0.5);
+            // M_d = mkvec(0.5,0,0);
+            struct mat33 Rp = quat2rotmat(input->plStquat);
+            struct mat66 R_blockdiag = zero66();
+            for (int i = 0; i < 3; ++i) {
+              for (int j = 0; j < 3; ++j) {
+                R_blockdiag.m[i][j] = Rp.m[i][j];
+                R_blockdiag.m[3+i][3+j] = Rp.m[i][j];
+              }
             }
+            struct vec Fdr = mvmul(mtranspose(Rp), F_d);
+
+            // find the Pinvs index for 0 1
+            int idx = -1;
+            bool swap = false;
+            for (int i = 0; i < 3; ++i) {
+              if (input->self->Pinvs[i].id1 == myid && input->self->Pinvs[i].id2 == input->ids[0]) {
+                idx = i;
+                swap = false;
+                break;
+              }
+              if (input->self->Pinvs[i].id2 == myid && input->self->Pinvs[i].id1 == input->ids[0]) {
+                idx = i;
+                swap = true;
+                break;
+              }
+            }
+
+            struct mat66 R_blockdiag_times_Pinv= mmul66(R_blockdiag, input->self->Pinvs[idx].Pinv);
+
+            float v[6] = {Fdr.x, Fdr.y, Fdr.z, M_d.x, M_d.y, M_d.z};
+            Fd1 = vzero();
+            Fd2 = vzero();
+            for (int j=0; j < 6; ++j) {
+              Fd1.x += R_blockdiag_times_Pinv.m[0][j] * v[j];
+              Fd1.y += R_blockdiag_times_Pinv.m[1][j] * v[j];
+              Fd1.z += R_blockdiag_times_Pinv.m[2][j] * v[j];
+              Fd2.x += R_blockdiag_times_Pinv.m[3][j] * v[j];
+              Fd2.y += R_blockdiag_times_Pinv.m[4][j] * v[j];
+              Fd2.z += R_blockdiag_times_Pinv.m[5][j] * v[j];
+            }
+
+            if (swap) {
+              // Pinv was with respect to other robot -> swap result
+              struct vec tmp;
+              tmp = Fd2;
+              Fd2 = Fd1;
+              Fd1 = tmp;
+            }
+
+            computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
+
+            // find the Pinvs index for 0 2
+            for (int i = 0; i < 3; ++i) {
+              if (input->self->Pinvs[i].id1 == myid && input->self->Pinvs[i].id2 == input->ids[1]) {
+                idx = i;
+                swap = false;
+                break;
+              }
+              if (input->self->Pinvs[i].id2 == myid && input->self->Pinvs[i].id1 == input->ids[1]) {
+                idx = i;
+                swap = true;
+                break;
+              }
+            }
+
+            R_blockdiag_times_Pinv= mmul66(R_blockdiag, input->self->Pinvs[idx].Pinv);
+            Fd1 = vzero();
+            Fd2 = vzero();
+            for (int j=0; j < 6; ++j) {
+              Fd1.x += R_blockdiag_times_Pinv.m[0][j] * v[j];
+              Fd1.y += R_blockdiag_times_Pinv.m[1][j] * v[j];
+              Fd1.z += R_blockdiag_times_Pinv.m[2][j] * v[j];
+              Fd2.x += R_blockdiag_times_Pinv.m[3][j] * v[j];
+              Fd2.y += R_blockdiag_times_Pinv.m[4][j] * v[j];
+              Fd2.z += R_blockdiag_times_Pinv.m[5][j] * v[j];
+            }
+
+            if (swap) {
+              // Pinv was with respect to other robot -> swap result
+              struct vec tmp;
+              tmp = Fd2;
+              Fd2 = Fd1;
+              Fd1 = tmp;
+            }
+
+            computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
+
+            // find the Pinvs index for 1 2
+            for (int i = 0; i < 3; ++i) {
+              if (input->self->Pinvs[i].id1 == input->ids[0] && input->self->Pinvs[i].id2 == input->ids[1]) {
+                idx = i;
+                swap = false;
+                break;
+              }
+              if (input->self->Pinvs[i].id2 == input->ids[0] && input->self->Pinvs[i].id1 == input->ids[1]) {
+                idx = i;
+                swap = true;
+                break;
+              }
+            }
+
+            R_blockdiag_times_Pinv= mmul66(R_blockdiag, input->self->Pinvs[idx].Pinv);
+            Fd1 = vzero();
+            Fd2 = vzero();
+            for (int j=0; j < 6; ++j) {
+              Fd1.x += R_blockdiag_times_Pinv.m[0][j] * v[j];
+              Fd1.y += R_blockdiag_times_Pinv.m[1][j] * v[j];
+              Fd1.z += R_blockdiag_times_Pinv.m[2][j] * v[j];
+              Fd2.x += R_blockdiag_times_Pinv.m[3][j] * v[j];
+              Fd2.y += R_blockdiag_times_Pinv.m[4][j] * v[j];
+              Fd2.z += R_blockdiag_times_Pinv.m[5][j] * v[j];
+            }
+
+            if (swap) {
+              // Pinv was with respect to other robot -> swap result
+              struct vec tmp;
+              tmp = Fd2;
+              Fd2 = Fd1;
+              Fd1 = tmp;
+            }
+
+            computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
+          
+          } else if (input->self->gen_hp == 3) {
+            struct vec Fd1, Fd2;
+            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint2, F_d, M_d, &Fd1, &Fd2);
+            computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
+
+            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint3, F_d, M_d, &Fd1, &Fd2);
+            computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
+
+            compute_Fd_pair_qp(input->plStquat, attPoint2, attPoint3, F_d, M_d, &Fd1, &Fd2);
+            computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
+          }
+
           struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
 
           struct mat33 attPR0t  = mmul(mcrossmat(attPoint),  R0t);
