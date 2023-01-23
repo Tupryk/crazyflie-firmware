@@ -481,11 +481,11 @@ static inline void computePlaneNormals_rb(
 
 static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, struct vec attPoint2, struct vec F_d, struct vec M_d, struct vec* F_d1, struct vec* F_d2)
 {
-  printf("\nFd: %f %f %f\n", F_d.x, F_d.y, F_d.z);
-  printf("Md: %f %f %f\n", M_d.x, M_d.y, M_d.z);
-  printf("q: %f %f %f %f\n", payload_quat.x, payload_quat.y, payload_quat.z, payload_quat.w);
-  printf("ap1: %f %f %f\n", attPoint1.x, attPoint1.y, attPoint1.z);
-  printf("ap2: %f %f %f\n", attPoint2.x, attPoint2.y, attPoint2.z);
+  // printf("\nFd: %f %f %f\n", F_d.x, F_d.y, F_d.z);
+  // printf("Md: %f %f %f\n", M_d.x, M_d.y, M_d.z);
+  // printf("q: %f %f %f %f\n", payload_quat.x, payload_quat.y, payload_quat.z, payload_quat.w);
+  // printf("ap1: %f %f %f\n", attPoint1.x, attPoint1.y, attPoint1.z);
+  // printf("ap2: %f %f %f\n", attPoint2.x, attPoint2.y, attPoint2.z);
 
 
 
@@ -530,8 +530,8 @@ static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, s
     F_d2->y =  (workspace)->solution->x[4];
     F_d2->z =  (workspace)->solution->x[5];
 
-    printf("Fd1: %f %f %f\n", F_d1->x, F_d1->y, F_d1->z);
-    printf("Fd2: %f %f %f\n", F_d2->x, F_d2->y, F_d2->z);
+    // printf("Fd1: %f %f %f\n", F_d1->x, F_d1->y, F_d1->z);
+    // printf("Fd2: %f %f %f\n", F_d2->x, F_d2->y, F_d2->z);
 
 
 
@@ -599,6 +599,10 @@ static controllerLeePayload_t g_self = {
   .attachement_points[0].l = -1,
   .attachement_points[1].l = -1,
   .attachement_points[2].l = -1,
+
+  .Pinvs[0].Pinv.m = {{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0}},
+  .Pinvs[1].Pinv.m = {{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0}},
+  .Pinvs[2].Pinv.m = {{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0}},
 };
 
 // static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -709,12 +713,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
               Fd1 = tmp;
             }
 
-            printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
-            printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
+            // printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
+            // printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
           } else if (input->self->gen_hp == 3) {
             compute_Fd_pair_qp(input->plStquat, attPoint, attPoint2, F_d, M_d, &Fd1, &Fd2);
-            printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
-            printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
+            // printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
+            // printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
           }
 
           computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2);
@@ -1810,6 +1814,124 @@ PARAM_ADD(PARAM_FLOAT, ap2x, &g_self.attachement_points[2].point.x)
 PARAM_ADD(PARAM_FLOAT, ap2y, &g_self.attachement_points[2].point.y)
 PARAM_ADD(PARAM_FLOAT, ap2z, &g_self.attachement_points[2].point.z)
 PARAM_ADD(PARAM_FLOAT, ap2l, &g_self.attachement_points[2].l)
+
+// Pinv
+PARAM_ADD(PARAM_UINT8, Pinv0id1,&g_self.Pinvs[0].id1)
+PARAM_ADD(PARAM_UINT8, Pinv0id2,&g_self.Pinvs[0].id2)
+PARAM_ADD(PARAM_FLOAT, Pinv000, &g_self.Pinvs[0].Pinv.m[0][0])
+PARAM_ADD(PARAM_FLOAT, Pinv010, &g_self.Pinvs[0].Pinv.m[1][0])
+PARAM_ADD(PARAM_FLOAT, Pinv020, &g_self.Pinvs[0].Pinv.m[2][0])
+PARAM_ADD(PARAM_FLOAT, Pinv030, &g_self.Pinvs[0].Pinv.m[3][0])
+PARAM_ADD(PARAM_FLOAT, Pinv040, &g_self.Pinvs[0].Pinv.m[4][0])
+PARAM_ADD(PARAM_FLOAT, Pinv050, &g_self.Pinvs[0].Pinv.m[5][0])
+PARAM_ADD(PARAM_FLOAT, Pinv001, &g_self.Pinvs[0].Pinv.m[0][1])
+PARAM_ADD(PARAM_FLOAT, Pinv011, &g_self.Pinvs[0].Pinv.m[1][1])
+PARAM_ADD(PARAM_FLOAT, Pinv021, &g_self.Pinvs[0].Pinv.m[2][1])
+PARAM_ADD(PARAM_FLOAT, Pinv031, &g_self.Pinvs[0].Pinv.m[3][1])
+PARAM_ADD(PARAM_FLOAT, Pinv041, &g_self.Pinvs[0].Pinv.m[4][1])
+PARAM_ADD(PARAM_FLOAT, Pinv051, &g_self.Pinvs[0].Pinv.m[5][1])
+PARAM_ADD(PARAM_FLOAT, Pinv002, &g_self.Pinvs[0].Pinv.m[0][2])
+PARAM_ADD(PARAM_FLOAT, Pinv012, &g_self.Pinvs[0].Pinv.m[1][2])
+PARAM_ADD(PARAM_FLOAT, Pinv022, &g_self.Pinvs[0].Pinv.m[2][2])
+PARAM_ADD(PARAM_FLOAT, Pinv032, &g_self.Pinvs[0].Pinv.m[3][2])
+PARAM_ADD(PARAM_FLOAT, Pinv042, &g_self.Pinvs[0].Pinv.m[4][2])
+PARAM_ADD(PARAM_FLOAT, Pinv052, &g_self.Pinvs[0].Pinv.m[5][2])
+PARAM_ADD(PARAM_FLOAT, Pinv003, &g_self.Pinvs[0].Pinv.m[0][3])
+PARAM_ADD(PARAM_FLOAT, Pinv013, &g_self.Pinvs[0].Pinv.m[1][3])
+PARAM_ADD(PARAM_FLOAT, Pinv023, &g_self.Pinvs[0].Pinv.m[2][3])
+PARAM_ADD(PARAM_FLOAT, Pinv033, &g_self.Pinvs[0].Pinv.m[3][3])
+PARAM_ADD(PARAM_FLOAT, Pinv043, &g_self.Pinvs[0].Pinv.m[4][3])
+PARAM_ADD(PARAM_FLOAT, Pinv053, &g_self.Pinvs[0].Pinv.m[5][3])
+PARAM_ADD(PARAM_FLOAT, Pinv004, &g_self.Pinvs[0].Pinv.m[0][4])
+PARAM_ADD(PARAM_FLOAT, Pinv014, &g_self.Pinvs[0].Pinv.m[1][4])
+PARAM_ADD(PARAM_FLOAT, Pinv024, &g_self.Pinvs[0].Pinv.m[2][4])
+PARAM_ADD(PARAM_FLOAT, Pinv034, &g_self.Pinvs[0].Pinv.m[3][4])
+PARAM_ADD(PARAM_FLOAT, Pinv044, &g_self.Pinvs[0].Pinv.m[4][4])
+PARAM_ADD(PARAM_FLOAT, Pinv054, &g_self.Pinvs[0].Pinv.m[5][4])
+PARAM_ADD(PARAM_FLOAT, Pinv005, &g_self.Pinvs[0].Pinv.m[0][5])
+PARAM_ADD(PARAM_FLOAT, Pinv015, &g_self.Pinvs[0].Pinv.m[1][5])
+PARAM_ADD(PARAM_FLOAT, Pinv025, &g_self.Pinvs[0].Pinv.m[2][5])
+PARAM_ADD(PARAM_FLOAT, Pinv035, &g_self.Pinvs[0].Pinv.m[3][5])
+PARAM_ADD(PARAM_FLOAT, Pinv045, &g_self.Pinvs[0].Pinv.m[4][5])
+PARAM_ADD(PARAM_FLOAT, Pinv055, &g_self.Pinvs[0].Pinv.m[5][5])
+
+PARAM_ADD(PARAM_UINT8, Pinv1id1,&g_self.Pinvs[1].id1)
+PARAM_ADD(PARAM_UINT8, Pinv1id2,&g_self.Pinvs[1].id2)
+PARAM_ADD(PARAM_FLOAT, Pinv100, &g_self.Pinvs[1].Pinv.m[0][0])
+PARAM_ADD(PARAM_FLOAT, Pinv110, &g_self.Pinvs[1].Pinv.m[1][0])
+PARAM_ADD(PARAM_FLOAT, Pinv120, &g_self.Pinvs[1].Pinv.m[2][0])
+PARAM_ADD(PARAM_FLOAT, Pinv130, &g_self.Pinvs[1].Pinv.m[3][0])
+PARAM_ADD(PARAM_FLOAT, Pinv140, &g_self.Pinvs[1].Pinv.m[4][0])
+PARAM_ADD(PARAM_FLOAT, Pinv150, &g_self.Pinvs[1].Pinv.m[5][0])
+PARAM_ADD(PARAM_FLOAT, Pinv101, &g_self.Pinvs[1].Pinv.m[0][1])
+PARAM_ADD(PARAM_FLOAT, Pinv111, &g_self.Pinvs[1].Pinv.m[1][1])
+PARAM_ADD(PARAM_FLOAT, Pinv121, &g_self.Pinvs[1].Pinv.m[2][1])
+PARAM_ADD(PARAM_FLOAT, Pinv131, &g_self.Pinvs[1].Pinv.m[3][1])
+PARAM_ADD(PARAM_FLOAT, Pinv141, &g_self.Pinvs[1].Pinv.m[4][1])
+PARAM_ADD(PARAM_FLOAT, Pinv151, &g_self.Pinvs[1].Pinv.m[5][1])
+PARAM_ADD(PARAM_FLOAT, Pinv102, &g_self.Pinvs[1].Pinv.m[0][2])
+PARAM_ADD(PARAM_FLOAT, Pinv112, &g_self.Pinvs[1].Pinv.m[1][2])
+PARAM_ADD(PARAM_FLOAT, Pinv122, &g_self.Pinvs[1].Pinv.m[2][2])
+PARAM_ADD(PARAM_FLOAT, Pinv132, &g_self.Pinvs[1].Pinv.m[3][2])
+PARAM_ADD(PARAM_FLOAT, Pinv142, &g_self.Pinvs[1].Pinv.m[4][2])
+PARAM_ADD(PARAM_FLOAT, Pinv152, &g_self.Pinvs[1].Pinv.m[5][2])
+PARAM_ADD(PARAM_FLOAT, Pinv103, &g_self.Pinvs[1].Pinv.m[0][3])
+PARAM_ADD(PARAM_FLOAT, Pinv113, &g_self.Pinvs[1].Pinv.m[1][3])
+PARAM_ADD(PARAM_FLOAT, Pinv123, &g_self.Pinvs[1].Pinv.m[2][3])
+PARAM_ADD(PARAM_FLOAT, Pinv133, &g_self.Pinvs[1].Pinv.m[3][3])
+PARAM_ADD(PARAM_FLOAT, Pinv143, &g_self.Pinvs[1].Pinv.m[4][3])
+PARAM_ADD(PARAM_FLOAT, Pinv153, &g_self.Pinvs[1].Pinv.m[5][3])
+PARAM_ADD(PARAM_FLOAT, Pinv104, &g_self.Pinvs[1].Pinv.m[0][4])
+PARAM_ADD(PARAM_FLOAT, Pinv114, &g_self.Pinvs[1].Pinv.m[1][4])
+PARAM_ADD(PARAM_FLOAT, Pinv124, &g_self.Pinvs[1].Pinv.m[2][4])
+PARAM_ADD(PARAM_FLOAT, Pinv134, &g_self.Pinvs[1].Pinv.m[3][4])
+PARAM_ADD(PARAM_FLOAT, Pinv144, &g_self.Pinvs[1].Pinv.m[4][4])
+PARAM_ADD(PARAM_FLOAT, Pinv154, &g_self.Pinvs[1].Pinv.m[5][4])
+PARAM_ADD(PARAM_FLOAT, Pinv105, &g_self.Pinvs[1].Pinv.m[0][5])
+PARAM_ADD(PARAM_FLOAT, Pinv115, &g_self.Pinvs[1].Pinv.m[1][5])
+PARAM_ADD(PARAM_FLOAT, Pinv125, &g_self.Pinvs[1].Pinv.m[2][5])
+PARAM_ADD(PARAM_FLOAT, Pinv135, &g_self.Pinvs[1].Pinv.m[3][5])
+PARAM_ADD(PARAM_FLOAT, Pinv145, &g_self.Pinvs[1].Pinv.m[4][5])
+PARAM_ADD(PARAM_FLOAT, Pinv155, &g_self.Pinvs[1].Pinv.m[5][5])
+
+PARAM_ADD(PARAM_UINT8, Pinv2id1,&g_self.Pinvs[2].id1)
+PARAM_ADD(PARAM_UINT8, Pinv2id2,&g_self.Pinvs[2].id2)
+PARAM_ADD(PARAM_FLOAT, Pinv200, &g_self.Pinvs[2].Pinv.m[0][0])
+PARAM_ADD(PARAM_FLOAT, Pinv210, &g_self.Pinvs[2].Pinv.m[1][0])
+PARAM_ADD(PARAM_FLOAT, Pinv220, &g_self.Pinvs[2].Pinv.m[2][0])
+PARAM_ADD(PARAM_FLOAT, Pinv230, &g_self.Pinvs[2].Pinv.m[3][0])
+PARAM_ADD(PARAM_FLOAT, Pinv240, &g_self.Pinvs[2].Pinv.m[4][0])
+PARAM_ADD(PARAM_FLOAT, Pinv250, &g_self.Pinvs[2].Pinv.m[5][0])
+PARAM_ADD(PARAM_FLOAT, Pinv201, &g_self.Pinvs[2].Pinv.m[0][1])
+PARAM_ADD(PARAM_FLOAT, Pinv211, &g_self.Pinvs[2].Pinv.m[1][1])
+PARAM_ADD(PARAM_FLOAT, Pinv221, &g_self.Pinvs[2].Pinv.m[2][1])
+PARAM_ADD(PARAM_FLOAT, Pinv231, &g_self.Pinvs[2].Pinv.m[3][1])
+PARAM_ADD(PARAM_FLOAT, Pinv241, &g_self.Pinvs[2].Pinv.m[4][1])
+PARAM_ADD(PARAM_FLOAT, Pinv251, &g_self.Pinvs[2].Pinv.m[5][1])
+PARAM_ADD(PARAM_FLOAT, Pinv202, &g_self.Pinvs[2].Pinv.m[0][2])
+PARAM_ADD(PARAM_FLOAT, Pinv212, &g_self.Pinvs[2].Pinv.m[1][2])
+PARAM_ADD(PARAM_FLOAT, Pinv222, &g_self.Pinvs[2].Pinv.m[2][2])
+PARAM_ADD(PARAM_FLOAT, Pinv232, &g_self.Pinvs[2].Pinv.m[3][2])
+PARAM_ADD(PARAM_FLOAT, Pinv242, &g_self.Pinvs[2].Pinv.m[4][2])
+PARAM_ADD(PARAM_FLOAT, Pinv252, &g_self.Pinvs[2].Pinv.m[5][2])
+PARAM_ADD(PARAM_FLOAT, Pinv203, &g_self.Pinvs[2].Pinv.m[0][3])
+PARAM_ADD(PARAM_FLOAT, Pinv213, &g_self.Pinvs[2].Pinv.m[1][3])
+PARAM_ADD(PARAM_FLOAT, Pinv223, &g_self.Pinvs[2].Pinv.m[2][3])
+PARAM_ADD(PARAM_FLOAT, Pinv233, &g_self.Pinvs[2].Pinv.m[3][3])
+PARAM_ADD(PARAM_FLOAT, Pinv243, &g_self.Pinvs[2].Pinv.m[4][3])
+PARAM_ADD(PARAM_FLOAT, Pinv253, &g_self.Pinvs[2].Pinv.m[5][3])
+PARAM_ADD(PARAM_FLOAT, Pinv204, &g_self.Pinvs[2].Pinv.m[0][4])
+PARAM_ADD(PARAM_FLOAT, Pinv214, &g_self.Pinvs[2].Pinv.m[1][4])
+PARAM_ADD(PARAM_FLOAT, Pinv224, &g_self.Pinvs[2].Pinv.m[2][4])
+PARAM_ADD(PARAM_FLOAT, Pinv234, &g_self.Pinvs[2].Pinv.m[3][4])
+PARAM_ADD(PARAM_FLOAT, Pinv244, &g_self.Pinvs[2].Pinv.m[4][4])
+PARAM_ADD(PARAM_FLOAT, Pinv254, &g_self.Pinvs[2].Pinv.m[5][4])
+PARAM_ADD(PARAM_FLOAT, Pinv205, &g_self.Pinvs[2].Pinv.m[0][5])
+PARAM_ADD(PARAM_FLOAT, Pinv215, &g_self.Pinvs[2].Pinv.m[1][5])
+PARAM_ADD(PARAM_FLOAT, Pinv225, &g_self.Pinvs[2].Pinv.m[2][5])
+PARAM_ADD(PARAM_FLOAT, Pinv235, &g_self.Pinvs[2].Pinv.m[3][5])
+PARAM_ADD(PARAM_FLOAT, Pinv245, &g_self.Pinvs[2].Pinv.m[4][5])
+PARAM_ADD(PARAM_FLOAT, Pinv255, &g_self.Pinvs[2].Pinv.m[5][5])
 
 PARAM_GROUP_STOP(ctrlLeeP)
 
