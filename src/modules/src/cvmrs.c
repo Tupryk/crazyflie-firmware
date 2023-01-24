@@ -50,6 +50,12 @@ void appMain()
     //Wait for the system to be fully started to start stabilization loop
     systemWaitStart();
 
+    paramVarId_t deck_id = paramGetVarId("deck", "bcAI");
+    uint8_t ai_deck_available = paramGetInt(deck_id);
+    if (!ai_deck_available) {
+        DEBUG_PRINT("No AI deck - do not start CVMRS task\n");
+        return;
+    }
 
     logVarId_t x_id = logGetVarId("stateEstimate", "x");
     logVarId_t y_id = logGetVarId("stateEstimate", "y");

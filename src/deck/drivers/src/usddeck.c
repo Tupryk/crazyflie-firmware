@@ -80,7 +80,8 @@
 
 #else
 #include "deck_spi.h"
-#define USD_CS_PIN    DECK_GPIO_IO3
+#define USD_CS_PIN              DECK_GPIO_IO4
+#define USD_CS_PIN_USED         DECK_USING_IO_4
 
 #define SPI_BEGIN               spiBegin
 #define USD_SPI_BAUDRATE_2MHZ   SPI_BAUDRATE_2MHZ
@@ -460,7 +461,8 @@ static void usdInit(DeckInfo *info)
     shutdownMutex = xSemaphoreCreateMutex();
 
     /* try to mount drives before creating the tasks */
-    if (f_mount(&FatFs, "", 1) == FR_OK) {
+    FRESULT r = f_mount(&FatFs, "", 1);
+    if (r == FR_OK) {
       DEBUG_PRINT("mount SD-Card [OK].\n");
 
       /* create usd-log task */
@@ -468,7 +470,7 @@ static void usdInit(DeckInfo *info)
                   USDLOG_TASK_STACKSIZE, NULL,
                   USDLOG_TASK_PRI, NULL);
     } else {
-      DEBUG_PRINT("mount SD-Card [FAIL].\n");
+      DEBUG_PRINT("mount SD-Card [FAIL] (%d).\n", r);
     }
   }
   isInit = true;
@@ -1067,7 +1069,7 @@ static const DeckDriver usd_deck = {
     .vid = 0xBC,
     .pid = 0x08,
     .name = "bcUSD",
-    .usedGpio = DECK_USING_IO_3,
+    .usedGpio = USD_CS_PIN_USED,
     .usedPeriph = DECK_USING_SPI,
     .init = usdInit,
     .test = usdTest,
