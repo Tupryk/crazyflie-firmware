@@ -97,7 +97,8 @@ STATIC_MEM_QUEUE_ALLOC(queueQPOutput, 1, sizeof(struct QPOutput));
 
 static uint32_t qp_runtime_us = 0;
 
-EVENTTRIGGER(qpSolved)
+// all times are in microseconds (i.e., up to 64ms can be measured)
+EVENTTRIGGER(qpSolved, uint16, Fd, uint16, svm, uint16, mu, uint16, total)
 
 #else
 
@@ -262,7 +263,14 @@ static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec 
 
   osqp_finalize_update(workspace);
 
+  #ifdef CRAZYFLIE_FW
+    uint64_t timestamp_svm_start = usecTimestamp();
+  #endif
   osqp_solve(workspace);
+  #ifdef CRAZYFLIE_FW
+    eventTrigger_qpSolved_payload.svm += usecTimestamp() - timestamp_svm_start;
+  #endif
+
   if (workspace->info->status_val == OSQP_SOLVED) {
     struct vec n = vloadf(workspace->solution->x);
 
@@ -381,7 +389,13 @@ static inline void computePlaneNormals_rb(
 
   osqp_update_lin_cost(workspace, q_new);
 
+  #ifdef CRAZYFLIE_FW
+    uint64_t timestamp_svm_start = usecTimestamp();
+  #endif
   osqp_solve(workspace);
+  #ifdef CRAZYFLIE_FW
+    eventTrigger_qpSolved_payload.svm += usecTimestamp() - timestamp_svm_start;
+  #endif
 
   if (workspace->info->status_val == OSQP_SOLVED/* || workspace->info->status_val == OSQP_SOLVED_INACCURATE || workspace->info->status_val == OSQP_MAX_ITER_REACHED*/) {
     struct vec n = vloadf(workspace->solution->x);
@@ -547,7 +561,15 @@ static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, s
 
   osqp_update_lower_bound(workspace, l_new);
   osqp_update_upper_bound(workspace, u_new);
+
+  #ifdef CRAZYFLIE_FW
+    uint64_t timestamp_Fd_start = usecTimestamp();
+  #endif
   osqp_solve(workspace);
+  #ifdef CRAZYFLIE_FW
+    eventTrigger_qpSolved_payload.Fd += usecTimestamp() - timestamp_Fd_start;
+  #endif
+
   if (workspace->info->status_val == OSQP_SOLVED) {
     F_d1->x = (workspace)->solution->x[0];
     F_d1->y = (workspace)->solution->x[1];
@@ -640,6 +662,13 @@ static controllerLeePayload_t g_self = {
 
 static void runQP(const struct QPInput *input, struct QPOutput* output)
 {
+#ifdef CRAZYFLIE_FW
+  eventTrigger_qpSolved_payload.Fd = 0;
+  eventTrigger_qpSolved_payload.svm = 0;
+  eventTrigger_qpSolved_payload.mu = 0;
+  uint64_t timestamp_total_start = usecTimestamp();
+#endif
+
   struct vec F_d = input->F_d;
   struct vec M_d = input->M_d;
   uint8_t num_neighbors = input->num_neighbors;
@@ -755,7 +784,6 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           // DEBUG_PRINT("Fd2: %f %f %f\n", (double)Fd2.x, (double)Fd2.y, (double)Fd2.z);
           // }
           // ++counter;
-
           computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2);
         }
         
@@ -794,7 +822,15 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         osqp_update_lin_cost(workspace, q_new);
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
+
+        #ifdef CRAZYFLIE_FW
+          uint64_t timestamp_mu_start = usecTimestamp();
+        #endif
         osqp_solve(workspace);
+        #ifdef CRAZYFLIE_FW
+          eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+        #endif
+
         if (workspace->info->status_val == OSQP_SOLVED) {
           desVirtInp.x = (workspace)->solution->x[0];
           desVirtInp.y = (workspace)->solution->x[1];
@@ -857,7 +893,15 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         osqp_update_lin_cost(workspace, q_new);
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
+
+        #ifdef CRAZYFLIE_FW
+          uint64_t timestamp_mu_start = usecTimestamp();
+        #endif
         osqp_solve(workspace);
+        #ifdef CRAZYFLIE_FW
+          eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+        #endif
+
         if (workspace->info->status_val == OSQP_SOLVED) {
           desVirtInp.x = (workspace)->solution->x[0];
           desVirtInp.y = (workspace)->solution->x[1];
@@ -1184,7 +1228,14 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           osqp_update_lin_cost(workspace, q_new);
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
+
+          #ifdef CRAZYFLIE_FW
+            uint64_t timestamp_mu_start = usecTimestamp();
+          #endif
           osqp_solve(workspace);
+          #ifdef CRAZYFLIE_FW
+            eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+          #endif
 
           if (workspace->info->status_val == OSQP_SOLVED) {
             desVirtInp.x = (workspace)->solution->x[0];
@@ -1270,7 +1321,14 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           osqp_update_lin_cost(workspace, q_new);
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
+
+          #ifdef CRAZYFLIE_FW
+            uint64_t timestamp_mu_start = usecTimestamp();
+          #endif
           osqp_solve(workspace);
+          #ifdef CRAZYFLIE_FW
+            eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+          #endif
 
           if (workspace->info->status_val == OSQP_SOLVED) {
             desVirtInp.x = (workspace)->solution->x[0];
@@ -1303,6 +1361,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     }
   }
 #ifdef CRAZYFLIE_FW
+  eventTrigger_qpSolved_payload.total = usecTimestamp() - timestamp_total_start;
   eventTrigger(&eventTrigger_qpSolved);
 #endif
 }
