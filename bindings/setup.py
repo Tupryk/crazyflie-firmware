@@ -47,6 +47,7 @@ fw_sources = [
     "src/lib/osqp/src/osqp/workspace_2uav_1hp_rod.c",
     "src/lib/osqp/src/osqp/workspace_hyperplane.c",
     "src/lib/osqp/src/osqp/workspace_hyperplane_rb.c",
+    "src/lib/osqp/src/osqp/workspace_compute_Fd_pair.c",
 ]
 
 cffirmware = Extension(

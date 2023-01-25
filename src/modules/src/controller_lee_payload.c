@@ -45,6 +45,7 @@ extern OSQPWorkspace workspace_3uav_2hp_rig;
 extern OSQPWorkspace workspace_2uav_1hp_rod;
 extern OSQPWorkspace workspace_hyperplane;
 extern OSQPWorkspace workspace_hyperplane_rb;
+extern OSQPWorkspace workspace_compute_Fd_pair;
 
 #define GRAVITY_MAGNITUDE (9.81f)
 
@@ -338,44 +339,35 @@ static inline void computePlaneNormals_rb(
 
   // TODO: relative to payload to aid warm start!
 
-  // p1 = vadd(p1, mkvec(0.1,0,0));
-  // p2 = vadd(p2, mkvec(0.1,0,0));
-  // p1_attached = vadd(p1_attached, mkvec(0.1,0,0));
-  // p2_attached = vadd(p2_attached, mkvec(0.1,0,0));
-
   // run QP to find separating hyperplane
   OSQPWorkspace* workspace = &workspace_hyperplane_rb;
 
   osqp_prepare_update(workspace);
 
-  // Update P
-  workspace->data->P->x[3] = 2 * lambda_svm;
-  workspace->data->P->x[4] = 2 * lambda_svm;
-
-  struct vec Fd1t = vadd(Fd1, p1_attached);
-  struct vec Fd2t = vadd(Fd2, p2_attached);
+  struct vec Fd1t = vadd(p1_attached, Fd1);
+  struct vec Fd2t = vadd(p2_attached, Fd2);
 
   // Update A
-  workspace->data->A->x[0] = Fd1t.x;
-  workspace->data->A->x[1] = Fd2t.x;
-  workspace->data->A->x[2] = p1.x;
-  workspace->data->A->x[3] = p1_attached.x;
-  workspace->data->A->x[4] = -p2.x;
-  workspace->data->A->x[5] = -p2_attached.x;
+  workspace->data->A->x[0] = p1.x;
+  workspace->data->A->x[1] = p1_attached.x;
+  workspace->data->A->x[2] = -p2.x;
+  workspace->data->A->x[3] = -p2_attached.x;
+  workspace->data->A->x[4] = Fd1t.x;
+  workspace->data->A->x[5] = -Fd2t.x;
 
-  workspace->data->A->x[6] = Fd1t.y;
-  workspace->data->A->x[7] = Fd2t.y;
-  workspace->data->A->x[8] = p1.y;
-  workspace->data->A->x[9] = p1_attached.y;
-  workspace->data->A->x[10] = -p2.y;
-  workspace->data->A->x[11] = -p2_attached.y;
+  workspace->data->A->x[6] = p1.y;
+  workspace->data->A->x[7] = p1_attached.y;
+  workspace->data->A->x[8] = -p2.y;
+  workspace->data->A->x[9] = -p2_attached.y;
+  workspace->data->A->x[10] = Fd1t.y;
+  workspace->data->A->x[11] = -Fd2t.y;
 
-  workspace->data->A->x[12] = Fd1t.z;
-  workspace->data->A->x[13] = Fd2t.z;
-  workspace->data->A->x[14] = p1.z;
-  workspace->data->A->x[15] = p1_attached.z;
-  workspace->data->A->x[16] = -p2.z;
-  workspace->data->A->x[17] = -p2_attached.z;
+  workspace->data->A->x[12] = p1.z;
+  workspace->data->A->x[13] = p1_attached.z;
+  workspace->data->A->x[14] = -p2.z;
+  workspace->data->A->x[15] = -p2_attached.z;
+  workspace->data->A->x[16] = Fd1t.z;
+  workspace->data->A->x[17] = -Fd2t.z;
 
   // print_csc_matrix(workspace->data->P, "P");
   // print_csc_matrix(workspace->data->A, "A");
@@ -385,17 +377,33 @@ static inline void computePlaneNormals_rb(
 
   osqp_finalize_update(workspace);
 
+  c_float q_new[6] = {0, 0, 0, lambda_svm, lambda_svm, 0 };
+
+  osqp_update_lin_cost(workspace, q_new);
+
   osqp_solve(workspace);
 
   if (workspace->info->status_val == OSQP_SOLVED/* || workspace->info->status_val == OSQP_SOLVED_INACCURATE || workspace->info->status_val == OSQP_MAX_ITER_REACHED*/) {
     struct vec n = vloadf(workspace->solution->x);
-    // TODO: the generated QP adds eranous decision variables...
+    // the QP adds additional decision variables...
     float a = workspace->solution->x[5];
+
+    // static int counter = 0;
+    // ++counter;
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("hp %f %f %f %f\n", (double)n.x, (double)n.y, (double)n.z, (double)a);
+
+    // }
 
     // For UAV1, compute the resulting intersection plane
     struct vec center;
     float radius;
     plane_sphere_intersection(n, a, p1_attached, l1, &center, &radius);
+
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("int %f %f %f %f\n", (double)center.x, (double)center.y, (double)center.z, (double)radius);
+
+    // }
 
     if (radius >= 0) {
       // compute the intersection point with the highest z-value
@@ -463,6 +471,14 @@ static inline void computePlaneNormals_rb(
   } else {
   #ifdef CRAZYFLIE_FW
         DEBUG_PRINT("QPsvm: %s\n", workspace->info->status);
+        DEBUG_PRINT("QPsvm: %s %d %f\n", workspace->info->status, workspace->info->iter, (double)workspace->info->obj_val);
+        DEBUG_PRINT("p1 = %f, %f, %f\n",(double) p1.x, (double)p1.y, (double)p1.z);
+        DEBUG_PRINT("p2 = %f, %f, %f\n", (double)p2.x, (double)p2.y, (double)p2.z);
+        DEBUG_PRINT("p1a = %f, %f, %f\n", (double)p1_attached.x, (double)p1_attached.y, (double)p1_attached.z);
+        DEBUG_PRINT("p2a = %f, %f, %f\n", (double)p2_attached.x, (double)p2_attached.y, (double)p2_attached.z);
+        DEBUG_PRINT("Fd1t = %f, %f, %f\n", (double)Fd1t.x, (double)Fd1t.y, (double)Fd1t.z);
+        DEBUG_PRINT("Fd2t = %f, %f, %f\n", (double)Fd2t.x, (double)Fd2t.y, (double)Fd2t.z);
+        DEBUG_PRINT("lambda_svm = %f\n", (double)lambda_svm);
   #else
         printf("QPsvm: %s %d %f\n", workspace->info->status, workspace->info->iter, workspace->info->obj_val);
         printf("p1 = %f, %f, %f\n", p1.x, p1.y, p1.z);
@@ -487,38 +503,48 @@ static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, s
   // printf("ap1: %f %f %f\n", attPoint1.x, attPoint1.y, attPoint1.z);
   // printf("ap2: %f %f %f\n", attPoint2.x, attPoint2.y, attPoint2.z);
 
-
-
-
   struct mat33 R0t = mtranspose(quat2rotmat(payload_quat));
 
   struct mat33 attPR0t = mmul(mcrossmat(attPoint1), R0t);
   struct mat33 attP2R0t = mmul(mcrossmat(attPoint2), R0t);
 
-  OSQPWorkspace* workspace = &workspace_2uav_1hp_rod;
+  OSQPWorkspace* workspace = &workspace_compute_Fd_pair;
 
   osqp_prepare_update(workspace);
 
   // Update A
   c_float* x = workspace->data->A->x;
-  x[0 ] = R0t.m[0][0]; x[1 ] = R0t.m[1][0]; x[ 2] = R0t.m[2][0]; x[3 ] =  attPR0t.m[0][0]; x[4 ] =  attPR0t.m[1][0];  x[5 ] =  attPR0t.m[2][0]; x[6 ] = 0;
-  x[7 ] = R0t.m[0][1]; x[8 ] = R0t.m[1][1]; x[ 9] = R0t.m[2][1]; x[10] =  attPR0t.m[0][1]; x[11] =  attPR0t.m[1][1];  x[12] =  attPR0t.m[2][1]; x[13] = 0;
-  x[14] = R0t.m[0][2]; x[15] = R0t.m[1][2]; x[16] = R0t.m[2][2]; x[17] =  attPR0t.m[0][2]; x[18] =  attPR0t.m[1][2];  x[19] =  attPR0t.m[2][2]; x[20] = 0;
+  x[ 0] = attPR0t.m[0][0];
+  x[ 1] = attPR0t.m[1][0];
+  x[ 2] = attPR0t.m[2][0];
 
-  x[21] = R0t.m[0][0]; x[22] = R0t.m[1][0]; x[23] = R0t.m[2][0]; x[24] = attP2R0t.m[0][0]; x[25] = attP2R0t.m[1][0];  x[26] = attP2R0t.m[2][0]; x[27] = 0;
-  x[28] = R0t.m[0][1]; x[29] = R0t.m[1][1]; x[30] = R0t.m[2][1]; x[31] = attP2R0t.m[0][1]; x[32] = attP2R0t.m[1][1];  x[33] = attP2R0t.m[2][1]; x[34] = 0;
-  x[35] = R0t.m[0][2]; x[36] = R0t.m[1][2]; x[37] = R0t.m[2][2]; x[38] = attP2R0t.m[0][2]; x[39] = attP2R0t.m[1][2];  x[40] = attP2R0t.m[2][2]; x[41] = 0;
+  x[ 4] = attPR0t.m[0][1];
+  x[ 5] = attPR0t.m[1][1];
+  x[ 6] = attPR0t.m[2][1];
+
+  x[ 8] = attPR0t.m[0][2];
+  x[ 9] = attPR0t.m[1][2];
+  x[10] = attPR0t.m[2][2];
+
+  x[12] = attP2R0t.m[0][0];
+  x[13] = attP2R0t.m[1][0];
+  x[14] = attP2R0t.m[2][0];
+
+  x[16] = attP2R0t.m[0][1];
+  x[17] = attP2R0t.m[1][1];
+  x[18] = attP2R0t.m[2][1];
+
+  x[20] = attP2R0t.m[0][2];
+  x[21] = attP2R0t.m[1][2];
+  x[22] = attP2R0t.m[2][2];
+
 
   osqp_finalize_update(workspace);
 
   // update q, l, and u (after finalize update!)
-  struct vec F_dP = mvmul(R0t, F_d);
-  c_float l_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
-  c_float u_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
+  c_float l_new[6] =  {M_d.x, M_d.y, M_d.z, F_d.x, F_d.y, F_d.z};
+  c_float u_new[6] =  {M_d.x, M_d.y, M_d.z, F_d.x, F_d.y, F_d.z};
 
-  c_float q_new[6] = {0, 0, 0, 0, 0, 0 };
-
-  osqp_update_lin_cost(workspace, q_new);
   osqp_update_lower_bound(workspace, l_new);
   osqp_update_upper_bound(workspace, u_new);
   osqp_solve(workspace);
@@ -721,6 +747,15 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             // printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
           }
 
+          // static int counter = 0;
+          // if (counter % 100 == 0) {
+          // DEBUG_PRINT("\nFd: %f %f %f\n", (double)F_d.x, (double)F_d.y, (double)F_d.z);
+          // DEBUG_PRINT("Md: %f %f %f\n", (double)M_d.x, (double)M_d.y, (double)M_d.z);
+          // DEBUG_PRINT("Fd1: %f %f %f\n", (double)Fd1.x, (double)Fd1.y, (double)Fd1.z);
+          // DEBUG_PRINT("Fd2: %f %f %f\n", (double)Fd2.x, (double)Fd2.y, (double)Fd2.z);
+          // }
+          // ++counter;
+
           computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2);
         }
         
@@ -748,8 +783,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 
         // update q, l, and u (after finalize update!)
         struct vec F_dP = mvmul(R0t, F_d);
-        c_float l_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
-        c_float u_new[9] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
+        c_float l_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
+        c_float u_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
 
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
         c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
