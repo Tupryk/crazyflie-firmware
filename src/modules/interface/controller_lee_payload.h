@@ -39,6 +39,8 @@ typedef struct controllerLeePayload_s {
         uint8_t id;
         struct vec point;
         float l; // cable length; set to <= 0 to compute automatically based on the measurements
+
+        struct vec mu_desired; // desired mu (if lambda is < 0)
     } attachement_points[3];
 
     struct {
@@ -120,6 +122,8 @@ typedef struct controllerLeePayload_s {
     float lambda_svm; // regularization value on how close the hyperplane should be to Fd
 
     uint8_t gen_hp; // 0: "old" geometric method, 1: "new" SVM method
+
+    uint8_t formation_control; // 0: no, use normal regularization; 1: yes, use mu_desired from attachement points
 
     struct vec n1;
     struct vec n2;

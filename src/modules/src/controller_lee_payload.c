@@ -708,6 +708,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     struct vec attPoint2 = input->self->attachement_points[1].point;
     struct vec desVirt2_prev = input->self->desVirt2_prev;
 
+    struct vec muDes = input->self->attachement_points[0].mu_desired;
+    struct vec muDes2 = input->self->attachement_points[1].mu_desired;
+
     if (num_neighbors == 1) {
 
       float l1 = -1;
@@ -716,9 +719,11 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       for (uint8_t i = 0; i < num_neighbors+1; ++i) {
         if (input->self->attachement_points[i].id == input->ids[0]) {
           attPoint2 = input->self->attachement_points[i].point;
+          muDes2 = input->self->attachement_points[i].mu_desired;
           l2 = input->self->attachement_points[i].l;
         } else {
           attPoint = input->self->attachement_points[i].point;
+          muDes = input->self->attachement_points[i].mu_desired;
           l1 = input->self->attachement_points[i].l;
         }
       }
@@ -844,11 +849,23 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         c_float u_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
 
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
-        c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
+
+        if (input->self->formation_control) {
+          float scale = vmag(F_d) / 2.0f;
+          muDes = vsclnorm(muDes, scale);
+          muDes2 = vsclnorm(muDes2, scale);
+
+          c_float q_new[6] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
+                            factor * muDes2.x, factor * muDes2.y, factor * muDes2.z,
+                          };
+          osqp_update_lin_cost(workspace, q_new);
+        } else {
+          c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
                             factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
                           };
-
-        osqp_update_lin_cost(workspace, q_new);
+          osqp_update_lin_cost(workspace, q_new);
+        }
+        
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
 
@@ -933,10 +950,21 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         c_float l_new[6] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY,};
         c_float u_new[6] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,};
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
-        c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
-                            factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
-                          };
-        osqp_update_lin_cost(workspace, q_new);
+
+        if (input->self->formation_control) {
+          float scale = vmag(F_d) / 2.0f;
+          muDes = vsclnorm(muDes, scale);
+          muDes2 = vsclnorm(muDes2, scale);
+          c_float q_new[6] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
+                              factor * muDes2.x, factor * muDes2.y, factor * muDes2.z,
+                            };
+          osqp_update_lin_cost(workspace, q_new);
+        } else {
+          c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
+                              factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
+                            };
+          osqp_update_lin_cost(workspace, q_new);
+        }
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
 
@@ -973,6 +1001,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       struct vec attPoint3 = input->self->attachement_points[2].point;  
       struct vec desVirt3_prev = input->self->desVirt3_prev;
 
+      struct vec muDes3 = input->self->attachement_points[2].mu_desired;
+
       float l1 = -1;
       float l2 = -1;
       float l3 = -1;
@@ -981,12 +1011,15 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       for (uint8_t i = 0; i < num_neighbors+1; ++i) {
         if (input->self->attachement_points[i].id == input->ids[0]) {
           attPoint2 = input->self->attachement_points[i].point;
+          muDes2 = input->self->attachement_points[i].mu_desired;
           l2 = input->self->attachement_points[i].l;
         } else if (input->self->attachement_points[i].id == input->ids[1]) {
           attPoint3 = input->self->attachement_points[i].point;
+          muDes3 = input->self->attachement_points[i].mu_desired;
           l3 = input->self->attachement_points[i].l;
         } else {
           attPoint = input->self->attachement_points[i].point;
+          muDes = input->self->attachement_points[i].mu_desired;
           l1 = input->self->attachement_points[i].l;
           myid = input->self->attachement_points[i].id;
         }
@@ -1267,11 +1300,24 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           */
           const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
 
-          c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
+          if (input->self->formation_control) {
+            float scale = vmag(F_d) / 3.0f;
+            muDes = vsclnorm(muDes, scale);
+            muDes2 = vsclnorm(muDes2, scale);
+            muDes3 = vsclnorm(muDes3, scale);
+            c_float q_new[9] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
+                              factor * muDes2.x, factor * muDes2.y, factor * muDes2.z, 
+                              factor * muDes3.x, factor * muDes3.y, factor * muDes3.z};
+
+            osqp_update_lin_cost(workspace, q_new);
+          } else {
+            c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
                               factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
                               factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
 
-          osqp_update_lin_cost(workspace, q_new);
+            osqp_update_lin_cost(workspace, q_new);
+          }
+
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
 
@@ -1360,11 +1406,23 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,  0, 0,  0, 0};
           const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
 
-          c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
-                              factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
-                              factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
+          if (input->self->formation_control) {
+            float scale = vmag(F_d) / 3.0f;
+            muDes = vsclnorm(muDes, scale);
+            muDes2 = vsclnorm(muDes2, scale);
+            muDes3 = vsclnorm(muDes3, scale);
+            c_float q_new[9] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
+                              factor * muDes2.x, factor * muDes2.y, factor * muDes2.z, 
+                              factor * muDes3.x, factor * muDes3.y, factor * muDes3.z};
 
-          osqp_update_lin_cost(workspace, q_new);
+            osqp_update_lin_cost(workspace, q_new);
+          } else {
+            c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
+                                factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
+                                factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
+
+            osqp_update_lin_cost(workspace, q_new);
+          }
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
 
@@ -1936,24 +1994,35 @@ PARAM_ADD(PARAM_FLOAT, lambda_svm, &g_self.lambda_svm)
 
 PARAM_ADD(PARAM_UINT8, gen_hp, &g_self.gen_hp)
 
+PARAM_ADD(PARAM_UINT8, en_fctl, &g_self.formation_control)
+
 // Attachement points rigid body payload
 PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)
 PARAM_ADD(PARAM_FLOAT, ap0x, &g_self.attachement_points[0].point.x)
 PARAM_ADD(PARAM_FLOAT, ap0y, &g_self.attachement_points[0].point.y)
 PARAM_ADD(PARAM_FLOAT, ap0z, &g_self.attachement_points[0].point.z)
 PARAM_ADD(PARAM_FLOAT, ap0l, &g_self.attachement_points[0].l)
+PARAM_ADD(PARAM_FLOAT, ap0dx, &g_self.attachement_points[0].mu_desired.x)
+PARAM_ADD(PARAM_FLOAT, ap0dy, &g_self.attachement_points[0].mu_desired.y)
+PARAM_ADD(PARAM_FLOAT, ap0dz, &g_self.attachement_points[0].mu_desired.z)
 
 PARAM_ADD(PARAM_UINT8, ap1id, &g_self.attachement_points[1].id)
 PARAM_ADD(PARAM_FLOAT, ap1x, &g_self.attachement_points[1].point.x)
 PARAM_ADD(PARAM_FLOAT, ap1y, &g_self.attachement_points[1].point.y)
 PARAM_ADD(PARAM_FLOAT, ap1z, &g_self.attachement_points[1].point.z)
 PARAM_ADD(PARAM_FLOAT, ap1l, &g_self.attachement_points[1].l)
+PARAM_ADD(PARAM_FLOAT, ap1dx, &g_self.attachement_points[1].mu_desired.x)
+PARAM_ADD(PARAM_FLOAT, ap1dy, &g_self.attachement_points[1].mu_desired.y)
+PARAM_ADD(PARAM_FLOAT, ap1dz, &g_self.attachement_points[1].mu_desired.z)
 
 PARAM_ADD(PARAM_UINT8, ap2id, &g_self.attachement_points[2].id)
 PARAM_ADD(PARAM_FLOAT, ap2x, &g_self.attachement_points[2].point.x)
 PARAM_ADD(PARAM_FLOAT, ap2y, &g_self.attachement_points[2].point.y)
 PARAM_ADD(PARAM_FLOAT, ap2z, &g_self.attachement_points[2].point.z)
 PARAM_ADD(PARAM_FLOAT, ap2l, &g_self.attachement_points[2].l)
+PARAM_ADD(PARAM_FLOAT, ap2dx, &g_self.attachement_points[2].mu_desired.x)
+PARAM_ADD(PARAM_FLOAT, ap2dy, &g_self.attachement_points[2].mu_desired.y)
+PARAM_ADD(PARAM_FLOAT, ap2dz, &g_self.attachement_points[2].mu_desired.z)
 
 // Pinv
 PARAM_ADD(PARAM_UINT8, Pinv0id1,&g_self.Pinvs[0].id1)

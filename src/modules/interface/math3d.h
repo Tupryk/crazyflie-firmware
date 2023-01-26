@@ -197,6 +197,12 @@ static inline struct vec vclampnorm(struct vec v, float maxnorm) {
 	}
 	return v;
 }
+// scale the Euclidean norm of a vector to the desired value
+static inline struct vec vsclnorm(struct vec v, float desired_norm) {
+	float const norm = vmag(v);
+	return vscl(desired_norm / norm, v);
+}
+
 // vector cross product.
 static inline struct vec vcross(struct vec a, struct vec b) {
 	return mkvec(a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x);

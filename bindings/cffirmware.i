@@ -141,12 +141,15 @@ void state_set_neighbor_position(state_t *state, int idx, uint8_t id, float x, f
     state->neighbors[idx].pos.z = z;
 }
 
-void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z)
+void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z, float mdx, float mdy, float mdz)
 {
     self->attachement_points[idx].id = id;
     self->attachement_points[idx].point.x = x;
     self->attachement_points[idx].point.y = y;
     self->attachement_points[idx].point.z = z;
+    self->attachement_points[idx].mu_desired.x = mdx;
+    self->attachement_points[idx].mu_desired.y = mdy;
+    self->attachement_points[idx].mu_desired.z = mdz;
 }
 
 void controller_lee_payload_set_Pinv(controllerLeePayload_t* self, int idx, int id1, int id2, int row, int column, float value)
