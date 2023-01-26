@@ -111,6 +111,7 @@ typedef struct controllerLeePayload_s {
     struct vec qdidot;
     // desired value from the QP
     struct vec desVirtInp;
+    struct vec desVirtInp2;
     struct vec desVirt2_prev;
     struct vec desVirt3_prev;
     uint32_t desVirtInp_tick;
@@ -127,6 +128,22 @@ typedef struct controllerLeePayload_s {
     struct vec n5;
     struct vec n6;
     float radius;
+
+    // osqp warm start aid
+    struct osqp_warmstart_hyperplane_rb {
+        float x[6];
+        float y[8];
+    } osqp_warmstart_hyperplane_rbs[3];
+
+    struct osqp_warmstart_compute_Fd_pair {
+        float x[9];
+        float y[6];
+    } osqp_warmstart_compute_Fd_pairs[3];
+
+    struct osqp_warmstart_hyperplane {
+        float x[4];
+        float y[3];
+    } osqp_warmstart_hyperplanes[3];
 
 } controllerLeePayload_t;
 

@@ -97,7 +97,7 @@ STATIC_MEM_QUEUE_ALLOC(queueQPOutput, 1, sizeof(struct QPOutput));
 
 static uint32_t qp_runtime_us = 0;
 
-// all times are in microseconds (i.e., up to 64ms can be measured)
+// all times are in microseconds / 8 (i.e., up to 64*8ms can be measured)
 EVENTTRIGGER(qpSolved, uint16, Fd, uint16, svm, uint16, mu, uint16, total)
 
 #else
@@ -237,7 +237,8 @@ static inline struct vec computePlaneNormal(struct vec ps1, struct vec ps2, stru
   return n_sol;
 }
 
-static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec pload, float r, float l1, float l2, float lambda_svm, struct vec Fd, struct vec* n1, struct vec* n2) {
+static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec pload, float r, float l1, float l2, float lambda_svm, struct vec Fd, struct vec* n1, struct vec* n2,
+  struct osqp_warmstart_hyperplane* warmstart_state) {
   // relative coordinates
   struct vec p1_r = vsub(p1, pload);
   struct vec p2_r = vsub(p2, pload);
@@ -263,15 +264,20 @@ static inline void computePlaneNormals(struct vec p1, struct vec p2, struct vec 
 
   osqp_finalize_update(workspace);
 
+  osqp_warm_start(workspace, warmstart_state->x, warmstart_state->y);
+
   #ifdef CRAZYFLIE_FW
     uint64_t timestamp_svm_start = usecTimestamp();
   #endif
   osqp_solve(workspace);
   #ifdef CRAZYFLIE_FW
-    eventTrigger_qpSolved_payload.svm += usecTimestamp() - timestamp_svm_start;
+    eventTrigger_qpSolved_payload.svm += (usecTimestamp() - timestamp_svm_start) / 8;
   #endif
 
   if (workspace->info->status_val == OSQP_SOLVED) {
+    memcpy(warmstart_state->x, workspace->solution->x, sizeof(warmstart_state->x));
+    memcpy(warmstart_state->y, workspace->solution->y, sizeof(warmstart_state->y));
+
     struct vec n = vloadf(workspace->solution->x);
 
     // now rotate the hyperplane in two directions to compute the two resulting hyperplanes
@@ -343,7 +349,8 @@ static inline void computePlaneNormals_rb(
   float r,
   float l1,
   float l2, float lambda_svm, struct vec Fd1, struct vec Fd2,
-  struct vec* n1, struct vec* n2) {
+  struct vec* n1, struct vec* n2,
+  struct osqp_warmstart_hyperplane_rb* warmstart_state) {
 
   // TODO: relative to payload to aid warm start!
 
@@ -389,15 +396,20 @@ static inline void computePlaneNormals_rb(
 
   osqp_update_lin_cost(workspace, q_new);
 
+  osqp_warm_start(workspace, warmstart_state->x, warmstart_state->y);
+
   #ifdef CRAZYFLIE_FW
     uint64_t timestamp_svm_start = usecTimestamp();
   #endif
   osqp_solve(workspace);
   #ifdef CRAZYFLIE_FW
-    eventTrigger_qpSolved_payload.svm += usecTimestamp() - timestamp_svm_start;
+    eventTrigger_qpSolved_payload.svm += (usecTimestamp() - timestamp_svm_start) / 8;
   #endif
 
   if (workspace->info->status_val == OSQP_SOLVED/* || workspace->info->status_val == OSQP_SOLVED_INACCURATE || workspace->info->status_val == OSQP_MAX_ITER_REACHED*/) {
+    memcpy(warmstart_state->x, workspace->solution->x, sizeof(warmstart_state->x));
+    memcpy(warmstart_state->y, workspace->solution->y, sizeof(warmstart_state->y));
+
     struct vec n = vloadf(workspace->solution->x);
     // the QP adds additional decision variables...
     float a = workspace->solution->x[5];
@@ -509,7 +521,7 @@ static inline void computePlaneNormals_rb(
   }
 }
 
-static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, struct vec attPoint2, struct vec F_d, struct vec M_d, struct vec* F_d1, struct vec* F_d2)
+static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, struct vec attPoint2, struct vec F_d, struct vec M_d, struct vec* F_d1, struct vec* F_d2, struct osqp_warmstart_compute_Fd_pair* warmstart_state)
 {
   // printf("\nFd: %f %f %f\n", F_d.x, F_d.y, F_d.z);
   // printf("Md: %f %f %f\n", M_d.x, M_d.y, M_d.z);
@@ -562,15 +574,20 @@ static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, s
   osqp_update_lower_bound(workspace, l_new);
   osqp_update_upper_bound(workspace, u_new);
 
+  osqp_warm_start(workspace, warmstart_state->x, warmstart_state->y);
+
   #ifdef CRAZYFLIE_FW
     uint64_t timestamp_Fd_start = usecTimestamp();
   #endif
   osqp_solve(workspace);
   #ifdef CRAZYFLIE_FW
-    eventTrigger_qpSolved_payload.Fd += usecTimestamp() - timestamp_Fd_start;
+    eventTrigger_qpSolved_payload.Fd += (usecTimestamp() - timestamp_Fd_start) / 8;
   #endif
 
   if (workspace->info->status_val == OSQP_SOLVED) {
+    memcpy(warmstart_state->x, workspace->solution->x, sizeof(warmstart_state->x));
+    memcpy(warmstart_state->y, workspace->solution->y, sizeof(warmstart_state->y));
+
     F_d1->x = (workspace)->solution->x[0];
     F_d1->y = (workspace)->solution->x[1];
     F_d1->z = (workspace)->solution->x[2];
@@ -717,7 +734,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         if (l2 <= 0) {
           l2 = vmag(vsub(plSt_att2, statePos2));
         }
-        M_d = mkvec(M_d.x, 0, M_d.z);
+
+        // no control over pitch -> set y component to zero
+        M_d.y = 0;
 
         struct vec n1;
         struct vec n2;
@@ -771,7 +790,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             // printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
             // printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
           } else if (input->self->gen_hp == 3) {
-            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint2, F_d, M_d, &Fd1, &Fd2);
+            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint2, F_d, M_d, &Fd1, &Fd2, &input->self->osqp_warmstart_compute_Fd_pairs[0]);
             // printf("Fd1: %f %f %f\n", Fd1.x, Fd1.y, Fd1.z);
             // printf("Fd2: %f %f %f\n", Fd2.x, Fd2.y, Fd2.z);
           }
@@ -784,13 +803,21 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           // DEBUG_PRINT("Fd2: %f %f %f\n", (double)Fd2.x, (double)Fd2.y, (double)Fd2.z);
           // }
           // ++counter;
-          computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2);
+          computePlaneNormals_rb(statePos, statePos2, plSt_att, plSt_att2, radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n2, &input->self->osqp_warmstart_hyperplane_rbs[0]);
         }
         
         struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
 
         struct mat33 attPR0t = mmul(mcrossmat(attPoint), R0t);
         struct mat33 attP2R0t = mmul(mcrossmat(attPoint2), R0t);
+
+        // static int counter = 0;
+        // if (counter % 100 == 0) {
+        //   DEBUG_PRINT("q %f %f %f %f\n", (double)input->plStquat.w, (double)input->plStquat.x, (double)input->plStquat.y, (double)input->plStquat.z);
+        //   DEBUG_PRINT("attPoint %f %f %f\n", (double)attPoint.x, (double)attPoint.y, (double)attPoint.z);
+        //   DEBUG_PRINT("attPoint2 %f %f %f\n", (double)attPoint2.x, (double)attPoint2.y, (double)attPoint2.z);
+        // }
+        // ++counter;
 
         OSQPWorkspace* workspace = &workspace_2uav_1hp_rod;
         workspace->settings->warm_start = 1;
@@ -806,6 +833,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         x[21] = R0t.m[0][0]; x[22] = R0t.m[1][0]; x[23] = R0t.m[2][0]; x[24] = attP2R0t.m[0][0]; x[25] = attP2R0t.m[1][0];  x[26] = attP2R0t.m[2][0]; x[27] = n2.x;
         x[28] = R0t.m[0][1]; x[29] = R0t.m[1][1]; x[30] = R0t.m[2][1]; x[31] = attP2R0t.m[0][1]; x[32] = attP2R0t.m[1][1];  x[33] = attP2R0t.m[2][1]; x[34] = n2.y;
         x[35] = R0t.m[0][2]; x[36] = R0t.m[1][2]; x[37] = R0t.m[2][2]; x[38] = attP2R0t.m[0][2]; x[39] = attP2R0t.m[1][2];  x[40] = attP2R0t.m[2][2]; x[41] = n2.z;
+
+        // print_csc_matrix(workspace->data->A, "A");
 
         osqp_finalize_update(workspace);
 
@@ -828,7 +857,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         #endif
         osqp_solve(workspace);
         #ifdef CRAZYFLIE_FW
-          eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+          eventTrigger_qpSolved_payload.mu += (usecTimestamp() - timestamp_mu_start) / 8;
         #endif
 
         if (workspace->info->status_val == OSQP_SOLVED) {
@@ -838,6 +867,23 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
           input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
           input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
+
+          input->self->desVirtInp2 = input->self->desVirt2_prev;
+
+          // // struct vec sanity_check = vsub(vadd(mvmul(attPR0t, desVirtInp), mvmul(attP2R0t, input->self->desVirt2_prev)), M_d);
+          
+          // static int counter = 0;
+          // if (counter % 100 == 0) {
+          //   DEBUG_PRINT("q %f %f %f %f\n", (double)input->plStquat.w, (double)input->plStquat.x, (double)input->plStquat.y, (double)input->plStquat.z);
+          //   DEBUG_PRINT("mu1 %f %f %f\n", (double)desVirtInp.x, (double)desVirtInp.y, (double)desVirtInp.z);
+          //   struct vec Md1 = mvmul(attPR0t, desVirtInp);
+          //   DEBUG_PRINT("Md1 %f %f %f\n", (double)Md1.x, (double)Md1.y, (double)Md1.z);
+
+          //   // DEBUG_PRINT("mu2 %f %f %f\n", (double)input->self->desVirt2_prev.x, (double)input->self->desVirt2_prev.y, (double)input->self->desVirt2_prev.z);
+          //   // DEBUG_PRINT("Mds %f %f %f\n", (double)sanity_check.x, (double)sanity_check.y, (double)sanity_check.z);
+          // }
+          // ++counter;
+
           output->success = true;
         } else {
         #ifdef CRAZYFLIE_FW
@@ -868,7 +914,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           n1 = computePlaneNormal(statePos, statePos2, plStPos, radius, l1, l2);
           n2 = computePlaneNormal(statePos2, statePos, plStPos, radius, l2, l1);
         } else {
-          computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, input->self->lambda_svm, F_d, &n1, &n2);
+          computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, input->self->lambda_svm, F_d, &n1, &n2, &input->self->osqp_warmstart_hyperplanes[0]);
         }
 
         osqp_prepare_update(workspace);
@@ -899,7 +945,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         #endif
         osqp_solve(workspace);
         #ifdef CRAZYFLIE_FW
-          eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+          eventTrigger_qpSolved_payload.mu += (usecTimestamp() - timestamp_mu_start) / 8;
         #endif
 
         if (workspace->info->status_val == OSQP_SOLVED) {
@@ -981,9 +1027,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           } else if (input->self->gen_hp == 1) {
               struct vec Fd1 = vscl(0.5f, F_d);
               struct vec Fd2 = vscl(0.5f, F_d);        
-              computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
-              computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
-              computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
+              computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3, &input->self->osqp_warmstart_hyperplane_rbs[0]);
+              computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5, &input->self->osqp_warmstart_hyperplane_rbs[1]);
+              computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6, &input->self->osqp_warmstart_hyperplane_rbs[2]);
           } else if (input->self->gen_hp == 2) {
             struct vec Fd1, Fd2;
 
@@ -1038,7 +1084,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
               Fd1 = tmp;
             }
 
-            computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
+            computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3, &input->self->osqp_warmstart_hyperplane_rbs[0]);
 
             // find the Pinvs index for 0 2
             for (int i = 0; i < 3; ++i) {
@@ -1074,7 +1120,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
               Fd1 = tmp;
             }
 
-            computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
+            computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5, &input->self->osqp_warmstart_hyperplane_rbs[1]);
 
             // find the Pinvs index for 1 2
             for (int i = 0; i < 3; ++i) {
@@ -1110,18 +1156,18 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
               Fd1 = tmp;
             }
 
-            computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
+            computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6, &input->self->osqp_warmstart_hyperplane_rbs[2]);
           
           } else if (input->self->gen_hp == 3) {
             struct vec Fd1, Fd2;
-            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint2, F_d, M_d, &Fd1, &Fd2);
-            computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3);
+            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint2, F_d, M_d, &Fd1, &Fd2, &input->self->osqp_warmstart_compute_Fd_pairs[0]);
+            computePlaneNormals_rb(statePos,  statePos2, plSt_att, plSt_att2,  radius, l1, l2, input->self->lambda_svm, Fd1, Fd2, &n1, &n3, &input->self->osqp_warmstart_hyperplane_rbs[0]);
 
-            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint3, F_d, M_d, &Fd1, &Fd2);
-            computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5);
+            compute_Fd_pair_qp(input->plStquat, attPoint, attPoint3, F_d, M_d, &Fd1, &Fd2, &input->self->osqp_warmstart_compute_Fd_pairs[1]);
+            computePlaneNormals_rb(statePos,  statePos3, plSt_att, plSt_att3,  radius, l1, l3, input->self->lambda_svm, Fd1, Fd2, &n2, &n5, &input->self->osqp_warmstart_hyperplane_rbs[1]);
 
-            compute_Fd_pair_qp(input->plStquat, attPoint2, attPoint3, F_d, M_d, &Fd1, &Fd2);
-            computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6);
+            compute_Fd_pair_qp(input->plStquat, attPoint2, attPoint3, F_d, M_d, &Fd1, &Fd2, &input->self->osqp_warmstart_compute_Fd_pairs[2]);
+            computePlaneNormals_rb(statePos2, statePos3, plSt_att2, plSt_att3, radius, l2, l3, input->self->lambda_svm, Fd1, Fd2, &n4, &n6, &input->self->osqp_warmstart_hyperplane_rbs[2]);
           }
 
           struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
@@ -1234,7 +1280,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           #endif
           osqp_solve(workspace);
           #ifdef CRAZYFLIE_FW
-            eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+            eventTrigger_qpSolved_payload.mu += (usecTimestamp() - timestamp_mu_start) / 8;
           #endif
 
           if (workspace->info->status_val == OSQP_SOLVED) {
@@ -1288,9 +1334,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             n5 = computePlaneNormal(statePos3, statePos, plStPos,  radius, l3, l1); // 3 v 1
             n6 = computePlaneNormal(statePos3, statePos2, plStPos, radius, l3, l2); // 3 v 2
           } else {
-            computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, input->self->lambda_svm, F_d, &n1, &n3); // 1 v 2, 2 v 1
-            computePlaneNormals(statePos, statePos3, plStPos, radius, l1, l3, input->self->lambda_svm, F_d, &n2, &n5); // 1 v 3, 3 v 1
-            computePlaneNormals(statePos2, statePos3, plStPos, radius, l2, l3, input->self->lambda_svm, F_d, &n4, &n6); // 2 v 3, 3 v 2
+            computePlaneNormals(statePos, statePos2, plStPos, radius, l1, l2, input->self->lambda_svm, F_d, &n1, &n3, &input->self->osqp_warmstart_hyperplanes[0]); // 1 v 2, 2 v 1
+            computePlaneNormals(statePos, statePos3, plStPos, radius, l1, l3, input->self->lambda_svm, F_d, &n2, &n5, &input->self->osqp_warmstart_hyperplanes[1]); // 1 v 3, 3 v 1
+            computePlaneNormals(statePos2, statePos3, plStPos, radius, l2, l3, input->self->lambda_svm, F_d, &n4, &n6, &input->self->osqp_warmstart_hyperplanes[2]); // 2 v 3, 3 v 2
           }
 
           osqp_prepare_update(workspace);
@@ -1327,7 +1373,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           #endif
           osqp_solve(workspace);
           #ifdef CRAZYFLIE_FW
-            eventTrigger_qpSolved_payload.mu += usecTimestamp() - timestamp_mu_start;
+            eventTrigger_qpSolved_payload.mu += (usecTimestamp() - timestamp_mu_start) / 8;
           #endif
 
           if (workspace->info->status_val == OSQP_SOLVED) {
@@ -1361,7 +1407,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     }
   }
 #ifdef CRAZYFLIE_FW
-  eventTrigger_qpSolved_payload.total = usecTimestamp() - timestamp_total_start;
+  eventTrigger_qpSolved_payload.total = (usecTimestamp() - timestamp_total_start) / 8;
   eventTrigger(&eventTrigger_qpSolved);
 #endif
 }
@@ -1376,11 +1422,11 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
   qpinput.M_d = M_d;
   qpinput.plStPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
   qpinput.plStquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
-  if (state->num_neighbors == 1) {
-    struct vec rpy = quat2rpy(qpinput.plStquat);
-    rpy.y = 0;
-    qpinput.plStquat = rpy2quat(rpy);
-  }
+  // if (state->num_neighbors == 1) {
+  //   struct vec rpy = quat2rpy(qpinput.plStquat);
+  //   rpy.y = 0;
+  //   qpinput.plStquat = rpy2quat(rpy);
+  // }
 
   qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
     // We assume that we always have at least 1 neighbor
@@ -1508,12 +1554,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // rotational states of the payload
     struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
     struct vec plomega = mkvec(state->payload_omega.x, state->payload_omega.y, state->payload_omega.z);
-    if (state->num_neighbors == 1) {
-      struct vec rpy = quat2rpy(plquat);
-      rpy.y = 0;
-      plquat = rpy2quat(rpy);
-      plomega.y = 0;
-    }
+    // if (state->num_neighbors == 1) {
+    //   struct vec rpy = quat2rpy(plquat);
+    //   rpy.y = 0;
+    //   plquat = rpy2quat(rpy);
+    //   plomega.y = 0;
+    // }
 
     // errors
     struct vec plpos_e = vclampnorm(vsub(plPos_d, plStPos), self->Kpos_P_limit);
@@ -2122,6 +2168,11 @@ LOG_ADD(LOG_FLOAT, Mdz, &g_self.M_d.z)
 LOG_ADD(LOG_FLOAT, desVirtInpx, &g_self.desVirtInp.x)
 LOG_ADD(LOG_FLOAT, desVirtInpy, &g_self.desVirtInp.y)
 LOG_ADD(LOG_FLOAT, desVirtInpz, &g_self.desVirtInp.z)
+
+// computed virtual input
+LOG_ADD(LOG_FLOAT, desVirtInp2x, &g_self.desVirtInp2.x)
+LOG_ADD(LOG_FLOAT, desVirtInp2y, &g_self.desVirtInp2.y)
+LOG_ADD(LOG_FLOAT, desVirtInp2z, &g_self.desVirtInp2.z)
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
 
