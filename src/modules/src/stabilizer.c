@@ -128,7 +128,8 @@ static struct {
 } setpointCompressed;
 
 // for payloads
-static float payload_alpha = 0.9; // between 0...1; 1: no filter
+static float payload_alpha_v = 0.9; // between 0...1; 1: no filter
+static float payload_alpha_w = 0.9; // between 0...1; 1: no filter
 static point_t payload_pos_last;         // m   (world frame)
 static quaternion_t payload_quat_last;
 static velocity_t payload_vel_last;      // m/s (world frame)
@@ -328,14 +329,14 @@ static void stabilizerTask(void* param)
 
               // apply a simple complementary filter
               struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
-              vel_filtered = vadd(vscl(1.0f - payload_alpha, vel_old), vscl(payload_alpha, vel));
+              vel_filtered = vadd(vscl(1.0f - payload_alpha_v, vel_old), vscl(payload_alpha_v, vel));
 
               // estimate omega numerically
               struct quat q = mkquat(other->orientation.x, other->orientation.y, other->orientation.z, other->orientation.w);
               struct quat last_q = mkquat(payload_quat_last.x, payload_quat_last.y, payload_quat_last.z, payload_quat_last.w);
               struct vec omega = quat2omega(last_q, q, dt);
               struct vec omega_old = mkvec(payload_omega_last.x, payload_omega_last.y, payload_omega_last.z);
-              omega_filtered = vadd(vscl(1.0f - payload_alpha, omega_old), vscl(payload_alpha, omega));
+              omega_filtered = vadd(vscl(1.0f - payload_alpha_w, omega_old), vscl(payload_alpha_w, omega));
             }
             // update the position
             state.payload_pos.x = other->pos.x;
@@ -483,7 +484,9 @@ PARAM_ADD_CORE(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD_CORE(PARAM_UINT8, stop, &emergencyStop)
 
 
-PARAM_ADD_CORE(PARAM_FLOAT, pAlpha, &payload_alpha)
+PARAM_ADD_CORE(PARAM_FLOAT, pAlphaV, &payload_alpha_v)
+
+PARAM_ADD_CORE(PARAM_FLOAT, pAlphaW, &payload_alpha_w)
 
 PARAM_GROUP_STOP(stabilizer)
 
