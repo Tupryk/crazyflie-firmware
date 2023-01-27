@@ -370,7 +370,6 @@ static void stabilizerTask(void* param)
             state.payload_quat.y = other->orientation.y;
             state.payload_quat.z = other->orientation.z;
             state.payload_quat.w = other->orientation.w;
-            state.payload_quat.timestamp = other->timestamp;
 
             // update the velocity
             state.payload_vel.x = vel_filtered.x;

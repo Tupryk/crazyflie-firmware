@@ -117,15 +117,15 @@ void controllerMellinger(controllerMellinger_t* self, control_t *control, const 
                                          const state_t *state,
                                          const uint32_t tick)
 {
-  // struct vec r_error;
-  // struct vec v_error;
+  struct vec r_error;
+  struct vec v_error;
   struct vec target_thrust;
   struct vec z_axis;
   float current_thrust;
   struct vec x_axis_desired;
   struct vec y_axis_desired;
   struct vec x_c_des;
-  struct vec /*eR, ew,*/ M;
+  struct vec eR, ew, M;
   float dt;
   float desiredYaw = 0; //deg
 

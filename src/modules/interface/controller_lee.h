@@ -62,7 +62,7 @@ typedef struct controllerLee_s {
 
 void controllerLeeInit(controllerLee_t* self);
 void controllerLeeReset(controllerLee_t* self);
-void controllerLee(controllerLee_t* self, control_t *control, setpoint_t *setpoint,
+void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick);
@@ -70,7 +70,7 @@ void controllerLee(controllerLee_t* self, control_t *control, setpoint_t *setpoi
 #ifdef CRAZYFLIE_FW
 void controllerLeeFirmwareInit(void);
 bool controllerLeeFirmwareTest(void);
-void controllerLeeFirmware(control_t *control, setpoint_t *setpoint,
+void controllerLeeFirmware(control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick);

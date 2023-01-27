@@ -95,7 +95,7 @@ bool controllerLeeTest(controllerLee_t* self)
   return true;
 }
 
-void controllerLee(controllerLee_t* self, control_t *control, setpoint_t *setpoint,
+void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick)
@@ -150,15 +150,15 @@ void controllerLee(controllerLee_t* self, control_t *control, setpoint_t *setpoi
     struct quat q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     struct mat33 R = quat2rotmat(q);
     struct vec z  = vbasis(2);
-    control->thrustSI = self->mass*vdot(F_d , mvmul(R, z));
-    self->thrustSI = control->thrustSI;
+    control->thrustSi = self->mass*vdot(F_d , mvmul(R, z));
+    self->thrustSI = control->thrustSi;
     // Reset the accumulated error while on the ground
-    if (control->thrustSI < 0.01f) {
+    if (control->thrustSi < 0.01f) {
       controllerLeeReset(self);
     }
 
   // Compute Desired Rotation matrix
-    float normFd = control->thrustSI;
+    float normFd = control->thrustSi;
 
     struct vec xdes = vbasis(0);
     struct vec ydes = vbasis(1);
@@ -182,7 +182,7 @@ void controllerLee(controllerLee_t* self, control_t *control, setpoint_t *setpoi
     if (setpoint->mode.z == modeDisable) {
       if (setpoint->thrust < 1000) {
           control->controlMode = controlModeForceTorque;
-          control->thrustSI  = 0;
+          control->thrustSi  = 0;
           control->torque[0] = 0;
           control->torque[1] = 0;
           control->torque[2] = 0;
@@ -192,7 +192,7 @@ void controllerLee(controllerLee_t* self, control_t *control, setpoint_t *setpoi
     }
     // On CF2, thrust is mapped 65536 <==> 4 * 12 grams
     const float max_thrust = 70.0f / 1000.0f * 9.81f; // N
-    control->thrustSI = setpoint->thrust / UINT16_MAX * max_thrust;
+    control->thrustSi = setpoint->thrust / UINT16_MAX * max_thrust;
 
    self->qr = mkvec(
       radians(setpoint->attitude.roll),
@@ -230,9 +230,9 @@ void controllerLee(controllerLee_t* self, control_t *control, setpoint_t *setpoi
   // Desired Jerk and snap for now are zeros vector
   struct vec desJerk = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
 
-  if (control->thrustSI != 0) {
+  if (control->thrustSi != 0) {
     struct vec tmp = vsub(desJerk, vscl(vdot(zdes, desJerk), zdes));
-    hw = vscl(self->mass/control->thrustSI, tmp);
+    hw = vscl(self->mass/control->thrustSi, tmp);
   }
   struct vec z_w = mkvec(0,0,1); 
   float desiredYawRate = radians(setpoint->attitudeRate.yaw) * vdot(zdes,z_w);
@@ -281,7 +281,7 @@ bool controllerLeeFirmwareTest(void)
   return true;
 }
 
-void controllerLeeFirmware(control_t *control, setpoint_t *setpoint,
+void controllerLeeFirmware(control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick)

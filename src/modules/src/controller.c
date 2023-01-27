@@ -7,6 +7,7 @@
 #include "controller_mellinger.h"
 #include "controller_indi.h"
 #include "controller_brescianini.h"
+#include "controller_sjc.h"
 #include "controller_mellingerSI.h"
 #include "controller_lee.h"
 #include "controller_lee_payload.h"

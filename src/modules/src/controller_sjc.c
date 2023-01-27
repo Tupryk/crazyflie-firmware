@@ -151,7 +151,7 @@ bool controllerSJCTest(void)
   return true;
 }
 
-void controllerSJC(control_t *control, setpoint_t *setpoint,
+void controllerSJC(control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick)
@@ -212,25 +212,25 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
         veltmul(Kpos_P, pos_e),
         veltmul(Kpos_I, i_error_pos)));
 
-      control->thrustSI = vmag(F_d);
-      thrustSI = control->thrustSI;
+      control->thrustSi = vmag(F_d);
+      thrustSI = control->thrustSi;
       // This is for delay compensation (idea #1)
       // replace by T_d by T = T_d + T_d dot / lambda
-      float T_d_dot = (control->thrustSI - T_d_last) * POSITION_RATE;
+      float T_d_dot = (control->thrustSi - T_d_last) * POSITION_RATE;
       if (T_d_lambda > 0) {
-        control->thrustSI = control->thrustSI + T_d_dot / T_d_lambda;
+        control->thrustSi = control->thrustSi + T_d_dot / T_d_lambda;
       }
-      T_d_last = control->thrustSI;
+      T_d_last = control->thrustSi;
 
       // Reset the accumulated error while on the ground
-      if (control->thrustSI < 0.01f) {
+      if (control->thrustSi < 0.01f) {
         controllerSJCReset();
       }
 
       // Use current yaw instead of desired yaw for roll/pitch
       float yaw = radians(state->attitude.yaw);
       qr = mkvec(
-        asinf((F_d.x * sinf(yaw) - F_d.y * cosf(yaw)) / control->thrustSI),
+        asinf((F_d.x * sinf(yaw) - F_d.y * cosf(yaw)) / control->thrustSi),
         atanf((F_d.x * cosf(yaw) + F_d.y * sinf(yaw)) / F_d.z),
         desiredYaw);
     }
@@ -238,7 +238,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
     if (setpoint->mode.z == modeDisable) {
       if (setpoint->thrust < 1000) {
           control->controlMode = controlModeForceTorque;
-          control->thrustSI = 0;
+          control->thrustSi = 0;
           control->torque[0] = 0;
           control->torque[1] = 0;
           control->torque[2] = 0;
@@ -248,7 +248,7 @@ void controllerSJC(control_t *control, setpoint_t *setpoint,
     }
     // On CF2, thrust is mapped 65536 <==> 4 * 12 grams
     const float max_thrust = 4 * 12.0 / 1000.0 * 9.81; // N
-    control->thrustSI = setpoint->thrust / 65536.0f * max_thrust;
+    control->thrustSi = setpoint->thrust / 65536.0f * max_thrust;
 
     qr = mkvec(
       radians(setpoint->attitude.roll),

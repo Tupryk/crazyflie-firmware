@@ -640,7 +640,9 @@ static controllerLeePayload_t g_self = {
 
   // Cables PD
   .K_q = {25, 25, 25},
+  .K_q_limit = 100,
   .K_w = {24, 24, 24},
+  .K_w_limit = 100,
   .K_q_I = {0, 0, 0},
 
   //Attitude PID 
@@ -1583,7 +1585,7 @@ bool controllerLeePayloadTest(controllerLeePayload_t* self)
   return true;
 }
 
-void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setpoint_t *setpoint,
+void controllerLeePayload(controllerLeePayload_t* self, control_t *control, const setpoint_t *setpoint,
                                                         const sensorData_t *sensors,
                                                         const state_t *state,
                                                         const uint32_t tick)
@@ -1755,8 +1757,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     struct vec u_perpind = vsub(
       vscl(self->mass*l, mvmul(skewqi, vadd4(
-        vneg(veltmul(self->K_q, eq)),
-        vneg(veltmul(self->K_w, ew)),
+        vneg(veltmul(self->K_q, vclampnorm(eq, self->K_q_limit))),
+        vneg(veltmul(self->K_w, vclampnorm(ew, self->K_w_limit))),
         vneg(veltmul(self->K_q_I, self->i_error_q)), 
         vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
       vscl(self->mass, mvmul(skewqi2, acc_))
@@ -1764,15 +1766,15 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     self->u_i = vadd(u_parallel, u_perpind);
     
-    control->thrustSI = vmag(self->u_i);
-    control->u_all[0] = self->u_i.x;
-    control->u_all[1] = self->u_i.y;
-    control->u_all[2] = self->u_i.z;
+    control->thrustSi = vmag(self->u_i);
+    // control->u_all[0] = self->u_i.x;
+    // control->u_all[1] = self->u_i.y;
+    // control->u_all[2] = self->u_i.z;
 
 
-    self->thrustSI = control->thrustSI;
+    self->thrustSI = control->thrustSi;
   //  Reset the accumulated error while on the ground
-    if (control->thrustSI < 0.01f) {
+    if (control->thrustSi < 0.01f) {
       controllerLeePayloadReset(self);
     }
   
@@ -1805,7 +1807,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     if (setpoint->mode.z == modeDisable) {
       if (setpoint->thrust < 1000) {
           control->controlMode = controlModeForceTorque;
-          control->thrustSI  = 0;
+          control->thrustSi  = 0;
           control->torque[0] = 0;
           control->torque[1] = 0;
           control->torque[2] = 0;
@@ -1845,9 +1847,9 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
   // Desired Jerk and snap for now are zeros vector
   struct vec desJerk = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
 
-  if (control->thrustSI != 0) {
+  if (control->thrustSi != 0) {
     struct vec tmp = vsub(desJerk, vscl(vdot(zdes, desJerk), zdes));
-    hw = vscl(self->mass/control->thrustSI, tmp);
+    hw = vscl(self->mass/control->thrustSi, tmp);
   }
 
   struct vec z_w = mkvec(0, 0, 1);
@@ -1896,7 +1898,7 @@ bool controllerLeePayloadFirmwareTest(void)
   return true;
 }
 
-void controllerLeePayloadFirmware(control_t *control, setpoint_t *setpoint,
+void controllerLeePayloadFirmware(control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick)
@@ -1969,11 +1971,13 @@ PARAM_ADD(PARAM_FLOAT, KI_z, &g_self.KI.z)
 PARAM_ADD(PARAM_FLOAT, Kqx, &g_self.K_q.x)
 PARAM_ADD(PARAM_FLOAT, Kqy, &g_self.K_q.y)
 PARAM_ADD(PARAM_FLOAT, Kqz, &g_self.K_q.z)
+PARAM_ADD(PARAM_FLOAT, Kq_limit, &g_self.K_q_limit)
 
 // Cable D
 PARAM_ADD(PARAM_FLOAT, Kwx, &g_self.K_w.x)
 PARAM_ADD(PARAM_FLOAT, Kwy, &g_self.K_w.y)
 PARAM_ADD(PARAM_FLOAT, Kwz, &g_self.K_w.z)
+PARAM_ADD(PARAM_FLOAT, Kw_limit, &g_self.K_w_limit)
 
 // Cable I
 PARAM_ADD(PARAM_FLOAT, KqIx, &g_self.K_q_I.x)

@@ -72,7 +72,9 @@ typedef struct controllerLeePayload_s {
 
    // Cable PD 
     struct vec K_q;
+    float K_q_limit;
     struct vec K_w;
+    float K_w_limit;
     struct vec K_q_I;
 
    // Cable errors
@@ -154,7 +156,7 @@ typedef struct controllerLeePayload_s {
 
 void controllerLeePayloadInit(controllerLeePayload_t* self);
 void controllerLeePayloadReset(controllerLeePayload_t* self);
-void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setpoint_t *setpoint,
+void controllerLeePayload(controllerLeePayload_t* self, control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick);
@@ -162,7 +164,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 #ifdef CRAZYFLIE_FW
 void controllerLeePayloadFirmwareInit(void);
 bool controllerLeePayloadFirmwareTest(void);
-void controllerLeePayloadFirmware(control_t *control, setpoint_t *setpoint,
+void controllerLeePayloadFirmware(control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick);

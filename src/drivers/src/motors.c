@@ -112,10 +112,6 @@ const MotorHealthTestDef unknownMotorHealthTestSettings = {
 
 static bool isInit = false;
 
-// Compensate thrust depending on battery voltage so it will produce about the same
-// amount of thrust independent of the battery voltage. Based on thrust measurement.
-// Not applied for brushless motor setup.
-static uint8_t batCompensation = true;
 
 static uint64_t lastCycleTime;
 static uint32_t cycleTime;
@@ -210,14 +206,14 @@ float motorsCompensateBatteryVoltage(uint32_t id, float iThrust, float supplyVol
     * rushing the motors on bugs and invalid voltage levels.
     */
   if (new_thrust_comp) {
-    if (ithrust > 0) {
+    if (iThrust > 0) {
       // desired thrust in grams
       float maxThrust = motorsGetMaxThrust();
       float maxNewton = maxThrust / 1000.0f * 9.81f;
-      float thrustNewton = ((float)ithrust / 65535.0f) * maxNewton;
+      float thrustNewton = ((float)iThrust / 65535.0f) * maxNewton;
       float thrustGram = thrustNewton / 9.81f * 1000.0f;
       // normalized voltage
-      float v = supply_voltage / 4.2f;
+      float v = supplyVoltage / 4.2f;
       // normalized pwm:
       float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
 
@@ -807,7 +803,8 @@ LOG_ADD_CORE(LOG_UINT32, m3, &motor_ratios[MOTOR_M3])
  */
 LOG_ADD_CORE(LOG_UINT32, m4, &motor_ratios[MOTOR_M4])
 LOG_GROUP_STOP(motor)
-**
+
+/**
  * Logging variables of the motors PWM output
  */
 LOG_GROUP_START(pwm)
