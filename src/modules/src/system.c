@@ -72,6 +72,9 @@
 #include "i2cdev.h"
 #include "autoconf.h"
 #include "vcp_esc_passthrough.h"
+#if CONFIG_ENABLE_CPX
+  #include "cpxlink.h"
+#endif
 
 #ifndef CONFIG_MOTORS_START_DISARMED
 #define ARM_INIT true
@@ -114,6 +117,9 @@ void systemInit(void)
 
   usblinkInit();
   sysLoadInit();
+#if CONFIG_ENABLE_CPX
+  cpxlinkInit();
+#endif
 
   /* Initialized here so that DEBUG_PRINT (buffered) can be used early */
   debugInit();
@@ -174,7 +180,7 @@ void systemTask(void *arg)
 #endif
 
 #ifdef CONFIG_DEBUG_PRINT_ON_UART1
-  uart1Init(115200);
+  uart1Init(CONFIG_DEBUG_PRINT_ON_UART1_BAUDRATE);
 #endif
 
   initUsecTimer();

@@ -317,7 +317,7 @@ typedef struct {
   const mat3d* rotorRot;     // Rotor rotation matrix
   const mat3d* rotorRotInv;  // Inverted rotor rotation matrix
   uint8_t sensorId;
-  uint8_t basestationId;
+  uint8_t baseStationId;
   uint8_t sweepId;
   float t;                   // t is the tilt angle of the light plane on the rotor
   float measuredSweepAngle;
