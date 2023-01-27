@@ -82,7 +82,7 @@ struct QPOutput
 #include "eventtrigger.h"
 
 
-#define CONTROLLER_LEE_PAYLOAD_QP_TASK_STACKSIZE (6 * configMINIMAL_STACK_SIZE)
+#define CONTROLLER_LEE_PAYLOAD_QP_TASK_STACKSIZE (7 * configMINIMAL_STACK_SIZE)
 #define CONTROLLER_LEE_PAYLOAD_QP_TASK_NAME "LEEQP"
 #define CONTROLLER_LEE_PAYLOAD_QP_TASK_PRI 0
 
@@ -653,6 +653,7 @@ static controllerLeePayload_t g_self = {
 
   .en_qdidot = 0,
   .en_accrb = 1,
+  .formation_control = 0,
 
   .radius = 0.15,
 
