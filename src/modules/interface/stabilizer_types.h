@@ -7,7 +7,7 @@
  *
  * Crazyflie control firmware
  *
- * Copyright (C) 2011-2012 Bitcraze AB
+ * Copyright (C) 2011-2022 Bitcraze AB
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -68,8 +68,6 @@ typedef struct vec3_s jerk_t;
 
 /* Orientation as a quaternion */
 typedef struct quaternion_s {
-  uint32_t timestamp;
-
   union {
     struct {
       float q0;
@@ -92,8 +90,21 @@ typedef enum {
 } measurementSource_t;
 
 typedef struct tdoaMeasurement_s {
-  point_t anchorPositions[2];
-  uint8_t anchorIds[2];
+  union {
+    point_t anchorPositions[2];
+    struct {
+      point_t anchorPositionA;
+      point_t anchorPositionB;
+    };
+  };
+  union {
+    uint8_t anchorIds[2];
+    struct {
+      uint8_t anchorIdA;
+      uint8_t anchorIdB;
+    };
+  };
+
   float distanceDiff;
   float stdDev;
 } tdoaMeasurement_t;
@@ -181,6 +192,8 @@ typedef struct state_s {
   Axis3f payload_omega;        // rad/s (world frame)
 } state_t;
 
+#define STABILIZER_NR_OF_MOTORS 4
+
 typedef enum control_mode_e {
   controlModeLegacy      = 0, // legacy mode with int16_t roll, pitch, yaw and float thrust
   controlModeForceTorque = 1,
@@ -189,45 +202,55 @@ typedef enum control_mode_e {
 
 typedef struct control_s {
   union {
+    // controlModeLegacy
     struct {
-      // legacy part
       int16_t roll;
       int16_t pitch;
       int16_t yaw;
       float thrust;
     };
+
+    // controlModeForceTorque
+    // Note: Using SI units for a controller makes it hard to tune it for different platforms. The normalized force API
+    // is probably a better option.
     struct {
-      float thrustSI;  // N
-      float torque[3]; // Nm
-      float u_all[3];
+      float thrustSi;  // N
+      union { // Nm
+        float torque[3];
+        struct {
+          float torqueX;
+          float torqueY;
+          float torqueZ;
+        };
+      };
     };
-    float normalizedForces[4]; // 0 ... 1
+
+    // controlModeForce
+    float normalizedForces[STABILIZER_NR_OF_MOTORS]; // 0.0 ... 1.0
   };
+
   control_mode_t controlMode;
 } control_t;
 
-typedef enum motors_thrust_mode_e {
-  motorsThrustModePWM    = 0,
-  motorsThrustModeForce  = 1,
-} motors_thrust_mode_t;
+typedef union {
+  int32_t list[STABILIZER_NR_OF_MOTORS];
+  struct {
+    int32_t m1;
+    int32_t m2;
+    int32_t m3;
+    int32_t m4;
+  } motors;
+} motors_thrust_uncapped_t;
 
-typedef struct motors_thrust_s {
-  union {
-    struct {
-      uint16_t m1;  // PWM ratio
-      uint16_t m2;  // PWM ratio
-      uint16_t m3;  // PWM ratio
-      uint16_t m4;  // PWM ratio
-    };
-    struct {
-      float f1;  // force in grams
-      float f2;  // force in grams
-      float f3;  // force in grams
-      float f4;  // force in grams
-    };
-  };
-  motors_thrust_mode_t mode;
-} motors_thrust_t;
+typedef union {
+  uint16_t list[STABILIZER_NR_OF_MOTORS];
+  struct {
+    uint16_t m1;  // PWM ratio
+    uint16_t m2;  // PWM ratio
+    uint16_t m3;  // PWM ratio
+    uint16_t m4;  // PWM ratio
+  } motors;
+} motors_thrust_pwm_t;
 
 typedef enum mode_e {
   modeDisable = 0,

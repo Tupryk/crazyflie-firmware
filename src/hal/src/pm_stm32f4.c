@@ -57,9 +57,10 @@ typedef struct _PmSyslinkInfo
     uint8_t flags;
     struct
     {
-      uint8_t chg    : 1;
-      uint8_t pgood  : 1;
-      uint8_t unused : 6;
+      uint8_t isCharging   : 1;
+      uint8_t usbPluggedIn : 1;
+      uint8_t canCharge    : 1;
+      uint8_t unused       : 5;
     };
   };
   float vBat;
@@ -101,6 +102,8 @@ static PMStates pmState;
 static PmSyslinkInfo pmSyslinkInfo;
 
 static uint8_t batteryLevel;
+
+static bool ignoreChargedState = false;
 
 static void pmSetBatteryVoltage(float voltage);
 
@@ -253,11 +256,29 @@ static void pmGracefulShutdown()
   syslinkSendPacket(&slp);
 }
 
+static void pmEnableBatteryStatusAutoupdate()
+{
+  SyslinkPacket slp = {
+    .type = SYSLINK_PM_BATTERY_AUTOUPDATE,
+  };
+
+  syslinkSendPacket(&slp);
+}
+
 void pmSyslinkUpdate(SyslinkPacket *slp)
 {
   if (slp->type == SYSLINK_PM_BATTERY_STATE) {
+    // First byte of the packet contains some PM flags such as USB power, charging etc.
     memcpy(&pmSyslinkInfo, &slp->data[0], sizeof(pmSyslinkInfo));
-    pmSetBatteryVoltage(pmSyslinkInfo.vBat);
+
+    // If using voltage measurements from external battery, we'll set the
+    // voltage to this instead of the one sent from syslink.
+    if (isExtBatVoltDeckPinSet) {
+      pmSetBatteryVoltage(extBatteryVoltage);
+    } else {
+      pmSetBatteryVoltage(pmSyslinkInfo.vBat);
+    }
+
 #ifdef PM_SYSTLINK_INLCUDE_TEMP
     temp = pmSyslinkInfo.temp;
 #endif
@@ -273,31 +294,37 @@ void pmSetChargeState(PMChargeStates chgState)
 
 PMStates pmUpdateState()
 {
-  PMStates state;
-  bool isCharging = pmSyslinkInfo.chg;
-  bool isPgood = pmSyslinkInfo.pgood;
-  uint32_t batteryLowTime;
+  bool usbPluggedIn = pmSyslinkInfo.usbPluggedIn;
+  bool isCharging = pmSyslinkInfo.isCharging;
+  PMStates nextState;
 
-  batteryLowTime = xTaskGetTickCount() - batteryLowTimeStamp;
+  uint32_t batteryLowTime = xTaskGetTickCount() - batteryLowTimeStamp;
 
-  if (isPgood && !isCharging)
+  if (ignoreChargedState)
   {
-    state = charged;
+    // For some scenarios we might not care about the charging/charged state.
+    nextState = battery;
   }
-  else if (isPgood && isCharging)
+  else if (usbPluggedIn && !isCharging)
   {
-    state = charging;
+    nextState = charged;
   }
-  else if (!isPgood && !isCharging && (batteryLowTime > PM_BAT_LOW_TIMEOUT))
+  else if (usbPluggedIn && isCharging)
   {
-    state = lowPower;
+    nextState = charging;
   }
   else
   {
-    state = battery;
+    nextState = battery;
   }
 
-  return state;
+  if (nextState == battery && batteryLowTime > PM_BAT_LOW_TIMEOUT)
+  {
+    // This is to avoid setting state to lowPower when we're plugged in to USB.
+    nextState = lowPower;
+  }
+
+  return nextState;
 }
 
 void pmEnableExtBatteryCurrMeasuring(const deckPin_t pin, float ampPerVolt)
@@ -346,6 +373,10 @@ float pmMeasureExtBatteryVoltage(void)
   return voltage;
 }
 
+void pmIgnoreChargedState(bool ignore) {
+  ignoreChargedState = ignore;
+}
+
 bool pmIsBatteryLow(void) {
   return (pmState == lowPower);
 }
@@ -376,6 +407,10 @@ void pmTask(void *param)
 
   pmSetChargeState(charge500mA);
   systemWaitStart();
+
+  // Continuous battery voltage and status messages must be enabled
+  // after system startup to avoid syslink queue overflow.
+  pmEnableBatteryStatusAutoupdate();
 
   while(1)
   {

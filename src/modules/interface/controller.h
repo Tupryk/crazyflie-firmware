@@ -37,16 +37,17 @@ typedef enum {
   ControllerTypeMellingerSI,
   ControllerTypeLee,
   ControllerTypeLeePayload,
+  ControllerTypeBrescianini,
   ControllerType_COUNT,
 } ControllerType;
 
 void controllerInit(ControllerType controller);
 bool controllerTest(void);
-void controller(control_t *control, setpoint_t *setpoint,
+void controller(control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,
                                          const state_t *state,
                                          const uint32_t tick);
-ControllerType getControllerType(void);
+ControllerType controllerGetType(void);
 const char* controllerGetName();
 
 #endif //__CONTROLLER_H__
