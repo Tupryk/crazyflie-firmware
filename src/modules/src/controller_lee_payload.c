@@ -1804,17 +1804,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     self->R_des = mcolumns(xdes, ydes, zdes);
 
   } else {
-    if (setpoint->mode.z == modeDisable) {
-      if (setpoint->thrust < 1000) {
-          control->controlMode = controlModeForceTorque;
-          control->thrustSi  = 0;
-          control->torque[0] = 0;
-          control->torque[1] = 0;
-          control->torque[2] = 0;
-          controllerLeePayloadReset(self);
-          return;
-      }
-    }
+    // we only support position control
+    control->controlMode = controlModeForceTorque;
+    control->thrustSi  = 0;
+    control->torque[0] = 0;
+    control->torque[1] = 0;
+    control->torque[2] = 0;
+    controllerLeePayloadReset(self);
+    return;
   }
 
   // Attitude controller
