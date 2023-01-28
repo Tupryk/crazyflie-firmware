@@ -72,7 +72,9 @@ typedef struct controllerLeePayload_s {
 
    // Cable PD 
     struct vec K_q;
+    float K_q_limit;
     struct vec K_w;
+    float K_w_limit;
     struct vec K_q_I;
 
    // Cable errors

@@ -640,7 +640,9 @@ static controllerLeePayload_t g_self = {
 
   // Cables PD
   .K_q = {25, 25, 25},
+  .K_q_limit = 100,
   .K_w = {24, 24, 24},
+  .K_w_limit = 100,
   .K_q_I = {0, 0, 0},
 
   //Attitude PID 
@@ -1755,8 +1757,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     struct vec u_perpind = vsub(
       vscl(self->mass*l, mvmul(skewqi, vadd4(
-        vneg(veltmul(self->K_q, eq)),
-        vneg(veltmul(self->K_w, ew)),
+        vneg(veltmul(self->K_q, vclampnorm(eq, self->K_q_limit))),
+        vneg(veltmul(self->K_w, vclampnorm(ew, self->K_w_limit))),
         vneg(veltmul(self->K_q_I, self->i_error_q)), 
         vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
       vscl(self->mass, mvmul(skewqi2, acc_))
@@ -1969,11 +1971,13 @@ PARAM_ADD(PARAM_FLOAT, KI_z, &g_self.KI.z)
 PARAM_ADD(PARAM_FLOAT, Kqx, &g_self.K_q.x)
 PARAM_ADD(PARAM_FLOAT, Kqy, &g_self.K_q.y)
 PARAM_ADD(PARAM_FLOAT, Kqz, &g_self.K_q.z)
+PARAM_ADD(PARAM_FLOAT, Kq_limit, &g_self.K_q_limit)
 
 // Cable D
 PARAM_ADD(PARAM_FLOAT, Kwx, &g_self.K_w.x)
 PARAM_ADD(PARAM_FLOAT, Kwy, &g_self.K_w.y)
 PARAM_ADD(PARAM_FLOAT, Kwz, &g_self.K_w.z)
+PARAM_ADD(PARAM_FLOAT, Kw_limit, &g_self.K_w_limit)
 
 // Cable I
 PARAM_ADD(PARAM_FLOAT, KqIx, &g_self.K_q_I.x)
