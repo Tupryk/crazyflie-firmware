@@ -60,4 +60,7 @@ int powerDistributionMotorType(uint32_t id);
  */
 uint16_t powerDistributionStopRatio(uint32_t id);
 
+
+void powerDistributionOld(motors_thrust_t* motorPower, const control_t *control, float maxThrust);
+
 #endif //__POWER_DISTRIBUTION_H__

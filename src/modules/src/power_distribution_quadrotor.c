@@ -33,6 +33,7 @@
 #include "autoconf.h"
 #include "config.h"
 #include "math.h"
+#include "math3d.h"
 
 #ifndef CONFIG_MOTORS_DEFAULT_IDLE_THRUST
 #  define DEFAULT_IDLE_THRUST 0
@@ -161,6 +162,94 @@ void powerDistributionCap(const motors_thrust_uncapped_t* motorThrustBatCompUnca
     motorPwm->list[motorIndex] = capMinThrust(thrustCappedUpper, idleThrust);
   }
 }
+
+#define limitThrust(VAL) limitUint16(VAL)
+
+static void powerDistributionLegacyOld(motors_thrust_t* motorPower, const control_t *control)
+{
+  motorPower->mode = motorsThrustModePWM;
+  int16_t r = control->roll / 2.0f;
+  int16_t p = control->pitch / 2.0f;
+  motorPower->m1 = limitThrust(control->thrust - r + p + control->yaw);
+  motorPower->m2 = limitThrust(control->thrust - r - p - control->yaw);
+  motorPower->m3 =  limitThrust(control->thrust + r - p + control->yaw);
+  motorPower->m4 =  limitThrust(control->thrust + r + p - control->yaw);
+
+  if (motorPower->m1 < idleThrust) {
+    motorPower->m1 = idleThrust;
+  }
+  if (motorPower->m2 < idleThrust) {
+    motorPower->m2 = idleThrust;
+  }
+  if (motorPower->m3 < idleThrust) {
+    motorPower->m3 = idleThrust;
+  }
+  if (motorPower->m4 < idleThrust) {
+    motorPower->m4 = idleThrust;
+  }
+}
+
+static void powerDistributionForceTorqueOld(motors_thrust_t* motorPower, const control_t *control, float maxThrust)
+{
+  // On CF2, thrust is mapped 65536 <==> 60 grams
+  // float thrust = control->thrustSi;
+  struct vec torque = mkvec(control->torque[0], control->torque[1], control->torque[2]);
+
+  // torque.x = clamp(torque.x, -0.002, 0.002);
+  // torque.y = clamp(torque.y, -0.002, 0.002);
+  // torque.z = clamp(torque.z, -0.0005, 0.0005);
+
+  const float thrust_to_torque = 0.006f;
+  const float arm_length = 0.046f; // m
+
+  // see https://github.com/jpreiss/libquadrotor/blob/master/src/quad_control.c
+  const float thrustpart = 0.25f * control->thrustSi; // N (per rotor)
+  const float yawpart = -0.25f * torque.z / thrust_to_torque;
+
+  float const arm = 0.707106781f * arm_length;
+  const float rollpart = 0.25f / arm * torque.x;
+  const float pitchpart = 0.25f / arm * torque.y;
+
+  // Simple thrust mixing
+  float motorForce0 = thrustpart - rollpart - pitchpart + yawpart;
+  float motorForce1 = thrustpart - rollpart + pitchpart - yawpart;
+  float motorForce2 = thrustpart + rollpart + pitchpart + yawpart;
+  float motorForce3 = thrustpart + rollpart - pitchpart - yawpart;
+
+  // for CF2, motorratio directly maps to thrust (not rpm etc.)
+  // Thus, we only need to scale the values here
+  motorPower->mode = motorsThrustModeForce;
+  motorPower->f1 = clamp(motorForce0 / 9.81f * 1000.0f, 0, maxThrust);
+  motorPower->f2 = clamp(motorForce1 / 9.81f * 1000.0f, 0, maxThrust);
+  motorPower->f3 = clamp(motorForce2 / 9.81f * 1000.0f, 0, maxThrust);
+  motorPower->f4 = clamp(motorForce3 / 9.81f * 1000.0f, 0, maxThrust);
+}
+
+static void powerDistributionForceOld(motors_thrust_t* motorPower, const control_t *control, float maxThrust)
+{
+  motorPower->mode = motorsThrustModeForce;
+  motorPower->f1 = control->normalizedForces[0] * maxThrust;
+  motorPower->f2 = control->normalizedForces[1] * maxThrust;
+  motorPower->f3 = control->normalizedForces[2] * maxThrust;
+  motorPower->f4 = control->normalizedForces[3] * maxThrust;
+}
+
+void powerDistributionOld(motors_thrust_t* motorPower, const control_t *control, float maxThrust)
+{
+  switch (control->controlMode)
+  {
+    case controlModeLegacy:
+      powerDistributionLegacyOld(motorPower, control);
+      break;
+    case controlModeForceTorque:
+      powerDistributionForceTorqueOld(motorPower, control, maxThrust);
+      break;
+    case controlModeForce:
+      powerDistributionForceOld(motorPower, control, maxThrust);
+      break;
+  }
+}
+
 
 /**
  * Power distribution parameters

@@ -60,7 +60,7 @@ static float e10 = 3.926415845326646;
 static float e01 = 26.077196474667165;
 
 static float maxThrust;
-static bool new_thrust_comp = false;
+static bool new_thrust_comp = true;
 
 static bool motorSetEnable = false;
 static uint16_t motorPowerSet[] = {0, 0, 0, 0}; // user-requested PWM signals (overrides)

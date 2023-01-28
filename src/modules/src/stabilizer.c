@@ -70,6 +70,8 @@ static setpoint_t setpoint;
 static sensorData_t sensorData;
 static state_t state;
 static control_t control;
+static motors_thrust_t motorPower;
+static uint8_t power_dist_old = 1;
 
 static motors_thrust_uncapped_t motorThrustUncapped;
 static motors_thrust_uncapped_t motorThrustBatCompUncapped;
@@ -429,10 +431,27 @@ static void stabilizerTask(void* param)
       if (emergencyStop || (systemIsArmed() == false)) {
         motorsStop();
       } else {
-        powerDistribution(&control, &motorThrustUncapped);
-        batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
-        powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
-        setMotorRatios(&motorPwm);
+
+        if (power_dist_old == 0) {
+          powerDistribution(&control, &motorThrustUncapped);
+          batteryCompensation(&motorThrustUncapped, &motorThrustBatCompUncapped);
+          powerDistributionCap(&motorThrustBatCompUncapped, &motorPwm);
+          setMotorRatios(&motorPwm);
+        } else {
+          float maxThrust = motorsGetMaxThrust();
+          powerDistributionOld(&motorPower, &control, maxThrust);
+          if (motorPower.mode == motorsThrustModePWM) {
+            motorsSetRatio(MOTOR_M1, motorPower.m1);
+            motorsSetRatio(MOTOR_M2, motorPower.m2);
+            motorsSetRatio(MOTOR_M3, motorPower.m3);
+            motorsSetRatio(MOTOR_M4, motorPower.m4);
+          } else if (motorPower.mode == motorsThrustModeForce) {
+            motorsSetThrust(MOTOR_M1, motorPower.f1);
+            motorsSetThrust(MOTOR_M2, motorPower.f2);
+            motorsSetThrust(MOTOR_M3, motorPower.f3);
+            motorsSetThrust(MOTOR_M4, motorPower.f4);
+          }
+        }
       }
 
 #ifdef CONFIG_DECK_USD
@@ -500,6 +519,8 @@ PARAM_ADD_CORE(PARAM_UINT8, stop, &emergencyStop)
 PARAM_ADD_CORE(PARAM_FLOAT, pAlphaV, &payload_alpha_v)
 
 PARAM_ADD_CORE(PARAM_FLOAT, pAlphaW, &payload_alpha_w)
+
+PARAM_ADD_CORE(PARAM_UINT8, powerDist, &power_dist_old)
 
 PARAM_GROUP_STOP(stabilizer)
 
