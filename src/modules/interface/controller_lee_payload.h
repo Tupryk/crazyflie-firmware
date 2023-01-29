@@ -151,6 +151,19 @@ typedef struct controllerLeePayload_s {
         float y[3];
     } osqp_warmstart_hyperplanes[3];
 
+    // integral state (30), (31), (32) in Lee's paper
+    struct vec delta_bar_x0;
+    struct vec delta_bar_R0;
+    struct vec delta_bar_xi;
+
+    // integral gains
+    float h_x0;
+    float h_R0;
+    float h_xi;
+    float c_x;
+    float c_R;
+    float c_q;
+
 } controllerLeePayload_t;
 
 
