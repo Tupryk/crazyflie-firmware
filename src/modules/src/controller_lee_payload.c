@@ -1553,6 +1553,16 @@ void controllerLeePayloadReset(controllerLeePayload_t* self)
   self->acc_prev   = vzero();
   self->payload_vel_prev = vzero();
   self->qdi_prev = vzero();
+  self->desVirtInp = vzero();
+  
+  self->delta_bar_x0 = vzero();
+  self->delta_bar_R0 = vzero();
+  self->delta_bar_xi = vzero();
+
+  #ifdef CRAZYFLIE_FW
+  xQueueReset(queueQPInput);
+  xQueueReset(queueQPOutput);
+  #endif
 }
 
 void controllerLeePayloadInit(controllerLeePayload_t* self)
@@ -1567,11 +1577,11 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
     queueQPInput = STATIC_MEM_QUEUE_CREATE(queueQPInput);
     queueQPOutput = STATIC_MEM_QUEUE_CREATE(queueQPOutput);
 
-    struct QPOutput qpoutput;
-    memset(&qpoutput, 0, sizeof(qpoutput));
+    // struct QPOutput qpoutput;
+    // memset(&qpoutput, 0, sizeof(qpoutput));
     // qpoutput.timestamp = 0;
     // qpoutput.desVirtInput = vzero();
-    xQueueOverwrite(queueQPOutput, &qpoutput);
+    // xQueueOverwrite(queueQPOutput, &qpoutput);
 
     taskInitialized = true;
   }
@@ -1626,6 +1636,9 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec plpos_e = vclampnorm(vsub(plPos_d, plStPos), self->Kpos_P_limit);
     struct vec plvel_e = vclampnorm(vsub(plVel_d, plStVel), self->Kpos_D_limit);
     self->i_error_pos = vclampnorm(vadd(self->i_error_pos, vscl(dt, plpos_e)), self->Kpos_I_limit);
+
+    // Lee's integral error (30)
+    self->delta_bar_x0 = vadd(self->delta_bar_x0, vscl(self->h_x0/self->mp*dt, vadd(plvel_e, vscl(self->c_x, plpos_e))));
 
     struct vec attPoint = mkvec(0, 0, 0);
     float l = -1;
@@ -1685,19 +1698,34 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     self->omega_pr = mvmul(mmul(mtranspose(Rp), Rp_des), self->wp_des);
     struct vec omega_perror = vsub(plomega, self->omega_pr);
 
+    // Lees integral error (31)
+    self->delta_bar_R0 = vadd(self->delta_bar_R0, vscl(dt*self->h_R0, vadd(omega_perror, vscl(self->c_R, eRp))));
+
     self->plp_error = plpos_e;
     self->plv_error = plvel_e;
 
-    self->F_d =vscl(self->mp ,vadd4(
-      plAcc_d,
-      veltmul(self->Kpos_P, plpos_e),
-      veltmul(self->Kpos_D, plvel_e),
-      veltmul(self->Kpos_I, self->i_error_pos)));
+    // Lee (20)
+    // Note that the last component is not included here, since it would require
+    // computing delta_bar_xi for all i, on each robot
+    self->F_d = vsub(
+        vscl(self->mp ,vadd4(
+          plAcc_d,
+          veltmul(self->Kpos_P, plpos_e),
+          veltmul(self->Kpos_D, plvel_e),
+          veltmul(self->Kpos_I, self->i_error_pos))), // not in the original formulation
+        self->delta_bar_x0
+      );
 
-    self->M_d = vadd3(
+    // Lee (21)
+    // Note that the part with omega_0_d and omega_0_d_dot are not included, as they are zero in our case
+
+    // Note that the last component is not included here, since it would require
+    // computing delta_bar_xi for all i, on each robot
+    self->M_d = vadd4(
       vneg(veltmul(self->Kprot_P, eRp)),
       vneg(veltmul(self->Kprot_D, omega_perror)),
-      vneg(veltmul(self->Kprot_I, self->i_error_pl_att))
+      vneg(veltmul(self->Kprot_I, self->i_error_pl_att)), // not in the original formulation
+      vneg(self->delta_bar_R0)
     );
 
     computeDesiredVirtualInput(self, state, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
@@ -1755,13 +1783,29 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec wdi = vcross(qdi, self->qdidot);
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
 
-    struct vec u_perpind = vsub(
+    // Lee's integral error (32)
+    {
+      struct vec part1 = vscl(1.0f/self->mp, vadd(plvel_e, vscl(self->c_x, plpos_e)));
+      struct mat33 part2a = mmul(Rp, mcrossmat(attPoint));
+      struct vec part2b = vadd(omega_perror, vscl(self->c_R, eRp));
+      struct vec part2 = mvmul(part2a, part2b);
+
+      struct vec term1 = vscl(self->h_xi, mvmul(qiqiT, vsub(part1, part2)));
+
+      struct vec term2 = vscl(self->h_xi / self->mass * l, mvmul(skewqi, vadd(ew, vscl(self->c_q, eq))));
+
+      self->delta_bar_xi = vadd(self->delta_bar_xi, vscl(dt, vadd(term1, term2)));
+    }
+
+    // Lee (27)
+    struct vec u_perpind = vsub2(
       vscl(self->mass*l, mvmul(skewqi, vadd4(
         vneg(veltmul(self->K_q, vclampnorm(eq, self->K_q_limit))),
         vneg(veltmul(self->K_w, vclampnorm(ew, self->K_w_limit))),
-        vneg(veltmul(self->K_q_I, self->i_error_q)), 
+        vneg(veltmul(self->K_q_I, self->i_error_q)), // main difference to Lee: Lee multiplies again by skewqui and normalizes by cable length
         vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
-      vscl(self->mass, mvmul(skewqi2, acc_))
+      vscl(self->mass, mvmul(skewqi2, acc_)),
+      vneg(mvmul(skewqi2, self->delta_bar_xi))
     );
 
     self->u_i = vadd(u_parallel, u_perpind);
@@ -2143,6 +2187,15 @@ PARAM_ADD(PARAM_FLOAT, Pinv225, &g_self.Pinvs[2].Pinv.m[2][5])
 PARAM_ADD(PARAM_FLOAT, Pinv235, &g_self.Pinvs[2].Pinv.m[3][5])
 PARAM_ADD(PARAM_FLOAT, Pinv245, &g_self.Pinvs[2].Pinv.m[4][5])
 PARAM_ADD(PARAM_FLOAT, Pinv255, &g_self.Pinvs[2].Pinv.m[5][5])
+
+
+// Lee's integral gains
+PARAM_ADD(PARAM_FLOAT, h_x0, &g_self.h_x0)
+PARAM_ADD(PARAM_FLOAT, h_R0, &g_self.h_R0)
+PARAM_ADD(PARAM_FLOAT, h_xi, &g_self.h_xi)
+PARAM_ADD(PARAM_FLOAT, h_xi, &g_self.h_xi)
+PARAM_ADD(PARAM_FLOAT, c_R, &g_self.c_R)
+PARAM_ADD(PARAM_FLOAT, c_q, &g_self.c_q)
 
 PARAM_GROUP_STOP(ctrlLeeP)
 
