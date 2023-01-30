@@ -327,7 +327,14 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
       // If the controller is to track the payload, use its state, rather than the UAVs' state
       pos = state2vec(state->payload_pos);
       vel = state2vec(state->payload_vel);
-      yaw = 0.0;
+      
+      struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
+      if (!isnanf(plquat.w)) {
+        struct vec rpy = quat2rpy(plquat);
+        yaw = rpy.z;
+      } else {
+        yaw = 0.0;
+      }
     } else {
       pos = state2vec(state->position);
       vel = state2vec(state->velocity);
@@ -465,7 +472,7 @@ int takeoff(const struct data_takeoff* data)
   if (isInGroup(data->groupMask)) {
     xSemaphoreTake(lockTraj, portMAX_DELAY);
     float t = usecTimestamp() / 1e6;
-    result = plan_takeoff(&planner, pos, yaw, data->height, 0.0f, data->duration, t);
+    result = plan_takeoff(&planner, pos, yaw, data->height, yaw, data->duration, t);
     xSemaphoreGive(lockTraj);
   }
   return result;

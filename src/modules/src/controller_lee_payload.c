@@ -743,6 +743,13 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           l2 = vmag(vsub(plSt_att2, statePos2));
         }
 
+        // static int counter = 0;
+        // if (counter % 100 == 0) {
+        //   DEBUG_PRINT("alqp1 %f %f %f %f\n", (double)attPoint.x, (double)attPoint.y, (double)attPoint.z, (double)l1); 
+        //   DEBUG_PRINT("alqp1 %f %f %f %f\n", (double)attPoint2.x, (double)attPoint2.y, (double)attPoint2.z, (double)l2); 
+        // }
+        // ++counter;
+
         // no control over pitch -> set y component to zero
         M_d.y = 0;
 
@@ -1659,6 +1666,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       }
     }
 
+    // static int counter = 0;
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("al %f %f %f %f\n", (double)attPoint.x, (double)attPoint.y, (double)attPoint.z, (double)l); 
+    // }
+    // ++counter;
+
     if (!isnanf(plquat.w)) {
       // If the payload is a rigid body then the the attachment point should be added to PlStPos
       plStPos = vadd(plStPos, qvrot(plquat, attPoint));
@@ -2193,7 +2206,7 @@ PARAM_ADD(PARAM_FLOAT, Pinv255, &g_self.Pinvs[2].Pinv.m[5][5])
 PARAM_ADD(PARAM_FLOAT, h_x0, &g_self.h_x0)
 PARAM_ADD(PARAM_FLOAT, h_R0, &g_self.h_R0)
 PARAM_ADD(PARAM_FLOAT, h_xi, &g_self.h_xi)
-PARAM_ADD(PARAM_FLOAT, h_xi, &g_self.h_xi)
+PARAM_ADD(PARAM_FLOAT, c_x, &g_self.c_x)
 PARAM_ADD(PARAM_FLOAT, c_R, &g_self.c_R)
 PARAM_ADD(PARAM_FLOAT, c_q, &g_self.c_q)
 
