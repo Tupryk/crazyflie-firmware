@@ -858,11 +858,22 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         c_float l_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
         c_float u_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
 
-        const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+        /* P = np.eye(9)
+          1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+          => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+          =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+          => q = -2 * lambda / (1+2*lambda) * x_d
+        */
+        const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
         c_float q_new[6];
 
         if (input->self->formation_control == 0) {
-          memset(q_new, 0, sizeof(q_new) * 4);
+          q_new[0] = 0.0f;
+          q_new[1] = 0.0f;
+          q_new[2] = 0.0f;
+          q_new[3] = 0.0f;
+          q_new[4] = 0.0f;
+          q_new[5] = 0.0f;
         }
         else if (input->self->formation_control == 1) {
           q_new[0] = factor * desVirt_prev.x;
@@ -883,6 +894,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[4] = factor * muDes2.y;
           q_new[5] = factor * muDes2.z;
         }
+
+        // DEBUG_PRINT("qn %f %f %f %f %f %f\n", (double)q_new[0], (double)q_new[1], (double)q_new[2], (double)q_new[3], (double)q_new[4], (double)q_new[5]);
+
         
         osqp_update_lin_cost(workspace, q_new);
         osqp_update_lower_bound(workspace, l_new);
@@ -912,10 +926,10 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           // if (counter % 100 == 0) {
           //   DEBUG_PRINT("q %f %f %f %f\n", (double)input->plStquat.w, (double)input->plStquat.x, (double)input->plStquat.y, (double)input->plStquat.z);
           //   DEBUG_PRINT("mu1 %f %f %f\n", (double)desVirtInp.x, (double)desVirtInp.y, (double)desVirtInp.z);
-          //   struct vec Md1 = mvmul(attPR0t, desVirtInp);
-          //   DEBUG_PRINT("Md1 %f %f %f\n", (double)Md1.x, (double)Md1.y, (double)Md1.z);
+          //   // struct vec Md1 = mvmul(attPR0t, desVirtInp);
+          //   // DEBUG_PRINT("Md1 %f %f %f\n", (double)Md1.x, (double)Md1.y, (double)Md1.z);
 
-          //   // DEBUG_PRINT("mu2 %f %f %f\n", (double)input->self->desVirt2_prev.x, (double)input->self->desVirt2_prev.y, (double)input->self->desVirt2_prev.z);
+          //   DEBUG_PRINT("mu2 %f %f %f\n", (double)input->self->desVirt2_prev.x, (double)input->self->desVirt2_prev.y, (double)input->self->desVirt2_prev.z);
           //   // DEBUG_PRINT("Mds %f %f %f\n", (double)sanity_check.x, (double)sanity_check.y, (double)sanity_check.z);
           // }
           // ++counter;
@@ -968,11 +982,23 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         // update q, l, and u (after finalize update!)
         c_float l_new[6] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY,};
         c_float u_new[6] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,};
-        const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+
+        /* P = np.eye(9)
+            1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+            => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+            =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+            => q = -2 * lambda / (1+2*lambda) * x_d
+        */
+        const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
         c_float q_new[6];
 
         if (input->self->formation_control == 0) {
-          memset(q_new, 0, sizeof(q_new) * 4);
+          q_new[0] = 0.0f;
+          q_new[1] = 0.0f;
+          q_new[2] = 0.0f;
+          q_new[3] = 0.0f;
+          q_new[4] = 0.0f;
+          q_new[5] = 0.0f;
         }
         else if (input->self->formation_control == 1) {
           q_new[0] = factor * desVirt_prev.x;
@@ -1322,17 +1348,25 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           c_float l_new[12] =  {F_dP.x,	F_dP.y,	F_dP.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[12] =  {F_dP.x,	F_dP.y,	F_dP.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
 
-          /* P = np.eye(9) [can't be changed online]
-             x^2 + lambda (x^2 - 2xx_d + x_d^2)
-             => J = (1+lambda) x^2 - 2 * lambda x_d x
-             =>   = x^2 - 2 * lambda / (1+lambda) x_d x
-             => q = -2 * lambda / (1+lambda) * x_d
+          /* P = np.eye(9)
+             1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+             => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+             =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+             => q = -2 * lambda / (1+2*lambda) * x_d
           */
-          const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+          const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
           c_float q_new[9];
 
           if (input->self->formation_control == 0) {
-            memset(q_new, 0, sizeof(q_new) * 4);
+            q_new[0] = 0.0f;
+            q_new[1] = 0.0f;
+            q_new[2] = 0.0f;
+            q_new[3] = 0.0f;
+            q_new[4] = 0.0f;
+            q_new[5] = 0.0f;
+            q_new[6] = 0.0f;
+            q_new[7] = 0.0f;
+            q_new[8] = 0.0f;
           }
           else if (input->self->formation_control == 1) {
             q_new[0] = factor * desVirt_prev.x;
@@ -1449,11 +1483,25 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,  0, 0,  0, 0};
 
-          const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+          /* P = np.eye(9)
+             1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+             => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+             =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+             => q = -2 * lambda / (1+2*lambda) * x_d
+          */
+          const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
           c_float q_new[9];
 
           if (input->self->formation_control == 0) {
-            memset(q_new, 0, sizeof(q_new) * 4);
+            q_new[0] = 0.0f;
+            q_new[1] = 0.0f;
+            q_new[2] = 0.0f;
+            q_new[3] = 0.0f;
+            q_new[4] = 0.0f;
+            q_new[5] = 0.0f;
+            q_new[6] = 0.0f;
+            q_new[7] = 0.0f;
+            q_new[8] = 0.0f;
           }
           else if (input->self->formation_control == 1) {
             q_new[0] = factor * desVirt_prev.x;
@@ -1498,7 +1546,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             desVirtInp.x = (workspace)->solution->x[0];
             desVirtInp.y = (workspace)->solution->x[1];
             desVirtInp.z = (workspace)->solution->x[2];
-            
+
             input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
             input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
             input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
@@ -1565,6 +1613,12 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
   // get the latest result from the async computation, do not wait to not block the main loop
   BaseType_t qr = xQueuePeek(queueQPOutput, &qpoutput, 0);
 
+    // static int counter = 0;
+    // ++counter;
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("db %d %d\n", (int)qr, qpoutput.success);
+    // }
+
   // also mark as not successful, if queue was empty for some reason
   qpoutput.success &= (qr == pdTRUE);
 #else
@@ -1611,6 +1665,7 @@ void controllerLeePayloadReset(controllerLeePayload_t* self)
   self->payload_vel_prev = vzero();
   self->qdi_prev = vzero();
   self->desVirtInp = vzero();
+  self->prev_q_des = mkquat(0, 0, 0, 1);
   
   self->delta_bar_x0 = vzero();
   self->delta_bar_R0 = vzero();
@@ -1793,6 +1848,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     computeDesiredVirtualInput(self, state, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
 
+    // static int counter = 0;
+    // ++counter;
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("db %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
+    // }
+
     // if we don't have a desVirtInp (yet), skip this round
     if (vmag2(self->desVirtInp) == 0) {
       return;
@@ -1849,9 +1910,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // Lee's integral error (32)
     {
       struct vec part1 = vscl(1.0f/self->mp, vadd(plvel_e, vscl(self->c_x, plpos_e)));
-      struct mat33 part2a = mmul(Rp, mcrossmat(attPoint));
-      struct vec part2b = vadd(omega_perror, vscl(self->c_R, eRp));
-      struct vec part2 = mvmul(part2a, part2b);
+      struct vec part2 = vzero();
+      if (!isnanf(plquat.w)) {
+        struct mat33 part2a = mmul(Rp, mcrossmat(attPoint));
+        struct vec part2b = vadd(omega_perror, vscl(self->c_R, eRp));
+        part2 = mvmul(part2a, part2b);
+      }
 
       struct vec term1 = vscl(self->h_xi, mvmul(qiqiT, vsub(part1, part2)));
 
@@ -1878,18 +1942,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     control->u_all[1] = self->u_i.y;
     control->u_all[2] = self->u_i.z;
 
-
     self->thrustSI = control->thrustSI;
   //  Reset the accumulated error while on the ground
     if (control->thrustSI < 0.01f) {
       controllerLeePayloadReset(self);
     }
   
-  self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
-  self->rpy = quat2rpy(self->q);
-  self->R = quat2rotmat(self->q);
-
-  // Compute Desired Rotation matrix
+    // Compute Desired Rotation matrix
     struct vec Fd_ = self->u_i;
     struct vec xdes = vbasis(0);
     struct vec ydes = vbasis(1);
@@ -1944,22 +2003,29 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     radians(sensors->gyro.z));
 
   // Compute desired omega
-  struct vec xdes = mcolumn(self->R_des, 0);
-  struct vec ydes = mcolumn(self->R_des, 1);
-  struct vec zdes = mcolumn(self->R_des, 2);
-  struct vec hw = vzero();
-  // Desired Jerk and snap for now are zeros vector
-  struct vec desJerk = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
+  struct vec omega_des;
+  if (self->en_num_omega) {
+    omega_des = quat2omega(self->prev_q_des, q_des, dt);
+    self->prev_q_des = q_des;
 
-  if (control->thrustSI != 0) {
-    struct vec tmp = vsub(desJerk, vscl(vdot(zdes, desJerk), zdes));
-    hw = vscl(self->mass/control->thrustSI, tmp);
+  } else {
+    struct vec xdes = mcolumn(self->R_des, 0);
+    struct vec ydes = mcolumn(self->R_des, 1);
+    struct vec zdes = mcolumn(self->R_des, 2);
+    struct vec hw = vzero();
+    // Desired Jerk and snap for now are zeros vector
+    struct vec desJerk = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
+
+    if (control->thrustSI != 0) {
+      struct vec tmp = vsub(desJerk, vscl(vdot(zdes, desJerk), zdes));
+      hw = vscl(self->mass/control->thrustSI, tmp);
+    }
+
+    struct vec z_w = mkvec(0, 0, 1);
+    float desiredYawRate = radians(setpoint->attitudeRate.yaw) * vdot(zdes, z_w);
+    omega_des = mkvec(-vdot(hw,ydes), vdot(hw,xdes), desiredYawRate);
   }
 
-  struct vec z_w = mkvec(0, 0, 1);
-  float desiredYawRate = radians(setpoint->attitudeRate.yaw) * vdot(zdes, z_w);
-  struct vec omega_des = mkvec(-vdot(hw,ydes), vdot(hw,xdes), desiredYawRate);
-  
   self->omega_r = mvmul(mmul(mtranspose(self->R), self->R_des), omega_des);
 
   struct vec omega_error = vsub(self->omega, self->omega_r);
@@ -2260,6 +2326,8 @@ PARAM_ADD(PARAM_FLOAT, c_x, &g_self.c_x)
 PARAM_ADD(PARAM_FLOAT, c_R, &g_self.c_R)
 PARAM_ADD(PARAM_FLOAT, c_q, &g_self.c_q)
 
+// more fun flags
+PARAM_ADD(PARAM_UINT8, en_num_w, &g_self.en_num_omega)
 PARAM_GROUP_STOP(ctrlLeeP)
 
 

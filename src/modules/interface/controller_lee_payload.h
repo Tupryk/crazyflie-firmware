@@ -127,6 +127,9 @@ typedef struct controllerLeePayload_s {
 
     uint8_t formation_control; // 0: disabled, 1 - use regularization with previous value; 2: use mu_desired from attachement points
 
+    uint8_t en_num_omega; // 0 - use Lee's method, 1 - use numeric estimate
+    struct quat prev_q_des;
+
     struct vec n1;
     struct vec n2;
     struct vec n3;
