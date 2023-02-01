@@ -859,23 +859,32 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         c_float u_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
 
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+        c_float q_new[6];
 
-        if (input->self->formation_control) {
+        if (input->self->formation_control == 0) {
+          memset(q_new, 0, sizeof(q_new) * 4);
+        }
+        else if (input->self->formation_control == 1) {
+          q_new[0] = factor * desVirt_prev.x;
+          q_new[1] = factor * desVirt_prev.y;
+          q_new[2] = factor * desVirt_prev.z;
+          q_new[3] = factor * desVirt2_prev.x;
+          q_new[4] = factor * desVirt2_prev.y;
+          q_new[5] = factor * desVirt2_prev.z;
+        } else {
           float scale = vmag(F_d) / 2.0f;
           muDes = vsclnorm(muDes, scale);
           muDes2 = vsclnorm(muDes2, scale);
 
-          c_float q_new[6] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
-                            factor * muDes2.x, factor * muDes2.y, factor * muDes2.z,
-                          };
-          osqp_update_lin_cost(workspace, q_new);
-        } else {
-          c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
-                            factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
-                          };
-          osqp_update_lin_cost(workspace, q_new);
+          q_new[0] = factor * muDes.x;
+          q_new[1] = factor * muDes.y;
+          q_new[2] = factor * muDes.z;
+          q_new[3] = factor * muDes2.x;
+          q_new[4] = factor * muDes2.y;
+          q_new[5] = factor * muDes2.z;
         }
         
+        osqp_update_lin_cost(workspace, q_new);
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
 
@@ -960,21 +969,32 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         c_float l_new[6] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY,};
         c_float u_new[6] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,};
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+        c_float q_new[6];
 
-        if (input->self->formation_control) {
+        if (input->self->formation_control == 0) {
+          memset(q_new, 0, sizeof(q_new) * 4);
+        }
+        else if (input->self->formation_control == 1) {
+          q_new[0] = factor * desVirt_prev.x;
+          q_new[1] = factor * desVirt_prev.y;
+          q_new[2] = factor * desVirt_prev.z;
+          q_new[3] = factor * desVirt2_prev.x;
+          q_new[4] = factor * desVirt2_prev.y;
+          q_new[5] = factor * desVirt2_prev.z;
+        } else {
           float scale = vmag(F_d) / 2.0f;
           muDes = vsclnorm(muDes, scale);
           muDes2 = vsclnorm(muDes2, scale);
-          c_float q_new[6] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
-                              factor * muDes2.x, factor * muDes2.y, factor * muDes2.z,
-                            };
-          osqp_update_lin_cost(workspace, q_new);
-        } else {
-          c_float q_new[6] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
-                              factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z,
-                            };
-          osqp_update_lin_cost(workspace, q_new);
+
+          q_new[0] = factor * muDes.x;
+          q_new[1] = factor * muDes.y;
+          q_new[2] = factor * muDes.z;
+          q_new[3] = factor * muDes2.x;
+          q_new[4] = factor * muDes2.y;
+          q_new[5] = factor * muDes2.z;
         }
+
+        osqp_update_lin_cost(workspace, q_new);
         osqp_update_lower_bound(workspace, l_new);
         osqp_update_upper_bound(workspace, u_new);
 
@@ -1309,25 +1329,39 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
              => q = -2 * lambda / (1+lambda) * x_d
           */
           const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+          c_float q_new[9];
 
-          if (input->self->formation_control) {
+          if (input->self->formation_control == 0) {
+            memset(q_new, 0, sizeof(q_new) * 4);
+          }
+          else if (input->self->formation_control == 1) {
+            q_new[0] = factor * desVirt_prev.x;
+            q_new[1] = factor * desVirt_prev.y;
+            q_new[2] = factor * desVirt_prev.z;
+            q_new[3] = factor * desVirt2_prev.x;
+            q_new[4] = factor * desVirt2_prev.y;
+            q_new[5] = factor * desVirt2_prev.z;
+            q_new[6] = factor * desVirt3_prev.x;
+            q_new[7] = factor * desVirt3_prev.y;
+            q_new[8] = factor * desVirt3_prev.z;
+          } else {
             float scale = vmag(F_d) / 3.0f;
             muDes = vsclnorm(muDes, scale);
             muDes2 = vsclnorm(muDes2, scale);
             muDes3 = vsclnorm(muDes3, scale);
-            c_float q_new[9] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
-                              factor * muDes2.x, factor * muDes2.y, factor * muDes2.z, 
-                              factor * muDes3.x, factor * muDes3.y, factor * muDes3.z};
 
-            osqp_update_lin_cost(workspace, q_new);
-          } else {
-            c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
-                              factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
-                              factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
-
-            osqp_update_lin_cost(workspace, q_new);
+            q_new[0] = factor * muDes.x;
+            q_new[1] = factor * muDes.y;
+            q_new[2] = factor * muDes.z;
+            q_new[3] = factor * muDes2.x;
+            q_new[4] = factor * muDes2.y;
+            q_new[5] = factor * muDes2.z;
+            q_new[6] = factor * muDes3.x;
+            q_new[7] = factor * muDes3.y;
+            q_new[8] = factor * muDes3.z;
           }
 
+          osqp_update_lin_cost(workspace, q_new);
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
 
@@ -1414,25 +1448,41 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           // update q, l, and u (after finalize update!)
           c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,  0, 0,  0, 0};
-          const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
 
-          if (input->self->formation_control) {
+          const float factor = - 2.0f * input->self->lambdaa / (1.0f + input->self->lambdaa);
+          c_float q_new[9];
+
+          if (input->self->formation_control == 0) {
+            memset(q_new, 0, sizeof(q_new) * 4);
+          }
+          else if (input->self->formation_control == 1) {
+            q_new[0] = factor * desVirt_prev.x;
+            q_new[1] = factor * desVirt_prev.y;
+            q_new[2] = factor * desVirt_prev.z;
+            q_new[3] = factor * desVirt2_prev.x;
+            q_new[4] = factor * desVirt2_prev.y;
+            q_new[5] = factor * desVirt2_prev.z;
+            q_new[6] = factor * desVirt3_prev.x;
+            q_new[7] = factor * desVirt3_prev.y;
+            q_new[8] = factor * desVirt3_prev.z;
+          } else {
             float scale = vmag(F_d) / 3.0f;
             muDes = vsclnorm(muDes, scale);
             muDes2 = vsclnorm(muDes2, scale);
             muDes3 = vsclnorm(muDes3, scale);
-            c_float q_new[9] = {factor * muDes.x,  factor * muDes.y,  factor * muDes.z,
-                              factor * muDes2.x, factor * muDes2.y, factor * muDes2.z, 
-                              factor * muDes3.x, factor * muDes3.y, factor * muDes3.z};
 
-            osqp_update_lin_cost(workspace, q_new);
-          } else {
-            c_float q_new[9] = {factor * desVirt_prev.x,  factor * desVirt_prev.y,  factor * desVirt_prev.z,
-                                factor * desVirt2_prev.x, factor * desVirt2_prev.y, factor * desVirt2_prev.z, 
-                                factor * desVirt3_prev.x, factor * desVirt3_prev.y, factor * desVirt3_prev.z};
-
-            osqp_update_lin_cost(workspace, q_new);
+            q_new[0] = factor * muDes.x;
+            q_new[1] = factor * muDes.y;
+            q_new[2] = factor * muDes.z;
+            q_new[3] = factor * muDes2.x;
+            q_new[4] = factor * muDes2.y;
+            q_new[5] = factor * muDes2.z;
+            q_new[6] = factor * muDes3.x;
+            q_new[7] = factor * muDes3.y;
+            q_new[8] = factor * muDes3.z;
           }
+
+          osqp_update_lin_cost(workspace, q_new);
           osqp_update_lower_bound(workspace, l_new);
           osqp_update_upper_bound(workspace, u_new);
 
@@ -2053,7 +2103,7 @@ PARAM_ADD(PARAM_FLOAT, lambda_svm, &g_self.lambda_svm)
 
 PARAM_ADD(PARAM_UINT8, gen_hp, &g_self.gen_hp)
 
-PARAM_ADD(PARAM_UINT8, en_fctl, &g_self.formation_control)
+PARAM_ADD(PARAM_UINT8, form_ctrl, &g_self.formation_control)
 
 // Attachement points rigid body payload
 PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)

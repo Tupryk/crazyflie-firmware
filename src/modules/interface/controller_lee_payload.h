@@ -125,7 +125,7 @@ typedef struct controllerLeePayload_s {
 
     uint8_t gen_hp; // 0: "old" geometric method, 1: "new" SVM method
 
-    uint8_t formation_control; // 0: no, use normal regularization; 1: yes, use mu_desired from attachement points
+    uint8_t formation_control; // 0: disabled, 1 - use regularization with previous value; 2: use mu_desired from attachement points
 
     struct vec n1;
     struct vec n2;
