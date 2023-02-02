@@ -648,6 +648,7 @@ static controllerLeePayload_t g_self = {
   //Attitude PID 
   .KR = {0.008, 0.008, 0.01},
   .Komega = {0.0013, 0.0013, 0.002},
+  .Komega_limit = 100,
   .KI = {0.02, 0.02, 0.05},
   // desired orientation and omega for payload
   .qp_des = {0, 0, 0, 1},
@@ -696,8 +697,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
   struct vec plStPos = input->plStPos;
   // struct quat plStquat = input->plStquat;
   float radius = input->self->radius;
-  struct vec desVirtInp   = input->self->desVirtInp;
-  struct vec desVirt_prev = input->self->desVirtInp;
+
+  struct vec desVirtInp = vzero();
+  struct vec desVirt_prev = input->self->desVirt_prev;
 
   output->timestamp = input->timestamp;
   output->success = false;
@@ -914,11 +916,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           desVirtInp.x = (workspace)->solution->x[0];
           desVirtInp.y = (workspace)->solution->x[1];
           desVirtInp.z = (workspace)->solution->x[2];
+
+          // Store result for regularization
+          input->self->desVirt_prev = desVirtInp;
           input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
           input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
           input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
-
-          input->self->desVirtInp2 = input->self->desVirt2_prev;
 
           // // struct vec sanity_check = vsub(vadd(mvmul(attPR0t, desVirtInp), mvmul(attP2R0t, input->self->desVirt2_prev)), M_d);
           
@@ -1036,6 +1039,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           desVirtInp.x = (workspace)->solution->x[0];
           desVirtInp.y = (workspace)->solution->x[1];
           desVirtInp.z = (workspace)->solution->x[2];
+
+          // Store result for regularization
+          input->self->desVirt_prev = desVirtInp;
           input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
           input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
           input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
@@ -1063,16 +1069,20 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       float l2 = -1;
       float l3 = -1;
       uint8_t myid = 0;
+      // uint8_t id2 = 0;
+      // uint8_t id3 = 0;
       // Set corresponding attachment points
       for (uint8_t i = 0; i < num_neighbors+1; ++i) {
         if (input->self->attachement_points[i].id == input->ids[0]) {
           attPoint2 = input->self->attachement_points[i].point;
           muDes2 = input->self->attachement_points[i].mu_desired;
           l2 = input->self->attachement_points[i].l;
+          // id2 = input->self->attachement_points[i].id;
         } else if (input->self->attachement_points[i].id == input->ids[1]) {
           attPoint3 = input->self->attachement_points[i].point;
           muDes3 = input->self->attachement_points[i].mu_desired;
           l3 = input->self->attachement_points[i].l;
+          // id3 = input->self->attachement_points[i].id;
         } else {
           attPoint = input->self->attachement_points[i].point;
           muDes = input->self->attachement_points[i].mu_desired;
@@ -1412,6 +1422,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             desVirtInp.y = (workspace)->solution->x[1];
             desVirtInp.z = (workspace)->solution->x[2];
             
+            // Store result for regularization
+            input->self->desVirt_prev = desVirtInp;
             input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
             input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
             input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
@@ -1513,6 +1525,16 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             q_new[6] = factor * desVirt3_prev.x;
             q_new[7] = factor * desVirt3_prev.y;
             q_new[8] = factor * desVirt3_prev.z;
+
+            // // static int counter = 0;
+            // // if (counter % 100 == 0) {
+            //   DEBUG_PRINT("d1 %d %f %f %f\n", myid, (double)desVirt_prev.x, (double)desVirt_prev.y, (double)desVirt_prev.z);
+            //   DEBUG_PRINT("d2 %d %f %f %f\n", id2, (double)desVirt2_prev.x, (double)desVirt2_prev.y, (double)desVirt2_prev.z);
+            //   DEBUG_PRINT("d3 %d %f %f %f\n", id3, (double)desVirt3_prev.x, (double)desVirt3_prev.y, (double)desVirt3_prev.z);
+            // // }
+            // // ++counter;
+
+
           } else {
             float scale = vmag(F_d) / 3.0f;
             muDes = vsclnorm(muDes, scale);
@@ -1547,12 +1569,21 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             desVirtInp.y = (workspace)->solution->x[1];
             desVirtInp.z = (workspace)->solution->x[2];
 
+            // Store result for regularization
+            input->self->desVirt_prev = desVirtInp;
             input->self->desVirt2_prev.x =  (workspace)->solution->x[3];
             input->self->desVirt2_prev.y =  (workspace)->solution->x[4];
             input->self->desVirt2_prev.z =  (workspace)->solution->x[5];
             input->self->desVirt3_prev.x =   (workspace)->solution->x[6];
             input->self->desVirt3_prev.y =   (workspace)->solution->x[7];
             input->self->desVirt3_prev.z =   (workspace)->solution->x[8];
+
+            // DEBUG_PRINT("sol ");
+            // for (int i = 0; i < 9; ++i) {
+            //   DEBUG_PRINT("%f ", (double)(workspace)->solution->x[i]);
+            // }
+            // DEBUG_PRINT("\n");
+
             output->success = true;
           } else {
           #ifdef CRAZYFLIE_FW
@@ -1681,23 +1712,6 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
 {
   // copy default values (bindings), or NOP (firmware)
   *self = g_self;
-
-#ifdef CRAZYFLIE_FW
-  if (!taskInitialized) {
-    STATIC_MEM_TASK_CREATE(controllerLeePayloadQPTask, controllerLeePayloadQPTask, CONTROLLER_LEE_PAYLOAD_QP_TASK_NAME, NULL, CONTROLLER_LEE_PAYLOAD_QP_TASK_PRI);
-
-    queueQPInput = STATIC_MEM_QUEUE_CREATE(queueQPInput);
-    queueQPOutput = STATIC_MEM_QUEUE_CREATE(queueQPOutput);
-
-    // struct QPOutput qpoutput;
-    // memset(&qpoutput, 0, sizeof(qpoutput));
-    // qpoutput.timestamp = 0;
-    // qpoutput.desVirtInput = vzero();
-    // xQueueOverwrite(queueQPOutput, &qpoutput);
-
-    taskInitialized = true;
-  }
-#endif
 
   controllerLeePayloadReset(self);
 }
@@ -2003,11 +2017,19 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     radians(sensors->gyro.z));
 
   // Compute desired omega
-  struct vec omega_des;
   if (self->en_num_omega) {
-    omega_des = quat2omega(self->prev_q_des, q_des, dt);
-    self->prev_q_des = q_des;
+    if (self->desVirtInp_tick != self->prev_q_tick) {
+      float q_dt = (self->desVirtInp_tick - self->prev_q_tick) / 1000.0f;
+      self->omega_r = quat2omega(self->prev_q_des, q_des, q_dt);
 
+      // static int counter = 0;
+      // if (counter % 100 == 0) {
+      // DEBUG_PRINT("or %f %f %f %f\n", (double)q_dt, (double)self->omega_r.x, (double)self->omega_r.y, (double)self->omega_r.z);
+      // } 
+      // ++ counter;
+      self->prev_q_des = q_des;
+      self->prev_q_tick = self->desVirtInp_tick;
+    }
   } else {
     struct vec xdes = mcolumn(self->R_des, 0);
     struct vec ydes = mcolumn(self->R_des, 1);
@@ -2023,10 +2045,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     struct vec z_w = mkvec(0, 0, 1);
     float desiredYawRate = radians(setpoint->attitudeRate.yaw) * vdot(zdes, z_w);
-    omega_des = mkvec(-vdot(hw,ydes), vdot(hw,xdes), desiredYawRate);
+    struct vec omega_des = mkvec(-vdot(hw,ydes), vdot(hw,xdes), desiredYawRate);
+    self->omega_r = mvmul(mmul(mtranspose(self->R), self->R_des), omega_des);
   }
 
-  self->omega_r = mvmul(mmul(mtranspose(self->R), self->R_des), omega_des);
 
   struct vec omega_error = vsub(self->omega, self->omega_r);
   
@@ -2037,7 +2059,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
   // M = -kR eR - kw ew + w x Jw - J(w x wr)
   self->u = vadd4(
     vneg(veltmul(self->KR, eR)),
-    vneg(veltmul(self->Komega, omega_error)),
+    vneg(veltmul(self->Komega, vclampnorm(omega_error, self->Komega_limit))),
     vneg(veltmul(self->KI, self->i_error_att)),
     vcross(self->omega, veltmul(self->J, self->omega)));
 
@@ -2058,6 +2080,24 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 #include "param.h"
 #include "log.h"
 
+void controllerLeePayloadFirmwareTaskInit(void)
+{
+  if (!taskInitialized) {
+    STATIC_MEM_TASK_CREATE(controllerLeePayloadQPTask, controllerLeePayloadQPTask, CONTROLLER_LEE_PAYLOAD_QP_TASK_NAME, NULL, CONTROLLER_LEE_PAYLOAD_QP_TASK_PRI);
+
+    queueQPInput = STATIC_MEM_QUEUE_CREATE(queueQPInput);
+    queueQPOutput = STATIC_MEM_QUEUE_CREATE(queueQPOutput);
+
+    // struct QPOutput qpoutput;
+    // memset(&qpoutput, 0, sizeof(qpoutput));
+    // qpoutput.timestamp = 0;
+    // qpoutput.desVirtInput = vzero();
+    // xQueueOverwrite(queueQPOutput, &qpoutput);
+
+    taskInitialized = true;
+  }
+}
+
 void controllerLeePayloadFirmwareInit(void)
 {
   controllerLeePayloadInit(&g_self);
@@ -2077,30 +2117,23 @@ void controllerLeePayloadFirmware(control_t *control, setpoint_t *setpoint,
 }
 
 PARAM_GROUP_START(ctrlLeeP)
-PARAM_ADD(PARAM_FLOAT, KR_x, &g_self.KR.x)
-PARAM_ADD(PARAM_FLOAT, KR_y, &g_self.KR.y)
-PARAM_ADD(PARAM_FLOAT, KR_z, &g_self.KR.z)
-// Attitude D
-PARAM_ADD(PARAM_FLOAT, Kw_x, &g_self.Komega.x)
-PARAM_ADD(PARAM_FLOAT, Kw_y, &g_self.Komega.y)
-PARAM_ADD(PARAM_FLOAT, Kw_z, &g_self.Komega.z)
 
 // J
 PARAM_ADD(PARAM_FLOAT, J_x, &g_self.J.x)
 PARAM_ADD(PARAM_FLOAT, J_y, &g_self.J.y)
 PARAM_ADD(PARAM_FLOAT, J_z, &g_self.J.z)
 
-// Position P
+// Payload Position P
 PARAM_ADD(PARAM_FLOAT, Kpos_Px, &g_self.Kpos_P.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Py, &g_self.Kpos_P.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_Pz, &g_self.Kpos_P.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_P_limit, &g_self.Kpos_P_limit)
-// Position D
+// Payload Position D
 PARAM_ADD(PARAM_FLOAT, Kpos_Dx, &g_self.Kpos_D.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Dy, &g_self.Kpos_D.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_Dz, &g_self.Kpos_D.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_D_limit, &g_self.Kpos_D_limit)
-// Position I
+// Payload Position I
 PARAM_ADD(PARAM_FLOAT, Kpos_Ix, &g_self.Kpos_I.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iy, &g_self.Kpos_I.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_Iz, &g_self.Kpos_I.z)
@@ -2122,20 +2155,6 @@ PARAM_ADD(PARAM_FLOAT, Kprot_Iy, &g_self.Kprot_I.y)
 PARAM_ADD(PARAM_FLOAT, Kprot_Iz, &g_self.Kprot_I.z)
 PARAM_ADD(PARAM_FLOAT, Kprot_I_limit, &g_self.Kprot_I_limit)
 
-// Attitude P
-PARAM_ADD(PARAM_FLOAT, KRx, &g_self.KR.x)
-PARAM_ADD(PARAM_FLOAT, KRy, &g_self.KR.y)
-PARAM_ADD(PARAM_FLOAT, KRz, &g_self.KR.z)
-
-// Attitude D
-PARAM_ADD(PARAM_FLOAT, Komx, &g_self.Komega.x)
-PARAM_ADD(PARAM_FLOAT, Komy, &g_self.Komega.y)
-PARAM_ADD(PARAM_FLOAT, Komz, &g_self.Komega.z)
-
-// Attitude I
-PARAM_ADD(PARAM_FLOAT, KI_x, &g_self.KI.x)
-PARAM_ADD(PARAM_FLOAT, KI_y, &g_self.KI.y)
-PARAM_ADD(PARAM_FLOAT, KI_z, &g_self.KI.z)
 
 // Cable P
 PARAM_ADD(PARAM_FLOAT, Kqx, &g_self.K_q.x)
@@ -2153,6 +2172,23 @@ PARAM_ADD(PARAM_FLOAT, Kw_limit, &g_self.K_w_limit)
 PARAM_ADD(PARAM_FLOAT, KqIx, &g_self.K_q_I.x)
 PARAM_ADD(PARAM_FLOAT, KqIy, &g_self.K_q_I.y)
 PARAM_ADD(PARAM_FLOAT, KqIz, &g_self.K_q_I.z)
+
+// UAV Attitude P
+PARAM_ADD(PARAM_FLOAT, KRx, &g_self.KR.x)
+PARAM_ADD(PARAM_FLOAT, KRy, &g_self.KR.y)
+PARAM_ADD(PARAM_FLOAT, KRz, &g_self.KR.z)
+
+// UAV Attitude D
+PARAM_ADD(PARAM_UINT8, en_num_w, &g_self.en_num_omega)
+PARAM_ADD(PARAM_FLOAT, Komx, &g_self.Komega.x)
+PARAM_ADD(PARAM_FLOAT, Komy, &g_self.Komega.y)
+PARAM_ADD(PARAM_FLOAT, Komz, &g_self.Komega.z)
+PARAM_ADD(PARAM_FLOAT, Kom_limit, &g_self.Komega_limit)
+
+// UAV Attitude I
+PARAM_ADD(PARAM_FLOAT, KI_x, &g_self.KI.x)
+PARAM_ADD(PARAM_FLOAT, KI_y, &g_self.KI.y)
+PARAM_ADD(PARAM_FLOAT, KI_z, &g_self.KI.z)
 
 PARAM_ADD(PARAM_UINT8, en_qdidot, &g_self.en_qdidot)
 PARAM_ADD(PARAM_UINT8, en_accrb, &g_self.en_accrb)
@@ -2326,8 +2362,6 @@ PARAM_ADD(PARAM_FLOAT, c_x, &g_self.c_x)
 PARAM_ADD(PARAM_FLOAT, c_R, &g_self.c_R)
 PARAM_ADD(PARAM_FLOAT, c_q, &g_self.c_q)
 
-// more fun flags
-PARAM_ADD(PARAM_UINT8, en_num_w, &g_self.en_num_omega)
 PARAM_GROUP_STOP(ctrlLeeP)
 
 
@@ -2423,11 +2457,6 @@ LOG_ADD(LOG_FLOAT, Mdz, &g_self.M_d.z)
 LOG_ADD(LOG_FLOAT, desVirtInpx, &g_self.desVirtInp.x)
 LOG_ADD(LOG_FLOAT, desVirtInpy, &g_self.desVirtInp.y)
 LOG_ADD(LOG_FLOAT, desVirtInpz, &g_self.desVirtInp.z)
-
-// computed virtual input
-LOG_ADD(LOG_FLOAT, desVirtInp2x, &g_self.desVirtInp2.x)
-LOG_ADD(LOG_FLOAT, desVirtInp2y, &g_self.desVirtInp2.y)
-LOG_ADD(LOG_FLOAT, desVirtInp2z, &g_self.desVirtInp2.z)
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
 

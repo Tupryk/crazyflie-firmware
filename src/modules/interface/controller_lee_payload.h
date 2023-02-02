@@ -81,9 +81,10 @@ typedef struct controllerLeePayload_s {
     struct vec plp_error;
     struct vec plv_error;
 
-   //Attitude PID
+    //Attitude PID
     struct vec KR;
     struct vec Komega;
+    float Komega_limit;
     struct vec KI;
 
     // Logging variables
@@ -115,7 +116,8 @@ typedef struct controllerLeePayload_s {
     struct vec qdidot;
     // desired value from the QP
     struct vec desVirtInp;
-    struct vec desVirtInp2;
+
+    struct vec desVirt_prev;
     struct vec desVirt2_prev;
     struct vec desVirt3_prev;
     uint32_t desVirtInp_tick;
@@ -129,6 +131,7 @@ typedef struct controllerLeePayload_s {
 
     uint8_t en_num_omega; // 0 - use Lee's method, 1 - use numeric estimate
     struct quat prev_q_des;
+    uint32_t prev_q_tick;
 
     struct vec n1;
     struct vec n2;
@@ -178,6 +181,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
                                          const uint32_t tick);
 
 #ifdef CRAZYFLIE_FW
+void controllerLeePayloadFirmwareTaskInit(void);
 void controllerLeePayloadFirmwareInit(void);
 bool controllerLeePayloadFirmwareTest(void);
 void controllerLeePayloadFirmware(control_t *control, setpoint_t *setpoint,

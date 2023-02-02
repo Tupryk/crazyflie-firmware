@@ -58,6 +58,7 @@
 #include "rateSupervisor.h"
 #include "peer_localization.h"
 #include "math3d.h"
+#include "controller_lee_payload.h"
 
 static bool isInit;
 static bool emergencyStop = false;
@@ -211,6 +212,8 @@ void stabilizerInit(StateEstimatorType estimator)
   controllerType = getControllerType();
 
   STATIC_MEM_TASK_CREATE(stabilizerTask, stabilizerTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
+
+  controllerLeePayloadFirmwareTaskInit();
 
   isInit = true;
 }
