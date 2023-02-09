@@ -80,8 +80,8 @@
 
 #else
 #include "deck_spi.h"
-#define USD_CS_PIN              DECK_GPIO_IO4
-#define USD_CS_PIN_USED         DECK_USING_IO_4
+#define USD_CS_PIN              DECK_GPIO_IO3
+#define USD_CS_PIN_USED         DECK_USING_IO_3
 
 #define SPI_BEGIN               spiBegin
 #define USD_SPI_BAUDRATE_2MHZ   SPI_BAUDRATE_2MHZ

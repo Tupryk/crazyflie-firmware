@@ -146,6 +146,7 @@ static uint32_t gyroAccumulatorCount;
 static Axis3f accLatest;
 static Axis3f gyroLatest;
 static bool quadIsFlying = false;
+static uint8_t quadIsFlyingOverwrite = 2; // 0 - quad is not flying, 1 - quad is flying, 2 - automatic (default)
 
 static OutlierFilterLhState_t sweepOutlierFilterState;
 
@@ -335,7 +336,12 @@ static bool predictStateForward(uint32_t osTick, float dt) {
   gyroAccumulator = (Axis3f){.axis={0}};
   gyroAccumulatorCount = 0;
 
-  quadIsFlying = supervisorIsFlying();
+  if (quadIsFlyingOverwrite == 2) {
+    quadIsFlying = supervisorIsFlying();
+  } else {
+    quadIsFlying = quadIsFlyingOverwrite;
+  }
+
   kalmanCorePredict(&coreData, &accAverage, &gyroAverage, dt, quadIsFlying);
 
   return true;
@@ -594,7 +600,7 @@ PARAM_GROUP_START(kalman)
  * @brief Reset the kalman estimator
  */
   PARAM_ADD_CORE(PARAM_UINT8, resetEstimation, &resetEstimation)
-  PARAM_ADD(PARAM_UINT8, quadIsFlying, &quadIsFlying)
+  PARAM_ADD(PARAM_UINT8, quadIsFlying, &quadIsFlyingOverwrite)
 /**
  * @brief Nonzero to use robust TDOA method (default: 0)
  */
