@@ -120,7 +120,8 @@ static CRTPPacket LhAngle;
 #endif
 static bool enableLighthouseAngleStream = false;
 static float extPosStdDev = 0.01;
-static float extQuatStdDev = 4.5e-3;
+static float extRollPitchStdDev = 4.5e-3;
+static float extYawStdDev = 4.5e-3;
 static bool isInit = false;
 static bool isTimeSynced = false;
 static uint8_t my_id;
@@ -218,7 +219,8 @@ static void extPoseHandler(const CRTPPacket* pk) {
   ext_pose.quat.z = data->qz;
   ext_pose.quat.w = data->qw;
   ext_pose.stdDevPos = extPosStdDev;
-  ext_pose.stdDevQuat = extQuatStdDev;
+  ext_pose.stdDevRollPitch = extRollPitchStdDev;
+  ext_pose.stdDevYaw = extYawStdDev;
 
   estimatorEnqueuePose(&ext_pose);
   tickOfLastPacket = xTaskGetTickCount();
@@ -236,7 +238,8 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
       ext_pose.z = item->z / 1000.0f;
       quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
       ext_pose.stdDevPos = extPosStdDev;
-      ext_pose.stdDevQuat = extQuatStdDev;
+      ext_pose.stdDevRollPitch = extRollPitchStdDev;
+      ext_pose.stdDevYaw = extYawStdDev;
       estimatorEnqueuePose(&ext_pose);
       tickOfLastPacket = xTaskGetTickCount();
     } else {
@@ -489,5 +492,9 @@ PARAM_GROUP_START(locSrv)
   /**
  * @brief Standard deviation of the quarternion data to kalman filter
  */
-  PARAM_ADD_CORE(PARAM_FLOAT, extQuatStdDev, &extQuatStdDev)
+  PARAM_ADD_CORE(PARAM_FLOAT, extRPStdDev, &extRollPitchStdDev)
+  /**
+ * @brief Standard deviation of the quarternion data to kalman filter
+ */
+  PARAM_ADD_CORE(PARAM_FLOAT, extYStdDev, &extYawStdDev)
 PARAM_GROUP_STOP(locSrv)

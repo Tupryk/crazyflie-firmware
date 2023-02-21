@@ -126,7 +126,8 @@ typedef struct poseMeasurement_s {
   };
   quaternion_t quat;
   float stdDevPos;
-  float stdDevQuat;
+  float stdDevRollPitch;
+  float stdDevYaw;
 } poseMeasurement_t;
 
 typedef struct distanceMeasurement_s {

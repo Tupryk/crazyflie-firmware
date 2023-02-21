@@ -15,6 +15,7 @@ static uint8_t aeg;
 static uint8_t aGain;
 static uint8_t dGain;
 static uint16_t exposure;
+static uint8_t num_consecutive_images = 3;
 static uint8_t trigger = 0;
 const uint32_t baudrate_esp32 = 115200;
 
@@ -41,6 +42,7 @@ typedef struct
     uint8_t aGain;
     uint8_t dGain;
     uint16_t exposure;
+    uint8_t num_consecutive_images;
 } __attribute__((packed)) RegisterPacket_t;
 
 void appMain()
@@ -120,6 +122,7 @@ void appMain()
             reg_packet->aGain = aGain;
             reg_packet->dGain = dGain;
             reg_packet->exposure = exposure;
+            reg_packet->num_consecutive_images = num_consecutive_images;
 
             cpxSendPacketBlocking(&cpx_packet);
             trigger = 0;
@@ -145,6 +148,12 @@ PARAM_ADD(PARAM_UINT8, dGain, &dGain)
  * @brief Exposure 2 to (frame_length_lines - 2) [If AEG is disabled]
  */
 PARAM_ADD(PARAM_UINT16, exposure, &exposure)
+
+/**
+ * @brief Number of consecutive images to record (1-3)
+ */
+PARAM_ADD(PARAM_UINT8, num_img, &num_consecutive_images)
+
 /**
  * @brief Triggers an update of all settings/registers on the GAP8
  */

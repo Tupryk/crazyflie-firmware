@@ -49,14 +49,14 @@ void kalmanCoreUpdateWithPose(kalmanCoreData_t* this, poseMeasurement_t *pose)
     float h[KC_STATE_DIM] = {0};
     arm_matrix_instance_f32 H = {1, KC_STATE_DIM, h};
     h[KC_STATE_D0] = 1;
-    kalmanCoreScalarUpdate(this, &H, err_quat.x, pose->stdDevQuat);
+    kalmanCoreScalarUpdate(this, &H, err_quat.x, pose->stdDevRollPitch);
     h[KC_STATE_D0] = 0;
 
     h[KC_STATE_D1] = 1;
-    kalmanCoreScalarUpdate(this, &H, err_quat.y, pose->stdDevQuat);
+    kalmanCoreScalarUpdate(this, &H, err_quat.y, pose->stdDevRollPitch);
     h[KC_STATE_D1] = 0;
 
     h[KC_STATE_D2] = 1;
-    kalmanCoreScalarUpdate(this, &H, err_quat.z, pose->stdDevQuat);
+    kalmanCoreScalarUpdate(this, &H, err_quat.z, pose->stdDevYaw);
   }
 }
