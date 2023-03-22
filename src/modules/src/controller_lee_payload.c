@@ -647,6 +647,7 @@ static controllerLeePayload_t g_self = {
 
   //Attitude PID 
   .KR = {0.008, 0.008, 0.01},
+  .KR_limit = 100,
   .Komega = {0.0013, 0.0013, 0.002},
   .Komega_limit = 100,
   .KI = {0.02, 0.02, 0.05},
@@ -1810,10 +1811,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // Rate-controlled YAW is moving YAW angle setpoint
     if (setpoint->mode.yaw == modeVelocity) {
       float desiredYaw = radians(state->attitude.yaw + setpoint->attitudeRate.yaw * dt);
-      self->qp_des = rpy2quat(mkvec(0,0,desiredYaw));
+      self->qp_des = rpy2quat(mkvec(self->roll_des,self->pitch_des,desiredYaw));
     } else if (setpoint->mode.yaw == modeAbs) {
       float desiredYaw = radians(setpoint->attitude.yaw);
-      self->qp_des = rpy2quat(mkvec(0,0,desiredYaw));
+      self->qp_des = rpy2quat(mkvec(self->roll_des,self->pitch_des,desiredYaw));
     } else if (setpoint->mode.quat == modeAbs) {
       self->qp_des = mkquat(setpoint->attitudeQuaternion.x, setpoint->attitudeQuaternion.y, setpoint->attitudeQuaternion.z, setpoint->attitudeQuaternion.w);
     }
@@ -1854,8 +1855,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // Note that the last component is not included here, since it would require
     // computing delta_bar_xi for all i, on each robot
     self->M_d = vadd4(
-      vneg(veltmul(self->Kprot_P, eRp)),
-      vneg(veltmul(self->Kprot_D, omega_perror)),
+      vneg(veltmul(self->Kprot_P, vclampnorm(eRp, self->Kprot_P_limit))),
+      vneg(veltmul(self->Kprot_D, vclampnorm(omega_perror, self->Kprot_D_limit))),
       vneg(veltmul(self->Kprot_I, self->i_error_pl_att)), // not in the original formulation
       vneg(self->delta_bar_R0)
     );
@@ -1872,6 +1873,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     if (vmag2(self->desVirtInp) == 0) {
       return;
     }
+
+    // // if we don't have a desVirtInp (yet), estimate it based on the current cable state
+    // if (vmag2(self->desVirtInp) == 0) {
+    //   float force = 9.81f * (self->mass + self->mp / (1.0f + state->num_neighbors));
+    //   self->desVirtInp = vsclnorm(vsub(plStPos, statePos), force); 
+    // }
     // computed desired generalized forces in rigid payload case for equation 23 is Pmu_des = [Rp.T@F_d, M_d]
     // if a point mass for the payload is considered then: Pmu_des = F_d
 
@@ -1957,7 +1964,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     control->u_all[2] = self->u_i.z;
 
     self->thrustSI = control->thrustSI;
-  //  Reset the accumulated error while on the ground
+    //  Reset the accumulated error while on the ground
     if (control->thrustSI < 0.01f) {
       controllerLeePayloadReset(self);
     }
@@ -1967,7 +1974,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec xdes = vbasis(0);
     struct vec ydes = vbasis(1);
     struct vec zdes = vbasis(2);
-   
+  
     if (self->thrustSI > 0) {
       zdes = vnormalize(Fd_);
     } 
@@ -1982,7 +1989,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     xdes = vcross(ydes, zdes);
     
     self->R_des = mcolumns(xdes, ydes, zdes);
-
   } else {
     // we only support position control
     control->controlMode = controlModeForceTorque;
@@ -2058,7 +2064,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
   // compute moments
   // M = -kR eR - kw ew + w x Jw - J(w x wr)
   self->u = vadd4(
-    vneg(veltmul(self->KR, eR)),
+    vneg(veltmul(self->KR, vclampnorm(eR, self->KR_limit))),
     vneg(veltmul(self->Komega, vclampnorm(omega_error, self->Komega_limit))),
     vneg(veltmul(self->KI, self->i_error_att)),
     vcross(self->omega, veltmul(self->J, self->omega)));
@@ -2177,6 +2183,7 @@ PARAM_ADD(PARAM_FLOAT, KqIz, &g_self.K_q_I.z)
 PARAM_ADD(PARAM_FLOAT, KRx, &g_self.KR.x)
 PARAM_ADD(PARAM_FLOAT, KRy, &g_self.KR.y)
 PARAM_ADD(PARAM_FLOAT, KRz, &g_self.KR.z)
+PARAM_ADD(PARAM_FLOAT, KR_limit, &g_self.KR_limit)
 
 // UAV Attitude D
 PARAM_ADD(PARAM_UINT8, en_num_w, &g_self.en_num_omega)
@@ -2362,6 +2369,9 @@ PARAM_ADD(PARAM_FLOAT, c_x, &g_self.c_x)
 PARAM_ADD(PARAM_FLOAT, c_R, &g_self.c_R)
 PARAM_ADD(PARAM_FLOAT, c_q, &g_self.c_q)
 
+// Manual rotation (rad)
+PARAM_ADD(PARAM_FLOAT, roll_des, &g_self.roll_des)
+PARAM_ADD(PARAM_FLOAT, pitch_des, &g_self.pitch_des)
 PARAM_GROUP_STOP(ctrlLeeP)
 
 

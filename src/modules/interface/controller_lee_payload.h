@@ -83,6 +83,7 @@ typedef struct controllerLeePayload_s {
 
     //Attitude PID
     struct vec KR;
+    float KR_limit;
     struct vec Komega;
     float Komega_limit;
     struct vec KI;
@@ -169,6 +170,10 @@ typedef struct controllerLeePayload_s {
     float c_x;
     float c_R;
     float c_q;
+
+    // manual rotation control via params
+    float roll_des;
+    float pitch_des;
 
 } controllerLeePayload_t;
 

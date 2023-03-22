@@ -329,6 +329,7 @@ static void stabilizerTask(void* param)
               struct vec pos = mkvec(other->pos.x, other->pos.y, other->pos.z);
               struct vec last_pos = mkvec(payload_pos_last.x, payload_pos_last.y, payload_pos_last.z);
               struct vec vel = vdiv(vsub(pos, last_pos), dt);
+              vel = vclampnorm(vel, 2.0); // rescale to avoid weird outliers
 
               // apply a simple complementary filter
               struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
@@ -338,6 +339,8 @@ static void stabilizerTask(void* param)
               struct quat q = mkquat(other->orientation.x, other->orientation.y, other->orientation.z, other->orientation.w);
               struct quat last_q = mkquat(payload_quat_last.x, payload_quat_last.y, payload_quat_last.z, payload_quat_last.w);
               struct vec omega = quat2omega(last_q, q, dt);
+              omega = vclampnorm(omega, 20.0); // rescale to avoid weird outliers
+
               struct vec omega_old = mkvec(payload_omega_last.x, payload_omega_last.y, payload_omega_last.z);
               omega_filtered = vadd(vscl(1.0f - payload_alpha_w, omega_old), vscl(payload_alpha_w, omega));
             }
