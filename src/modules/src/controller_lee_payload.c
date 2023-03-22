@@ -717,6 +717,9 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     struct vec muDes = input->self->attachement_points[0].mu_desired;
     struct vec muDes2 = input->self->attachement_points[1].mu_desired;
 
+    struct vec muPlanned = input->self->desiredCableUnitVec;
+    struct vec muPlanned2 = input->self->desiredCableUnitVec2;
+
     if (num_neighbors == 1) {
 
       float l1 = -1;
@@ -1011,7 +1014,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[3] = factor * desVirt2_prev.x;
           q_new[4] = factor * desVirt2_prev.y;
           q_new[5] = factor * desVirt2_prev.z;
-        } else {
+        } else if (input->self->formation_control == 2) {
           float scale = vmag(F_d) / 2.0f;
           muDes = vsclnorm(muDes, scale);
           muDes2 = vsclnorm(muDes2, scale);
@@ -1022,6 +1025,17 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[3] = factor * muDes2.x;
           q_new[4] = factor * muDes2.y;
           q_new[5] = factor * muDes2.z;
+        } else {
+          float scale = vmag(F_d) / 2.0f;
+          muPlanned = vsclnorm(muPlanned, scale);
+          muPlanned2 = vsclnorm(muPlanned2, scale);
+
+          q_new[0] = factor * muPlanned.x;
+          q_new[1] = factor * muPlanned.y;
+          q_new[2] = factor * muPlanned.z;
+          q_new[3] = factor * muPlanned2.x;
+          q_new[4] = factor * muPlanned2.y;
+          q_new[5] = factor * muPlanned2.z;
         }
 
         osqp_update_lin_cost(workspace, q_new);
@@ -1610,6 +1624,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 #endif
 }
 
+static inline struct vec computeUnitVec(float az, float el)
+{
+  // cos(az)*np.cos(el)
+  return mkvec(cosf(az)*cosf(el), sinf(az)*cosf(el), sin(el));
+}
+
 static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d, uint32_t tick_in, struct vec* result, uint32_t* tick_out)
 {
   struct QPInput qpinput;
@@ -1775,12 +1795,21 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       for (uint8_t j = 0; j < state->num_neighbors; ++j) {
         if (self->attachement_points[i].id == state->neighbors[j].id) {
           // this attachement point belongs to a neighbor
+          if (state->num_neighbors == 1) {
+            float az2 = setpoint->cableAngles[i].az;
+            float el2 = setpoint->cableAngles[i].el;
+            self->desiredCableUnitVec2 = computeUnitVec(az2, el2);
+          }
           found = true;
           break;
         }
       }
       if (!found) {
         attPoint = self->attachement_points[i].point;
+        float az = setpoint->cableAngles[i].az;
+        float el = setpoint->cableAngles[i].el;
+        self->desiredCableUnitVec = computeUnitVec(az, el);
+
         l = self->attachement_points[i].l;
         break;
       }
