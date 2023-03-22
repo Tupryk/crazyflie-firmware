@@ -257,6 +257,14 @@ typedef struct setpoint_s {
     stab_mode_t yaw;
     stab_mode_t quat;
   } mode;
+
+  uint8_t num_cables;
+  struct {
+    uint8_t id;
+    float az; // rad
+    float el; // rad
+  } cableAngles[3];
+
 } setpoint_t;
 
 /** Estimate of position */

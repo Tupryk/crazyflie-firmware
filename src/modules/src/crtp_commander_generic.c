@@ -76,6 +76,7 @@ enum packet_type {
   hoverType         = 5,
   fullStateType     = 6,
   positionType      = 7,
+  desCableAnglesType= 8,
 };
 
 /* ---===== 2 - Decoding functions =====--- */
@@ -375,6 +376,27 @@ static void positionDecoder(setpoint_t *setpoint, uint8_t type, const void *data
   setpoint->attitude.yaw = values->yaw;
 }
 
+/* positionDecoder
+ * Set the absolute postition and orientation
+ */
+ struct desCableAnglesPacket_s {
+  uint8_t num_cables;
+  uint8_t id[3];
+  int16_t az[3]; // mrad
+  int16_t el[3]; // mrad
+ } __attribute__((packed));
+static void desCableAnglesDecoder(setpoint_t *setpoint, uint8_t type, const void *data, size_t datalen)
+{
+  const struct desCableAnglesPacket_s *values = data;
+
+  setpoint->num_cables = values->num_cables;
+  for (int i = 0; i < setpoint->num_cables; ++i) {
+    setpoint->cableAngles[i].id = values->id[i];
+    setpoint->cableAngles[i].az = values->az[i] / 1000.0f;
+    setpoint->cableAngles[i].el = values->el[i] / 1000.0f;
+  }
+}
+
  /* ---===== 3 - packetDecoders array =====--- */
 const static packetDecoder_t packetDecoders[] = {
   [stopType]          = stopDecoder,
@@ -385,6 +407,7 @@ const static packetDecoder_t packetDecoders[] = {
   [hoverType]         = hoverDecoder,
   [fullStateType]     = fullStateDecoder,
   [positionType]      = positionDecoder,
+  [desCableAnglesType]= desCableAnglesDecoder,
 };
 
 /* Decoder switch */
