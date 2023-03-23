@@ -1806,14 +1806,32 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       }
       if (!found) {
         attPoint = self->attachement_points[i].point;
-        float az = setpoint->cableAngles[i].az;
-        float el = setpoint->cableAngles[i].el;
-        self->desiredCableUnitVec = computeUnitVec(az, el);
-
         l = self->attachement_points[i].l;
         break;
       }
     }
+
+    if (state->num_neighbors == 1) {
+      for (uint8_t i =0; i < setpoint->num_cables ; ++i) {
+        bool foundCable = false;
+        for (uint8_t j = 0; j < state->num_neighbors; ++j) {
+          if (setpoint->cableAngles[i].id == state->neighbors[j].id) {
+            float az2 = setpoint->cableAngles[i].az;
+            float el2 = setpoint->cableAngles[i].el;
+            self->desiredCableUnitVec2 = computeUnitVec(az2, el2);
+            foundCable = true;
+            break;
+          }
+        }
+        if (!foundCable) {
+          float az = setpoint->cableAngles[i].az;
+          float el = setpoint->cableAngles[i].el;
+          self->desiredCableUnitVec = computeUnitVec(az, el);
+          break;
+        }
+      }
+    }
+
 
     // static int counter = 0;
     // if (counter % 100 == 0) {
