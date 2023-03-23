@@ -175,6 +175,9 @@ typedef struct controllerLeePayload_s {
     float roll_des;
     float pitch_des;
 
+    // desired cable unit vector
+    struct vec desiredCableUnitVec;
+    struct vec desiredCableUnitVec2;
 } controllerLeePayload_t;
 
 
