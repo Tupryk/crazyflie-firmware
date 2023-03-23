@@ -1795,11 +1795,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       for (uint8_t j = 0; j < state->num_neighbors; ++j) {
         if (self->attachement_points[i].id == state->neighbors[j].id) {
           // this attachement point belongs to a neighbor
-          if (state->num_neighbors == 1) {
-            float az2 = setpoint->cableAngles[i].az;
-            float el2 = setpoint->cableAngles[i].el;
-            self->desiredCableUnitVec2 = computeUnitVec(az2, el2);
-          }
           found = true;
           break;
         }
