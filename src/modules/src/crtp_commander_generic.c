@@ -380,20 +380,19 @@ static void positionDecoder(setpoint_t *setpoint, uint8_t type, const void *data
  * Set the absolute postition and orientation
  */
  struct desCableAnglesPacket_s {
-  uint8_t num_cables;
-  uint8_t id[3];
-  int16_t az[3]; // mrad
-  int16_t el[3]; // mrad
+  uint8_t id;
+  int16_t az; // mrad
+  int16_t el; // mrad
  } __attribute__((packed));
 static void desCableAnglesDecoder(setpoint_t *setpoint, uint8_t type, const void *data, size_t datalen)
 {
   const struct desCableAnglesPacket_s *values = data;
 
-  setpoint->num_cables = values->num_cables;
+  setpoint->num_cables = datalen / 5;
   for (int i = 0; i < setpoint->num_cables; ++i) {
-    setpoint->cableAngles[i].id = values->id[i];
-    setpoint->cableAngles[i].az = values->az[i] / 1000.0f;
-    setpoint->cableAngles[i].el = values->el[i] / 1000.0f;
+    setpoint->cableAngles[i].id = values[i].id;
+    setpoint->cableAngles[i].az = values[i].az / 1000.0f;
+    setpoint->cableAngles[i].el = values[i].el / 1000.0f;
   }
 }
 
