@@ -1805,27 +1805,24 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
         break;
       }
     }
-    for (uint8_t i =0; i < state->num_neighbors+1 ; ++i) {
-      bool foundCable = false;
-      DEBUG_PRINT("we are inside the loop\n");
-      for (uint8_t j = 0; j < state->num_neighbors; ++j) {
-        if (setpoint->cableAngles[i].id == state->neighbors[j].id) {
-          float az2 = setpoint->cableAngles[i]. az;
-          float el2 = setpoint->cableAngles[i].el;
-          self->desiredCableUnitVec2 = computeUnitVec(az2, el2);
-          foundCable = true;
-          break;
-        }
-      }
-      if (!foundCable) {
+
+    // Set corresponding desired cable angles points
+    DEBUG_PRINT("%d\n", setpoint->num_cables);
+
+    for (uint8_t i = 0; i < setpoint->num_cables; ++i) {
+      if (state->num_neighbors > 0 && setpoint->cableAngles[i].id == state->neighbors[0].id) {
+        float az2 = setpoint->cableAngles[i]. az;
+        float el2 = setpoint->cableAngles[i].el;
+        self->desiredCableUnitVec2 = computeUnitVec(az2, el2);
+      } else if (state->num_neighbors > 1 && setpoint->cableAngles[i].id == state->neighbors[1].id) {
+        // TODO: handle 3
+      } else {
         float az = setpoint->cableAngles[i].az;
         float el = setpoint->cableAngles[i].el;
         DEBUG_PRINT("az, el: %f, %f\n", (double) az, (double) el);
         self->desiredCableUnitVec = computeUnitVec(az, el);
-        break;
       }
     }
-
 
     if (!isnanf(plquat.w)) {
       // If the payload is a rigid body then the the attachment point should be added to PlStPos
