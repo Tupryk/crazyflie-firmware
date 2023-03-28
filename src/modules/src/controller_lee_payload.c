@@ -717,8 +717,8 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     struct vec muDes = input->self->attachement_points[0].mu_desired;
     struct vec muDes2 = input->self->attachement_points[1].mu_desired;
 
-    struct vec muPlanned = input->self->desiredCableUnitVec;
-    struct vec muPlanned2 = input->self->desiredCableUnitVec2;
+    struct vec muPlanned = input->self->desiredCableUnitVec[0];
+    struct vec muPlanned2 = input->self->desiredCableUnitVec[1];
 
     if (num_neighbors == 1) {
 
@@ -1006,8 +1006,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[3] = 0.0f;
           q_new[4] = 0.0f;
           q_new[5] = 0.0f;
-        }
-        else if (input->self->formation_control == 1) {
+        } else if (input->self->formation_control == 1) {
           q_new[0] = factor * desVirt_prev.x;
           q_new[1] = factor * desVirt_prev.y;
           q_new[2] = factor * desVirt_prev.z;
@@ -1016,7 +1015,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[5] = factor * desVirt2_prev.z;
         } else if (input->self->formation_control == 2) {
           float scale = vmag(F_d) / 2.0f;
-          muDes = vsclnorm(muDes, scale);
+          muDes = vsclnorm(muDes, scale); 
           muDes2 = vsclnorm(muDes2, scale);
 
           q_new[0] = factor * muDes.x;
@@ -1027,8 +1026,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[5] = factor * muDes2.z;
         } else {
           float scale = vmag(F_d) / 2.0f;
-          muPlanned = vsclnorm(muPlanned, scale);
-          muPlanned2 = vsclnorm(muPlanned2, scale);
+          if (vmag2(muPlanned) > 0) {
+            muPlanned = vsclnorm(muPlanned, scale);
+          }
+          if (vmag2(muPlanned2) > 0) {
+            muPlanned2 = vsclnorm(muPlanned2, scale);
+          }
 
           q_new[0] = factor * muPlanned.x;
           q_new[1] = factor * muPlanned.y;
@@ -1471,7 +1474,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           if (l3 <= 0) {
             l3 = vmag(vsub(plStPos, statePos3));
           }
-
+          struct vec muPlanned3 = input->self->desiredCableUnitVec[2];
           // solve QP for 3 uavs 2 hps and point mass
           OSQPWorkspace* workspace = &workspace_3uav_2hp;
           workspace->settings->warm_start = 1;
@@ -1541,16 +1544,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             q_new[7] = factor * desVirt3_prev.y;
             q_new[8] = factor * desVirt3_prev.z;
 
-            // // static int counter = 0;
-            // // if (counter % 100 == 0) {
-            //   DEBUG_PRINT("d1 %d %f %f %f\n", myid, (double)desVirt_prev.x, (double)desVirt_prev.y, (double)desVirt_prev.z);
-            //   DEBUG_PRINT("d2 %d %f %f %f\n", id2, (double)desVirt2_prev.x, (double)desVirt2_prev.y, (double)desVirt2_prev.z);
-            //   DEBUG_PRINT("d3 %d %f %f %f\n", id3, (double)desVirt3_prev.x, (double)desVirt3_prev.y, (double)desVirt3_prev.z);
-            // // }
-            // // ++counter;
-
-
-          } else {
+          } else if (input->self->formation_control == 2) {
             float scale = vmag(F_d) / 3.0f;
             muDes = vsclnorm(muDes, scale);
             muDes2 = vsclnorm(muDes2, scale);
@@ -1565,6 +1559,28 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
             q_new[6] = factor * muDes3.x;
             q_new[7] = factor * muDes3.y;
             q_new[8] = factor * muDes3.z;
+          } else {
+            float scale = vmag(F_d) / 3.0f;
+            if (vmag2(muPlanned) > 0) {
+              muPlanned = vsclnorm(muPlanned, scale);
+            }
+            if (vmag2(muPlanned2) > 0) {
+              muPlanned2 = vsclnorm(muPlanned2, scale);
+            }
+            if (vmag2(muPlanned3) > 0) {
+              muPlanned3 = vsclnorm(muPlanned3, scale);
+            }
+
+            q_new[0] = factor * muPlanned.x;
+            q_new[1] = factor * muPlanned.y;
+            q_new[2] = factor * muPlanned.z;
+            q_new[3] = factor * muPlanned2.x;
+            q_new[4] = factor * muPlanned2.y;
+            q_new[5] = factor * muPlanned2.z;
+            q_new[6] = factor * muPlanned3.x;
+            q_new[7] = factor * muPlanned3.y;
+            q_new[8] = factor * muPlanned3.z;
+
           }
 
           osqp_update_lin_cost(workspace, q_new);
@@ -1807,23 +1823,36 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     }
 
     // Set corresponding desired cable angles points
-    DEBUG_PRINT("%d\n", setpoint->num_cables);
-
+    // static int counter = 0;
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("formation control: %d\n", self->formation_control);
+    //   DEBUG_PRINT("cable nums %d\n", setpoint->num_cables);
+    //   DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
+    // }
+    // counter++;
     for (uint8_t i = 0; i < setpoint->num_cables; ++i) {
+      // DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
+      // DEBUG_PRINT("setpoint id: %d\n", setpoint->cableAngles[i].id);
+      // DEBUG_PRINT("uav id 1: %d\n", state->neighbors[0].id);
+      // DEBUG_PRINT("uav id 2: %d\n", state->neighbors[1].id);
+      
       if (state->num_neighbors > 0 && setpoint->cableAngles[i].id == state->neighbors[0].id) {
-        float az2 = setpoint->cableAngles[i]. az;
+        float az2 = setpoint->cableAngles[i].az;
         float el2 = setpoint->cableAngles[i].el;
-        self->desiredCableUnitVec2 = computeUnitVec(az2, el2);
+        self->desiredCableUnitVec[1] = computeUnitVec(az2, el2);
       } else if (state->num_neighbors > 1 && setpoint->cableAngles[i].id == state->neighbors[1].id) {
-        // TODO: handle 3
+        float az3 = setpoint->cableAngles[i].az;
+        float el3 = setpoint->cableAngles[i].el;        
+        self->desiredCableUnitVec[2] = computeUnitVec(az3, el3);
+        
       } else {
         float az = setpoint->cableAngles[i].az;
         float el = setpoint->cableAngles[i].el;
-        DEBUG_PRINT("az, el: %f, %f\n", (double) az, (double) el);
-        self->desiredCableUnitVec = computeUnitVec(az, el);
+        self->desiredCableUnitVec[0] = computeUnitVec(az, el);
       }
     }
-
+    // DEBUG_PRINT("qi = [%f, %f, %f]\n", (double) self->desiredCableUnitVec.x, (double) self->desiredCableUnitVec.y, (double) self->desiredCableUnitVec.z);
+    // DEBUG_PRINT("qi2 = [%f, %f, %f]\n", (double) self->desiredCableUnitVec2.x, (double) self->desiredCableUnitVec2.y, (double) self->desiredCableUnitVec2.z);
     if (!isnanf(plquat.w)) {
       // If the payload is a rigid body then the the attachment point should be added to PlStPos
       plStPos = vadd(plStPos, qvrot(plquat, attPoint));
@@ -2499,6 +2528,12 @@ LOG_ADD(LOG_FLOAT, Mdz, &g_self.M_d.z)
 LOG_ADD(LOG_FLOAT, desVirtInpx, &g_self.desVirtInp.x)
 LOG_ADD(LOG_FLOAT, desVirtInpy, &g_self.desVirtInp.y)
 LOG_ADD(LOG_FLOAT, desVirtInpz, &g_self.desVirtInp.z)
+
+
+LOG_ADD(LOG_FLOAT, desCableVecx, &g_self.desiredCableUnitVec[0].x)
+LOG_ADD(LOG_FLOAT, desCableVecy, &g_self.desiredCableUnitVec[0].y)
+LOG_ADD(LOG_FLOAT, desCableVecz, &g_self.desiredCableUnitVec[0].z)
+
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
 
