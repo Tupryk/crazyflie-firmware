@@ -1568,7 +1568,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
               muPlanned2 = vsclnorm(muPlanned2, scale);
             }
             if (vmag2(muPlanned3) > 0) {
-              muPlanned2 = vsclnorm(muPlanned3, scale);
+              muPlanned3 = vsclnorm(muPlanned3, scale);
             }
 
             q_new[0] = factor * muPlanned.x;
@@ -1823,13 +1823,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     }
 
     // Set corresponding desired cable angles points
-    static int counter = 0;
-    if (counter % 100 == 0) {
-      DEBUG_PRINT("formation control: %d\n", self->formation_control);
-      DEBUG_PRINT("cable nums %d\n", setpoint->num_cables);
-      DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
-    }
-    counter++;
+    // static int counter = 0;
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("formation control: %d\n", self->formation_control);
+    //   DEBUG_PRINT("cable nums %d\n", setpoint->num_cables);
+    //   DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
+    // }
+    // counter++;
     for (uint8_t i = 0; i < setpoint->num_cables; ++i) {
       // DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
       // DEBUG_PRINT("setpoint id: %d\n", setpoint->cableAngles[i].id);
