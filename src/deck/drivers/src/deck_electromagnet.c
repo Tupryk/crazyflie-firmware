@@ -1,12 +1,13 @@
 #define DEBUG_MODULE "DeckElectromagnet"
 #include "debug.h"
 
-// #include "deck_electromagnet.h"
 #include "deck.h"
+#include "param.h"
 
-// const deckPin_t gatePin = DECK_GPIO_IO1;
 #define GATE_PIN    DECK_GPIO_IO1
+uint8_t state = 0;
 
+static void activateCallback(void);
 
 static void initializeDeckElectromagnet()
 {
@@ -15,27 +16,25 @@ static void initializeDeckElectromagnet()
 	// Configure pin IO1 as an output with pull-down resistor
 	pinMode(GATE_PIN, OUTPUT);
 
+	// initialize with given default state
+	activateCallback();
+
 	// Test: Activate electromagnet
-	digitalWrite(GATE_PIN, HIGH);
+	// digitalWrite(GATE_PIN, HIGH);
 
 	DEBUG_PRINT("Electromagnet deck initialized successfully!\n");
 }
 
-// static void activateDeckElectromagnet()
-// {
-// 	DEBUG_PRINT("Activating electromagnet deck!\n");
-
-// 	// Activate electromagnet
-// 	digitalWrite(gatePin, HIGH);
-// }
-
-// static void deactivateDeckElectromagnet()
-// {
-// 	DEBUG_PRINT("Deactivating electromagnet deck!\n");
-
-// 	// Deactivate electromagnet
-// 	digitalWrite(gatePin, LOW);
-// }
+static void activateCallback(void)
+{
+	if (state) {
+		DEBUG_PRINT("Activating electromagnet deck!\n");
+		digitalWrite(GATE_PIN, HIGH);
+	} else {
+		DEBUG_PRINT("Deactivating electromagnet deck!\n");
+		digitalWrite(GATE_PIN, LOW);
+	}
+}
 
 static const DeckDriver driverElectromagnet = {
 	.vid = 0,
@@ -48,8 +47,6 @@ static const DeckDriver driverElectromagnet = {
 DECK_DRIVER(driverElectromagnet);
 
 // add a parameter to the deck driver
-// PARAM_GROUP_START(electromagnet)
-
-// PARAM_ADD(PARAM_BOOL, activate, &activateDeckElectromagnet)
-
-// PARAM_GROUP_STOP(electromagnet)
+PARAM_GROUP_START(electromagnet)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, activate, &state, &activateCallback)
+PARAM_GROUP_STOP(electromagnet)
