@@ -888,7 +888,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[3] = factor * desVirt2_prev.x;
           q_new[4] = factor * desVirt2_prev.y;
           q_new[5] = factor * desVirt2_prev.z;
-        } else {
+        } else if (input->self->formation_control == 2) {
           float scale = vmag(F_d) / 2.0f;
           muDes = vsclnorm(muDes, scale);
           muDes2 = vsclnorm(muDes2, scale);
@@ -899,6 +899,23 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           q_new[3] = factor * muDes2.x;
           q_new[4] = factor * muDes2.y;
           q_new[5] = factor * muDes2.z;
+        }
+        else {
+          float scale = vmag(F_d) / 2.0f;
+          if (vmag2(muPlanned) > 0) {
+            muPlanned = vsclnorm(muPlanned, scale);
+          }
+          if (vmag2(muPlanned2) > 0) {
+            muPlanned2 = vsclnorm(muPlanned2, scale);
+          }
+
+          q_new[0] = factor * muPlanned.x;
+          q_new[1] = factor * muPlanned.y;
+          q_new[2] = factor * muPlanned.z;
+          q_new[3] = factor * muPlanned2.x;
+          q_new[4] = factor * muPlanned2.y;
+          q_new[5] = factor * muPlanned2.z;
+
         }
 
         // DEBUG_PRINT("qn %f %f %f %f %f %f\n", (double)q_new[0], (double)q_new[1], (double)q_new[2], (double)q_new[3], (double)q_new[4], (double)q_new[5]);
