@@ -1,0 +1,142 @@
+/**
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
+ * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
+ * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
+ *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
+ *
+ * Crazyflie control firmware
+ *
+ * Copyright (C) 2023 BitCraze AB
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, in version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program. If not, see <http://www.gnu.org/licenses/>.
+ *
+ * deck_servo.c - Deck driver for the servo deck
+ */
+
+#define DEBUG_MODULE "DeckServo"
+#include "debug.h"
+
+#include "deck.h"
+#include "param.h"
+
+#include "servo.h"
+
+uint8_t state = 0;
+
+uint8_t ratioOff = 0;
+uint8_t ratioHalf = 128;
+uint8_t ratioMax = 255;
+
+uint8_t ratioleft = 19;  // 1.5 ms pulse at 50 Hz, 20 ms period
+uint8_t ratioCenter = 26; // 2.0 ms pulse at 50 Hz, 20 ms period
+uint8_t ratioRight = 32; // 2.5 ms pulse at 50 Hz, 20 ms period
+
+uint8_t ratio = 0;
+
+uint16_t frequencyDefault = 50;
+uint16_t frequency = 50;
+
+// Why do we have to declare these functions here?
+static void activateCallback(void);
+static void setRatioCallback(void);
+static void setFrequencyCallback(void);
+
+static void initializeDeckServo()
+{
+	DEBUG_PRINT("Initializing servo deck!\n");
+
+	// initialize the PWM pin TX1
+    servoInit();
+
+    DEBUG_PRINT("Servo deck initialized successfully!\n");
+
+	// test the servo deck
+	servoTest();
+}
+
+static void servoTest(void)
+{
+	DEBUG_PRINT("Starting servo deck test!\n");
+
+	// turn on the servo deck
+	activateServo();
+
+	DEBUG_PRINT("Ending servo deck test!\n");
+}
+
+static void activateCallback(void)
+{
+	if (state) {
+		activateServo();
+	} else {
+		deactivateServo();
+	}
+}
+
+static void activateServo()
+{	
+	DEBUG_PRINT("Activating servo!\n");
+
+	servoSetRatio(ratioCenter);
+	servoSetFreq(frequencyDefault);
+}
+
+static void deactivateServo()
+{
+	DEBUG_PRINT("Deactivating servo!\n");
+
+	servoSetRatio(ratioOff);
+	servoSetFreq(frequencyDefault);
+}
+
+static void setRatioCallback(void)
+{	
+	DebugPrint("Setting servo ratio to %d!\n", ratio);
+
+	servoSetRatio(ratio);
+}
+
+static void setFrequencyCallback(void)
+{
+	DebugPrint("Setting servo frequency to %d!\n", frequency);
+
+	servoSetFreq(frequency);
+}
+
+static const DeckDriver driverServo = {
+	.vid = 0,
+  	.pid = 0,
+	.name = "deckServo",
+
+	.usedPeriph = DECK_USING_PA2 | DECK_USING_TIMER5,
+	.usedGpio = 0,
+	
+	.init = initializeDeckServo,
+};
+
+DECK_DRIVER(driverServo);
+
+// servo deck parameters
+PARAM_GROUP_START(servo)
+
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, activate, &state, &activateCallback)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, setRatio, &ratio, &setRatioCallback)
+PARAM_ADD_WITH_CALLBACK(PARAM_UINT16, setFrequency, &frequency, &setFrequencyCallback)
+
+PARAM_GROUP_STOP(servo)
+
+// Questions
+// - What are the desired frequencies for the servo deck?
+//     - linear actuator: 50 Hz
+//     - servo motor: 50 Hz
