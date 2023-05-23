@@ -47,8 +47,9 @@ uint8_t ratio = 0;
 uint16_t frequencyDefault = 50;
 uint16_t frequency = 50;
 
-// Why do we have to declare these functions here?
-static void activateCallback(void);
+static void servoTest(void);
+static void activateServo(void);
+static void deactivateServo(void);
 static void setRatioCallback(void);
 static void setFrequencyCallback(void);
 
@@ -102,14 +103,14 @@ static void deactivateServo()
 
 static void setRatioCallback(void)
 {	
-	DebugPrint("Setting servo ratio to %d!\n", ratio);
+	DEBUG_PRINT("Setting servo ratio to %d!\n", ratio);
 
 	servoSetRatio(ratio);
 }
 
 static void setFrequencyCallback(void)
 {
-	DebugPrint("Setting servo frequency to %d!\n", frequency);
+	DEBUG_PRINT("Setting servo frequency to %d!\n", frequency);
 
 	servoSetFreq(frequency);
 }

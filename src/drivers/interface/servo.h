@@ -47,11 +47,6 @@
 void servoInit();
 
 /**
- * Test of the servo motor. 
- */
-bool servoTest(void);
-
-/**
  * Set servo PWM ratio/power.
  */
 void servoSetRatio(uint8_t ratio);

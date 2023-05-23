@@ -116,11 +116,6 @@ void servoInit()
   isInit = true;
 }
 
-bool servoTest(void)
-{
-  return isInit;
-}
-
 void servoSetRatio(uint8_t ratio)
 {
   TIM_SetCompare3(SERVO_TIM, ratio);
