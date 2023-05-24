@@ -38,9 +38,14 @@ uint8_t ratioOff = 0;
 uint8_t ratioHalf = 128;
 uint8_t ratioMax = 255;
 
-uint8_t ratioleft = 19;  // 1.5 ms pulse at 50 Hz, 20 ms period
-uint8_t ratioCenter = 26; // 2.0 ms pulse at 50 Hz, 20 ms period
-uint8_t ratioRight = 32; // 2.5 ms pulse at 50 Hz, 20 ms period
+// linear actuator (right) shaft looking up
+uint8_t ratiolefterrr = 6; // 0.5 ms pulse at 50 Hz -> 100% length (GETS HOT, CRITICAL)
+uint8_t ratio_07ms = 9; // 0.7 ms pulse at 50 Hz -> 95% length (OK, COOL)
+uint8_t ratio_075ms = 10; // 0.75 ms pulse at 50 Hz -> 90% length
+uint8_t ratiolefter = 13; // 1.0 ms pulse at 50 Hz
+uint8_t ratioleft = 19;  // 1.5 ms pulse at 50 Hz
+uint8_t ratioCenter = 26; // 2.0 ms pulse at 50 Hz -> 20% length
+uint8_t ratioRight = 32; // 2.5 ms pulse at 50 Hz -> 0% length (OK, COOL)
 
 uint8_t ratio = 0;
 
@@ -70,8 +75,8 @@ static void servoTest(void)
 {
 	DEBUG_PRINT("Starting servo deck test!\n");
 
-	// turn on the servo deck
-	activateServo();
+	servoSetRatio(29);
+	servoSetFreq(frequencyDefault);
 
 	DEBUG_PRINT("Ending servo deck test!\n");
 }
@@ -136,8 +141,3 @@ PARAM_ADD_WITH_CALLBACK(PARAM_UINT8, setRatio, &ratio, &setRatioCallback)
 PARAM_ADD_WITH_CALLBACK(PARAM_UINT16, setFrequency, &frequency, &setFrequencyCallback)
 
 PARAM_GROUP_STOP(servo)
-
-// Questions
-// - What are the desired frequencies for the servo deck?
-//     - linear actuator: 50 Hz
-//     - servo motor: 50 Hz
