@@ -32,27 +32,44 @@
 
 #include "servo.h"
 
-uint8_t state = 0;
+// linear servo
+#define ratioOff 		0
+#define ratioHalf 		128
+#define ratioMax 		255
 
-uint8_t ratioOff = 0;
-uint8_t ratioHalf = 128;
-uint8_t ratioMax = 255;
+// linear actuator (right) (shaft looking up, arm at top == 100% length, arm at bottom == 0% length)
+#define ratio_500us 	6 // 0.5 ms pulse at 50 Hz -> 100% length (GETS HOT, CRITICAL)
+#define ratio_700us 	9 // 0.7 ms pulse at 50 Hz -> 95% length (OK, COOL)
+#define ratio_750us 	10 // 0.75 ms pulse at 50 Hz -> 90% length
+#define ratio_850us 	11 // 0.85 ms pulse at 50 Hz -> ...
+#define ratio_950us 	12 // 0.95 ms pulse at 50 Hz -> ...
+#define ratio_1000us 	13 // 1.0 ms pulse at 50 Hz -> ...
+#define ratio_1500us 	19 // 1.5 ms pulse at 50 Hz -> ...
+#define ratio_2000us 	26 // 2.0 ms pulse at 50 Hz -> 20% length
+#define ratio_2300us 	29 // 2.3 ms pulse at 50 Hz -> 5% length
+#define ratio_2500us 	32 // 2.5 ms pulse at 50 Hz -> 0% length (OK, COOL)
 
-// linear actuator (right) shaft looking up
-uint8_t ratiolefterrr = 6; // 0.5 ms pulse at 50 Hz -> 100% length (GETS HOT, CRITICAL)
-uint8_t ratio_07ms = 9; // 0.7 ms pulse at 50 Hz -> 95% length (OK, COOL)
-uint8_t ratio_075ms = 10; // 0.75 ms pulse at 50 Hz -> 90% length
-uint8_t ratiolefter = 13; // 1.0 ms pulse at 50 Hz
-uint8_t ratioleft = 19;  // 1.5 ms pulse at 50 Hz
-uint8_t ratioCenter = 26; // 2.0 ms pulse at 50 Hz -> 20% length
-uint8_t ratioRight = 32; // 2.5 ms pulse at 50 Hz -> 0% length (OK, COOL)
+// ratio limits of the linear actuators (top == shaft end)
+#define ratioRightTop 		ratio_700us
+#define ratioRightBottom 	ratio_2300us
+#define ratioLeftTop 		ratio_2300us
+#define ratioLeftBottom 	ratio_850us
+
+// normal servo info
+//  500 us -> 190 deg
+// 1000 us -> 135 deg
+// 1500 us -> 100 deg
+// 2000 us ->  60 deg
+// 2500 us ->  10 deg
 
 uint8_t ratio = 0;
 
 uint16_t frequencyDefault = 50;
 uint16_t frequency = 50;
 
-static void servoTest(void);
+uint8_t state = 0;
+
+static void testServo(void);
 static void activateServo(void);
 static void deactivateServo(void);
 static void setRatioCallback(void);
@@ -68,14 +85,14 @@ static void initializeDeckServo()
     DEBUG_PRINT("Servo deck initialized successfully!\n");
 
 	// test the servo deck
-	servoTest();
+	testServo();
 }
 
-static void servoTest(void)
+static void testServo(void)
 {
 	DEBUG_PRINT("Starting servo deck test!\n");
 
-	servoSetRatio(29);
+	servoSetRatio(ratioRightBottom);
 	servoSetFreq(frequencyDefault);
 
 	DEBUG_PRINT("Ending servo deck test!\n");
@@ -94,7 +111,7 @@ static void activateServo()
 {	
 	DEBUG_PRINT("Activating servo!\n");
 
-	servoSetRatio(ratioCenter);
+	servoSetRatio(ratio_1000us);
 	servoSetFreq(frequencyDefault);
 }
 
@@ -102,7 +119,7 @@ static void deactivateServo()
 {
 	DEBUG_PRINT("Deactivating servo!\n");
 
-	servoSetRatio(ratioOff);
+	servoSetRatio(ratio_1000us);
 	servoSetFreq(frequencyDefault);
 }
 
