@@ -54,13 +54,19 @@ struct QPInput
 {
   struct vec F_d;
   struct vec M_d;
+
   struct vec plStPos;
   struct quat plStquat;
-  struct vec statePos;
-  struct vec statePos2;
-  struct vec statePos3;
-  uint8_t num_neighbors;
-  uint8_t ids[2]; // ids for statePos2, statePos3
+
+  uint8_t num_uavs;
+  struct {
+    uint8_t id;
+    struct vec pos;
+    struct vec attPoint;
+    struct vec mu_planned; // from the planner
+    float l;
+  } team_state[MAX_TEAM_SIZE];
+
   controllerLeePayload_t* self;
   uint32_t timestamp; // ticks, i.e., ms
 };
@@ -521,7 +527,7 @@ static inline void computePlaneNormals_rb(
   }
 }
 
-static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, struct vec attPoint2, struct vec F_d, struct vec M_d, struct vec* F_d1, struct vec* F_d2, struct osqp_warmstart_compute_Fd_pair* warmstart_state)
+/*static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, struct vec attPoint2, struct vec F_d, struct vec M_d, struct vec* F_d1, struct vec* F_d2, struct osqp_warmstart_compute_Fd_pair* warmstart_state)
 {
   // printf("\nFd: %f %f %f\n", F_d.x, F_d.y, F_d.z);
   // printf("Md: %f %f %f\n", M_d.x, M_d.y, M_d.z);
@@ -610,7 +616,7 @@ static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, s
   }
   return false;
 }
-
+*/
 
 static controllerLeePayload_t g_self = {
   .mass = 0.034,
@@ -692,9 +698,146 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 #endif
 
   struct vec F_d = input->F_d;
-  struct vec M_d = input->M_d;
-  uint8_t num_neighbors = input->num_neighbors;
-  struct vec statePos = input->statePos;
+  // struct vec M_d = input->M_d;
+  struct vec plStPos = input->plStPos;
+  float radius = input->self->radius;
+
+  // struct vec desVirtInp[MAX_TEAM_SIZE];
+  // struct vec desVirt_prev[MAX_TEAM_SIZE];
+
+  output->timestamp = input->timestamp;
+  output->success = false;
+
+  bool is_rigid_body = !isnanf(input->plStquat.w);
+  
+  if(!is_rigid_body) {
+    // 2 uavs point mass case
+    float ls[MAX_TEAM_SIZE];
+
+    for (uint8_t i=0; i < input->num_uavs; ++i)
+    {
+      if (input->team_state[i].l <= 0) {
+        ls[i] = vmag(vsub(plStPos, input->team_state[i].pos));
+      } else {
+        ls[i] = input->team_state[i].l;
+      }
+    }
+
+    for (uint8_t i=0; i < input->num_uavs; ++i) {
+      for (uint8_t j=i+1; j < input->num_uavs; ++j) {
+        // TODO: check for n>3
+        // 0,1; 0, 2; 1,2; 
+        uint8_t n_idx1 = i * (input->num_uavs-1) + j - 1; // 0, 1, 3
+        uint8_t n_idx2 = j * (input->num_uavs-1) + i; // 2, 4, 5 
+        computePlaneNormals(input->team_state[i].pos, input->team_state[j].pos, plStPos, radius, ls[i], ls[j], input->self->lambda_svm, F_d, &input->self->n[n_idx1], &input->self->n[n_idx2], &input->self->osqp_warmstart_hyperplanes[0]);
+      }
+    }
+
+    OSQPWorkspace* workspace = 0;
+    if (input->num_uavs == 2) {
+      workspace = &workspace_2uav_2hp;
+    } else if (input->num_uavs == 3) {
+      workspace = &workspace_3uav_2hp;
+    } else {
+      printf("Wrong name of the workspace\n");
+    }
+
+    // workspace structure
+    workspace->settings->warm_start = 1;
+    osqp_prepare_update(workspace);
+    c_float* x = workspace->data->A->x;
+
+    x[1] = input->self->n[0].x;
+    x[3] = input->self->n[0].y;
+    x[5] = input->self->n[0].z;
+    x[7] = input->self->n[1].x;
+    x[9] = input->self->n[1].y;
+    x[11] = input->self->n[1].z;
+
+    osqp_finalize_update(workspace);
+
+    // update q, l, and u (after finalize update!)
+    c_float l_new[6] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY,};
+    c_float u_new[6] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,};
+    
+    /* P = np.eye(9)
+        1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+        => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+        =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+        => q = -2 * lambda / (1+2*lambda) * x_d
+    */
+    const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
+    c_float q_new[6];
+
+    if (input->self->formation_control == 0) {
+      q_new[0] = 0.0f;
+      q_new[1] = 0.0f;
+      q_new[2] = 0.0f;
+      q_new[3] = 0.0f;
+      q_new[4] = 0.0f;
+      q_new[5] = 0.0f;
+    } else if (input->self->formation_control == 1) {
+      q_new[0] = factor * input->self->desVirt_prev[0].x;
+      q_new[1] = factor * input->self->desVirt_prev[0].y;
+      q_new[2] = factor * input->self->desVirt_prev[0].z;
+      q_new[3] = factor * input->self->desVirt_prev[1].x;
+      q_new[4] = factor * input->self->desVirt_prev[1].y;
+      q_new[5] = factor * input->self->desVirt_prev[1].z;
+    }
+
+    osqp_update_lin_cost(workspace, q_new);
+    osqp_update_lower_bound(workspace, l_new);
+    osqp_update_upper_bound(workspace, u_new);
+
+    #ifdef CRAZYFLIE_FW
+      uint64_t timestamp_mu_start = usecTimestamp();
+    #endif
+    osqp_solve(workspace);
+    #ifdef CRAZYFLIE_FW
+      eventTrigger_qpSolved_payload.mu += (usecTimestamp() - timestamp_mu_start) / 8;
+    #endif
+
+    if (workspace->info->status_val == OSQP_SOLVED) {
+      input->self->desVirt[0].x = (workspace)->solution->x[0];
+      input->self->desVirt[0].y = (workspace)->solution->x[1];
+      input->self->desVirt[0].z = (workspace)->solution->x[2];
+
+      input->self->desVirt[1].x = (workspace)->solution->x[3];
+      input->self->desVirt[1].y = (workspace)->solution->x[4];
+      input->self->desVirt[1].z = (workspace)->solution->x[5];
+
+      // Store result for regularization
+      // input->self->desVirt_prev = desVirtInp;
+      input->self->desVirt_prev[0].x =  (workspace)->solution->x[0];
+      input->self->desVirt_prev[0].y =  (workspace)->solution->x[1];
+      input->self->desVirt_prev[0].z =  (workspace)->solution->x[2];
+
+      input->self->desVirt_prev[1].x =  (workspace)->solution->x[3];
+      input->self->desVirt_prev[1].y =  (workspace)->solution->x[4];
+      input->self->desVirt_prev[1].z =  (workspace)->solution->x[5];
+
+      output->success = true;
+    } else {
+    #ifdef CRAZYFLIE_FW
+          DEBUG_PRINT("QP: %s\n", workspace->info->status);
+    #else
+          printf("QP: %s\n", workspace->info->status);
+    #endif
+        }
+    // input->self->n1 = n1;
+    // input->self->n2 = n2;
+    output->desVirtInp.x = input->self->desVirt[0].x; 
+    output->desVirtInp.y = input->self->desVirt[0].y; 
+    output->desVirtInp.z = input->self->desVirt[0].z; 
+    
+  } else {
+
+  } 
+///
+  
+  // struct vec statePos = input->team_state[0].pos;
+  // The original code is here
+  /*
   struct vec plStPos = input->plStPos;
   // struct quat plStquat = input->plStquat;
   float radius = input->self->radius;
@@ -719,7 +862,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
 
     struct vec muPlanned = input->self->desiredCableUnitVec[0];
     struct vec muPlanned2 = input->self->desiredCableUnitVec[1];
-
+    
     if (num_neighbors == 1) {
 
       float l1 = -1;
@@ -864,12 +1007,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         c_float l_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, -INFINITY, -INFINITY,};
         c_float u_new[8] =  {F_dP.x,	F_dP.y,	F_dP.z, M_d.x, M_d.y, M_d.z, 0, 0,};
 
-        /* P = np.eye(9)
-          1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
-          => J = (1/2+lambda) x^2 - 2 * lambda x_d x
-          =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
-          => q = -2 * lambda / (1+2*lambda) * x_d
-        */
+        //  P = np.eye(9)
+        //   1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+        //   => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+        //   =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+        //   => q = -2 * lambda / (1+2*lambda) * x_d
+        // 
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
         c_float q_new[6];
 
@@ -970,7 +1113,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         input->self->n2 = n2;
         output->desVirtInp = desVirtInp; 
 
-      } else /* point mass case */ {
+      } else { // point mass case
         // automatically compute cable length, if desired
         if (l1 <= 0) {
           l1 = vmag(vsub(plStPos, statePos));
@@ -1007,12 +1150,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         c_float l_new[6] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY,};
         c_float u_new[6] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,};
 
-        /* P = np.eye(9)
-            1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
-            => J = (1/2+lambda) x^2 - 2 * lambda x_d x
-            =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
-            => q = -2 * lambda / (1+2*lambda) * x_d
-        */
+        //     P = np.eye(9)
+        //     1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+        //     => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+        //     =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+        //     => q = -2 * lambda / (1+2*lambda) * x_d
+        // 
         const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
         c_float q_new[6];
 
@@ -1393,12 +1536,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           c_float l_new[12] =  {F_dP.x,	F_dP.y,	F_dP.z,  M_d.x,  M_d.y,  M_d.z,  -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[12] =  {F_dP.x,	F_dP.y,	F_dP.z,  M_d.x,  M_d.y,  M_d.z, 0, 0,  0, 0,  0, 0};
 
-          /* P = np.eye(9)
-             1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
-             => J = (1/2+lambda) x^2 - 2 * lambda x_d x
-             =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
-             => q = -2 * lambda / (1+2*lambda) * x_d
-          */
+          //  P = np.eye(9)
+          //    1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+          //    => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+          //    =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+          //    => q = -2 * lambda / (1+2*lambda) * x_d
+          
           const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
           c_float q_new[9];
 
@@ -1480,7 +1623,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           input->self->n5 = n5;
           input->self->n6 = n6;
           output->desVirtInp = desVirtInp;
-        } else /* point mass case */ {
+        } else  { // point mass case 
           // automatically compute cable length, if desired
           if (l1 <= 0) {
             l1 = vmag(vsub(plStPos, statePos));
@@ -1530,12 +1673,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
           c_float l_new[9] =  {F_d.x,	F_d.y,	F_d.z, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY, -INFINITY,};
           c_float u_new[9] =  {F_d.x,	F_d.y,	F_d.z, 0, 0,  0, 0,  0, 0};
 
-          /* P = np.eye(9)
-             1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
-             => J = (1/2+lambda) x^2 - 2 * lambda x_d x
-             =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
-             => q = -2 * lambda / (1+2*lambda) * x_d
-          */
+          //  P = np.eye(9)
+          //    1/2 x^2 + lambda (x^2 - 2xx_d + x_d^2)
+          //    => J = (1/2+lambda) x^2 - 2 * lambda x_d x
+          //    =>     1/2 x^2 - 1 * lambda / (1/2+lambda) x_d x
+          //    => q = -2 * lambda / (1+2*lambda) * x_d
+          
           const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
           c_float q_new[9];
 
@@ -1651,6 +1794,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
       }
     }
   }
+  */
 #ifdef CRAZYFLIE_FW
   eventTrigger_qpSolved_payload.total = (usecTimestamp() - timestamp_total_start) / 8;
   eventTrigger(&eventTrigger_qpSolved);
@@ -1663,7 +1807,7 @@ static inline struct vec computeUnitVec(float az, float el)
   return mkvec(cosf(az)*cosf(el), sinf(az)*cosf(el), sin(el));
 }
 
-static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, struct vec F_d, struct vec M_d, uint32_t tick_in, struct vec* result, uint32_t* tick_out)
+static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state_t *state, const setpoint_t* setpoint, struct vec F_d, struct vec M_d, uint32_t tick_in, struct vec* result, uint32_t* tick_out)
 {
   struct QPInput qpinput;
   struct QPOutput qpoutput;
@@ -1678,17 +1822,38 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
   //   rpy.y = 0;
   //   qpinput.plStquat = rpy2quat(rpy);
   // }
+  qpinput.num_uavs = state->num_uavs;
+  for (uint8_t i = 0; i < state->num_uavs; ++i) {
+    qpinput.team_state[i].id = state->team_state[i].id;
+    qpinput.team_state[i].pos = mkvec(state->team_state[i].pos.x, state->team_state[i].pos.y, state->team_state[i].pos.z);
 
-  qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
-    // We assume that we always have at least 1 neighbor
-  qpinput.statePos2 = mkvec(state->neighbors[0].pos.x, state->neighbors[0].pos.y, state->neighbors[0].pos.z);
-  qpinput.ids[0] = state->neighbors[0].id;
-  qpinput.num_neighbors = state->num_neighbors;
-  if (state->num_neighbors == 2) 
-  {
-    qpinput.statePos3 = mkvec(state->neighbors[1].pos.x, state->neighbors[1].pos.y, state->neighbors[1].pos.z);
-    qpinput.ids[1] = state->neighbors[1].id;
-  }  
+    for (uint8_t j = 0; j < state->num_uavs; ++j) {
+      if (self->attachement_points[j].id == state->team_state[i].id) {
+        qpinput.team_state[i].attPoint = self->attachement_points[j].point;
+        qpinput.team_state[i].l = self->attachement_points[j].l;
+        break;
+      }
+    }
+    for (uint8_t j = 0; j < state->num_uavs; ++j) {
+      if (setpoint->cableAngles[j].id == state->team_state[i].id) {
+        float az = setpoint->cableAngles[j].az;
+        float el = setpoint->cableAngles[j].el;
+        qpinput.team_state[i].mu_planned = computeUnitVec(az, el);
+      }
+    }
+  }
+
+
+  // qpinput.statePos = mkvec(state->position.x, state->position.y, state->position.z);
+  //   // We assume that we always have at least 1 neighbor
+  // qpinput.statePos2 = mkvec(state->neighbors[0].pos.x, state->neighbors[0].pos.y, state->neighbors[0].pos.z);
+  // qpinput.ids[0] = state->neighbors[0].id;
+  // qpinput.num_neighbors = state->num_neighbors;
+  // if (state->num_neighbors == 2) 
+  // {
+  //   qpinput.statePos3 = mkvec(state->neighbors[1].pos.x, state->neighbors[1].pos.y, state->neighbors[1].pos.z);
+  //   qpinput.ids[1] = state->neighbors[1].id;
+  // }  
 
   qpinput.self = self;
   qpinput.timestamp = tick_in;
@@ -1823,16 +1988,9 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec attPoint = mkvec(0, 0, 0);
     float l = -1;
     // find the attachment point for this UAV (the one, which doesn't have any neighbor associated with it)
-    for (uint8_t i = 0; i < state->num_neighbors+1; ++i) {
-      bool found = false;
-      for (uint8_t j = 0; j < state->num_neighbors; ++j) {
-        if (self->attachement_points[i].id == state->neighbors[j].id) {
-          // this attachement point belongs to a neighbor
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
+    for (uint8_t i = 0; i < state->num_uavs; ++i) {
+      if (self->attachement_points[i].id == state->team_state[0].id) {
+        // this attachement point belongs to a neighbor
         attPoint = self->attachement_points[i].point;
         l = self->attachement_points[i].l;
         break;
@@ -1847,27 +2005,38 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     //   DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
     // }
     // counter++;
-    for (uint8_t i = 0; i < setpoint->num_cables; ++i) {
-      // DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
-      // DEBUG_PRINT("setpoint id: %d\n", setpoint->cableAngles[i].id);
-      // DEBUG_PRINT("uav id 1: %d\n", state->neighbors[0].id);
-      // DEBUG_PRINT("uav id 2: %d\n", state->neighbors[1].id);
+
+    // for (uint8_t i = 0; i < state->num_uavs; ++i) {
+    //   for (uint8_t j = 0; j < state->num_uavs; ++j) {
+    //     if (setpoint->cableAngles[j].id == state->team_state[i].id) {
+    //       float az = setpoint->cableAngles[j].az;
+    //       float el = setpoint->cableAngles[j].el;
+    //       self->desiredCableUnitVec[i] = computeUnitVec(az, el);
+    //       break;
+    //     }
+    //   }  
+    // }
+    // for (uint8_t i = 0; i < setpoint->num_cables; ++i) {
+    //   // DEBUG_PRINT("num of neighbors: %d\n", state->num_neighbors);
+    //   // DEBUG_PRINT("setpoint id: %d\n", setpoint->cableAngles[i].id);
+    //   // DEBUG_PRINT("uav id 1: %d\n", state->neighbors[0].id);
+    //   // DEBUG_PRINT("uav id 2: %d\n", state->neighbors[1].id);
       
-      if (state->num_neighbors > 0 && setpoint->cableAngles[i].id == state->neighbors[0].id) {
-        float az2 = setpoint->cableAngles[i].az;
-        float el2 = setpoint->cableAngles[i].el;
-        self->desiredCableUnitVec[1] = computeUnitVec(az2, el2);
-      } else if (state->num_neighbors > 1 && setpoint->cableAngles[i].id == state->neighbors[1].id) {
-        float az3 = setpoint->cableAngles[i].az;
-        float el3 = setpoint->cableAngles[i].el;        
-        self->desiredCableUnitVec[2] = computeUnitVec(az3, el3);
+    //   if (state->num_neighbors > 0 && setpoint->cableAngles[i].id == state->neighbors[0].id) {
+    //     float az2 = setpoint->cableAngles[i].az;
+    //     float el2 = setpoint->cableAngles[i].el;
+    //     self->desiredCableUnitVec[1] = computeUnitVec(az2, el2);
+    //   } else if (state->num_neighbors > 1 && setpoint->cableAngles[i].id == state->neighbors[1].id) {
+    //     float az3 = setpoint->cableAngles[i].az;
+    //     float el3 = setpoint->cableAngles[i].el;        
+    //     self->desiredCableUnitVec[2] = computeUnitVec(az3, el3);
         
-      } else {
-        float az = setpoint->cableAngles[i].az;
-        float el = setpoint->cableAngles[i].el;
-        self->desiredCableUnitVec[0] = computeUnitVec(az, el);
-      }
-    }
+    //   } else {
+    //     float az = setpoint->cableAngles[i].az;
+    //     float el = setpoint->cableAngles[i].el;
+    //     self->desiredCableUnitVec[0] = computeUnitVec(az, el);
+    //   }
+    // }
     // DEBUG_PRINT("qi = [%f, %f, %f]\n", (double) self->desiredCableUnitVec.x, (double) self->desiredCableUnitVec.y, (double) self->desiredCableUnitVec.z);
     // DEBUG_PRINT("qi2 = [%f, %f, %f]\n", (double) self->desiredCableUnitVec2.x, (double) self->desiredCableUnitVec2.y, (double) self->desiredCableUnitVec2.z);
     if (!isnanf(plquat.w)) {
@@ -1939,7 +2108,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       vneg(self->delta_bar_R0)
     );
 
-    computeDesiredVirtualInput(self, state, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
+    computeDesiredVirtualInput(self, state, setpoint, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
 
     // static int counter = 0;
     // ++counter;
@@ -2298,27 +2467,18 @@ PARAM_ADD(PARAM_FLOAT, ap0x, &g_self.attachement_points[0].point.x)
 PARAM_ADD(PARAM_FLOAT, ap0y, &g_self.attachement_points[0].point.y)
 PARAM_ADD(PARAM_FLOAT, ap0z, &g_self.attachement_points[0].point.z)
 PARAM_ADD(PARAM_FLOAT, ap0l, &g_self.attachement_points[0].l)
-PARAM_ADD(PARAM_FLOAT, ap0dx, &g_self.attachement_points[0].mu_desired.x)
-PARAM_ADD(PARAM_FLOAT, ap0dy, &g_self.attachement_points[0].mu_desired.y)
-PARAM_ADD(PARAM_FLOAT, ap0dz, &g_self.attachement_points[0].mu_desired.z)
 
 PARAM_ADD(PARAM_UINT8, ap1id, &g_self.attachement_points[1].id)
 PARAM_ADD(PARAM_FLOAT, ap1x, &g_self.attachement_points[1].point.x)
 PARAM_ADD(PARAM_FLOAT, ap1y, &g_self.attachement_points[1].point.y)
 PARAM_ADD(PARAM_FLOAT, ap1z, &g_self.attachement_points[1].point.z)
 PARAM_ADD(PARAM_FLOAT, ap1l, &g_self.attachement_points[1].l)
-PARAM_ADD(PARAM_FLOAT, ap1dx, &g_self.attachement_points[1].mu_desired.x)
-PARAM_ADD(PARAM_FLOAT, ap1dy, &g_self.attachement_points[1].mu_desired.y)
-PARAM_ADD(PARAM_FLOAT, ap1dz, &g_self.attachement_points[1].mu_desired.z)
 
 PARAM_ADD(PARAM_UINT8, ap2id, &g_self.attachement_points[2].id)
 PARAM_ADD(PARAM_FLOAT, ap2x, &g_self.attachement_points[2].point.x)
 PARAM_ADD(PARAM_FLOAT, ap2y, &g_self.attachement_points[2].point.y)
 PARAM_ADD(PARAM_FLOAT, ap2z, &g_self.attachement_points[2].point.z)
 PARAM_ADD(PARAM_FLOAT, ap2l, &g_self.attachement_points[2].l)
-PARAM_ADD(PARAM_FLOAT, ap2dx, &g_self.attachement_points[2].mu_desired.x)
-PARAM_ADD(PARAM_FLOAT, ap2dy, &g_self.attachement_points[2].mu_desired.y)
-PARAM_ADD(PARAM_FLOAT, ap2dz, &g_self.attachement_points[2].mu_desired.z)
 
 // Pinv
 PARAM_ADD(PARAM_UINT8, Pinv0id1,&g_self.Pinvs[0].id1)
@@ -2508,29 +2668,29 @@ LOG_ADD(LOG_FLOAT, qdidoty, &g_self.qdidot.y)
 LOG_ADD(LOG_FLOAT, qdidotz, &g_self.qdidot.z)
 
 // hyperplanes
-LOG_ADD(LOG_FLOAT, n1x, &g_self.n1.x)
-LOG_ADD(LOG_FLOAT, n1y, &g_self.n1.y)
-LOG_ADD(LOG_FLOAT, n1z, &g_self.n1.z)
+// LOG_ADD(LOG_FLOAT, n1x, &g_self.n1.x)
+// LOG_ADD(LOG_FLOAT, n1y, &g_self.n1.y)
+// LOG_ADD(LOG_FLOAT, n1z, &g_self.n1.z)
 
-LOG_ADD(LOG_FLOAT, n2x, &g_self.n2.x)
-LOG_ADD(LOG_FLOAT, n2y, &g_self.n2.y)
-LOG_ADD(LOG_FLOAT, n2z, &g_self.n2.z)
+// LOG_ADD(LOG_FLOAT, n2x, &g_self.n2.x)
+// LOG_ADD(LOG_FLOAT, n2y, &g_self.n2.y)
+// LOG_ADD(LOG_FLOAT, n2z, &g_self.n2.z)
 
-LOG_ADD(LOG_FLOAT, n3x, &g_self.n3.x)
-LOG_ADD(LOG_FLOAT, n3y, &g_self.n3.y)
-LOG_ADD(LOG_FLOAT, n3z, &g_self.n3.z)
+// LOG_ADD(LOG_FLOAT, n3x, &g_self.n3.x)
+// LOG_ADD(LOG_FLOAT, n3y, &g_self.n3.y)
+// LOG_ADD(LOG_FLOAT, n3z, &g_self.n3.z)
 
-LOG_ADD(LOG_FLOAT, n4x, &g_self.n4.x)
-LOG_ADD(LOG_FLOAT, n4y, &g_self.n4.y)
-LOG_ADD(LOG_FLOAT, n4z, &g_self.n4.z)
+// LOG_ADD(LOG_FLOAT, n4x, &g_self.n4.x)
+// LOG_ADD(LOG_FLOAT, n4y, &g_self.n4.y)
+// LOG_ADD(LOG_FLOAT, n4z, &g_self.n4.z)
 
-LOG_ADD(LOG_FLOAT, n5x, &g_self.n5.x)
-LOG_ADD(LOG_FLOAT, n5y, &g_self.n5.y)
-LOG_ADD(LOG_FLOAT, n5z, &g_self.n5.z)
+// LOG_ADD(LOG_FLOAT, n5x, &g_self.n5.x)
+// LOG_ADD(LOG_FLOAT, n5y, &g_self.n5.y)
+// LOG_ADD(LOG_FLOAT, n5z, &g_self.n5.z)
 
-LOG_ADD(LOG_FLOAT, n6x, &g_self.n6.x)
-LOG_ADD(LOG_FLOAT, n6y, &g_self.n6.y)
-LOG_ADD(LOG_FLOAT, n6z, &g_self.n6.z)
+// LOG_ADD(LOG_FLOAT, n6x, &g_self.n6.x)
+// LOG_ADD(LOG_FLOAT, n6y, &g_self.n6.y)
+// LOG_ADD(LOG_FLOAT, n6z, &g_self.n6.z)
 
 // computed desired payload force
 LOG_ADD(LOG_FLOAT, Fdx, &g_self.F_d.x)
@@ -2547,9 +2707,9 @@ LOG_ADD(LOG_FLOAT, desVirtInpy, &g_self.desVirtInp.y)
 LOG_ADD(LOG_FLOAT, desVirtInpz, &g_self.desVirtInp.z)
 
 
-LOG_ADD(LOG_FLOAT, desCableVecx, &g_self.desiredCableUnitVec[0].x)
-LOG_ADD(LOG_FLOAT, desCableVecy, &g_self.desiredCableUnitVec[0].y)
-LOG_ADD(LOG_FLOAT, desCableVecz, &g_self.desiredCableUnitVec[0].z)
+// LOG_ADD(LOG_FLOAT, desCableVecx, &g_self.desiredCableUnitVec[0].x)
+// LOG_ADD(LOG_FLOAT, desCableVecy, &g_self.desiredCableUnitVec[0].y)
+// LOG_ADD(LOG_FLOAT, desCableVecz, &g_self.desiredCableUnitVec[0].z)
 
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
