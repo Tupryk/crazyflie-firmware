@@ -739,7 +739,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     } else if (input->num_uavs == 3) {
       workspace = &workspace_3uav_2hp;
     } else {
-      printf("Wrong name of the workspace\n");
+      DEBUG_PRINT("Wrong name of the workspace\n");
     }
 
     // workspace structure
