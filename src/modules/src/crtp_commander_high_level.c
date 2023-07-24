@@ -114,7 +114,7 @@ static float defaultLandingVelocity = 0.5f;
 static float yawrate_desired = 0.0f;
 static float yawacc_limit = 1.0f;
 static float yawrate_limit = 5.0f;
-static float yawrate_current = 0.0f;
+// static float yawrate_current = 0.0f;
 
 // Trajectory memory handling from the memory module
 static uint32_t handleMemGetSize(void) { return crtpCommanderHighLevelTrajectoryMemSize(); }
@@ -308,7 +308,7 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
   if (!RATE_DO_EXECUTE(RATE_HL_COMMANDER, tick)) {
     return false;
   }
-  const float dt = (float)(1.0f/RATE_HL_COMMANDER);
+  // const float dt = (float)(1.0f/RATE_HL_COMMANDER);
 
   xSemaphoreTake(lockTraj, portMAX_DELAY);
   float t = usecTimestamp() / 1e6;
@@ -361,21 +361,21 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
     pos = ev.pos;
     vel = ev.vel;
 
-    float yawrate_desired_adjusted = yawrate_desired;
-    if (yawrate_desired == 0.0f) {
-      float signed_yaw = shortest_signed_angle_radians(yaw, 0.0f);
-      // attempt to go there in 1.0s
-      yawrate_desired_adjusted = copysignf(fabsf(signed_yaw/1.0f), signed_yaw);
-    }
+    // float yawrate_desired_adjusted = yawrate_desired;
+    // if (yawrate_desired == 0.0f) {
+    //   float signed_yaw = shortest_signed_angle_radians(yaw, 0.0f);
+    //   // attempt to go there in 1.0s
+    //   yawrate_desired_adjusted = copysignf(fabsf(signed_yaw/1.0f), signed_yaw);
+    // }
 
-    float yawacc_desired = (yawrate_desired_adjusted - yawrate_current)/dt;
-    float yawacc = clamp(yawacc_desired, -yawacc_limit, yawacc_limit);
-    yawrate_current += yawacc * dt;
-    yawrate_current = clamp(yawrate_current, -yawrate_limit, yawrate_limit);
+    // float yawacc_desired = (yawrate_desired_adjusted - yawrate_current)/dt;
+    // float yawacc = clamp(yawacc_desired, -yawacc_limit, yawacc_limit);
+    // yawrate_current += yawacc * dt;
+    // yawrate_current = clamp(yawrate_current, -yawrate_limit, yawrate_limit);
 
-    yaw = normalize_radians(yaw + yawrate_current * dt);
-    setpoint->attitude.yaw = degrees(yaw);
-    setpoint->attitudeRate.yaw = degrees(yawrate_current);
+    // yaw = normalize_radians(yaw + yawrate_current * dt);
+    // setpoint->attitude.yaw = degrees(yaw);
+    // setpoint->attitudeRate.yaw = degrees(yawrate_current);
 
     return true;
   }
