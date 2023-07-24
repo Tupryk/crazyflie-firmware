@@ -32,6 +32,8 @@
 #include "param.h"
 #include "log.h"
 
+#include "math3d.h"
+
 #define ATTITUDE_LPF_CUTOFF_FREQ      15.0f
 #define ATTITUDE_LPF_ENABLE false
 #define ATTITUDE_RATE_LPF_CUTOFF_FREQ 30.0f
@@ -155,11 +157,12 @@ void attitudeControllerCorrectAttitudePID(
 
   // Update PID for yaw axis
   float yawError;
-  yawError = eulerYawDesired - eulerYawActual;
-  if (yawError > 180.0f)
-    yawError -= 360.0f;
-  else if (yawError < -180.0f)
-    yawError += 360.0f;
+  yawError = degrees(shortest_signed_angle_radians(radians(eulerYawActual), radians(eulerYawDesired)));
+  // yawError = eulerYawDesired - eulerYawActual;
+  // if (yawError > 180.0f)
+  //   yawError -= 360.0f;
+  // else if (yawError < -180.0f)
+  //   yawError += 360.0f;
   pidSetError(&pidYaw, yawError);
   *yawRateDesired = pidUpdate(&pidYaw, eulerYawActual, false);
 }

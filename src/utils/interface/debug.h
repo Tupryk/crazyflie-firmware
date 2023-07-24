@@ -65,10 +65,10 @@ void debugInit(void);
   //#define DEBUG_PRINT(fmt, ...)
 #endif
 
-#ifndef PRINT_OS_DEBUG_INFO
-  #undef DEBUG_PRINT_OS
-  #define DEBUG_PRINT_OS(fmt, ...)
-#endif
+// #ifndef PRINT_OS_DEBUG_INFO
+//   #undef DEBUG_PRINT_OS
+//   #define DEBUG_PRINT_OS(fmt, ...)
+// #endif
 
 
 #ifdef TEST_PRINTS
