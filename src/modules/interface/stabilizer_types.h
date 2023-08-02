@@ -31,7 +31,7 @@
 #include "imu_types.h"
 #include "lighthouse_types.h"
 
-#define MAX_TEAM_SIZE (3)
+#define MAX_TEAM_SIZE (12)
 
 /* Data structure used by the stabilizer subsystem.
  * All have a timestamp to be set when the data is calculated.
