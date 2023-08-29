@@ -1938,8 +1938,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       vneg(veltmul(self->Kprot_I, self->i_error_pl_att)), // not in the original formulation
       vneg(self->delta_bar_R0)
     );
-
-    computeDesiredVirtualInput(self, state, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
+    if (state->num_neighbors >= 1) {
+      computeDesiredVirtualInput(self, state, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
+    } else {
+      self->desVirtInp.x = self->F_d.x;
+      self->desVirtInp.y = self->F_d.y;
+      self->desVirtInp.z = self->F_d.z;
+    }
 
     // static int counter = 0;
     // ++counter;
