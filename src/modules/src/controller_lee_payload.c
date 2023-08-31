@@ -1459,8 +1459,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     );
 
     self->u_i = vadd(u_parallel, u_perpind);
-    
-    control->thrustSI = vmag(self->u_i);
+    self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
+    self->rpy = quat2rpy(self->q);
+    self->R = quat2rotmat(self->q);
+    struct vec e3 = mkvec(0,0,1);
+    control->thrustSI = vdot(self->u_i, mvmul( self->R,e3));
     control->u_all[0] = self->u_i.x;
     control->u_all[1] = self->u_i.y;
     control->u_all[2] = self->u_i.z;
