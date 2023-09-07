@@ -832,11 +832,19 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         q_new[3*i + 1] = 0.0f;
         q_new[3*i + 2] = 0.0f;
       } else if (input->self->formation_control == 1) {
-        q_new[3*i]     = factor* input->self->desVirt_prev[i].x;
-        q_new[3*i + 1] = factor* input->self->desVirt_prev[i].y;
-        q_new[3*i + 2] = factor* input->self->desVirt_prev[i].z;
+        q_new[3*i]     = factor * input->self->desVirt_prev[i].x;
+        q_new[3*i + 1] = factor * input->self->desVirt_prev[i].y;
+        q_new[3*i + 2] = factor * input->self->desVirt_prev[i].z;
+      } else {
+        struct vec mu_planned  = input->team_state[i].mu_planned; 
+
+        q_new[3*i]     = factor * mu_planned.x;
+        q_new[3*i + 1] = factor * mu_planned.y; 
+        q_new[3*i + 2] = factor * mu_planned.z;
+
       }
     }
+    // printf("q_new: %f %f %f %f %f %f\n",q_new[0], q_new[1], q_new[2], q_new[3], q_new[4],q_new[5]);
     osqp_update_lin_cost(workspace, q_new);
     osqp_update_lower_bound(workspace, l_new);
     osqp_update_upper_bound(workspace, u_new);
@@ -1086,6 +1094,7 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
   for (uint8_t i = 0; i < state->num_uavs; ++i) {
     qpinput.team_state[i].id = state->team_state[i].id;
     qpinput.team_state[i].pos = mkvec(state->team_state[i].pos.x, state->team_state[i].pos.y, state->team_state[i].pos.z);
+    qpinput.team_state[i].mu_planned = setpoint->cablevectors[i].mu_planned;
 
     for (uint8_t j = 0; j < state->num_uavs; ++j) {
       if (self->attachement_points[j].id == state->team_state[i].id) {
@@ -1094,13 +1103,7 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
         break;
       }
     }
-    for (uint8_t j = 0; j < state->num_uavs; ++j) {
-      if (setpoint->cableAngles[j].id == state->team_state[i].id) {
-        float az = setpoint->cableAngles[j].az;
-        float el = setpoint->cableAngles[j].el;
-        qpinput.team_state[i].mu_planned = computeUnitVec(az, el);
-      }
-    }
+
   }
 
   qpinput.self = self;
@@ -1208,7 +1211,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     
     struct vec plPos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
     struct vec plVel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
-    struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
+    struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z);
 
     struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
     struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
@@ -1419,8 +1422,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     if (self->desVirtInp_tick != self->qdi_prev_tick) {
       if (self->en_qdidot) {
-        float qdi_dt = (self->desVirtInp_tick - self->qdi_prev_tick) / 1000.0f;
-        self->qdidot = vdiv(vsub(qdi, self->qdi_prev), qdi_dt);
+        self->qdidot = setpoint->cablevectors[0].qid_ref;
       } else {
         self->qdidot = vzero();
       }

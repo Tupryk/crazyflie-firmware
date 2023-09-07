@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include "imu_types.h"
 #include "lighthouse_types.h"
+#include "math3d.h"
 
 #define MAX_TEAM_SIZE (12)
 
@@ -288,9 +289,11 @@ typedef struct setpoint_s {
   uint8_t num_cables;
   struct {
     uint8_t id;
-    float az; // rad
-    float el; // rad
-  } cableAngles[MAX_TEAM_SIZE];
+    // float az; // rad
+    // float el; // rad
+    struct vec mu_planned;
+    struct vec qid_ref;
+  } cablevectors[MAX_TEAM_SIZE];
 
 } setpoint_t;
 

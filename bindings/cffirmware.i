@@ -146,6 +146,17 @@ struct vec controller_lee_payload_get_n(controllerLeePayload_t* self, int idx)
     struct vec n = mkvec(self->n[idx].x, self->n[idx].y, self->n[idx].z);
     return n;
 }
+void set_setpoint_qi_ref(setpoint_t *setpoint, int idx, uint8_t id, float qx, float qy, float qz, float qdx, float qdy, float qdz) 
+{     
+    setpoint->cablevectors[idx].id = id;
+    setpoint->cablevectors[idx].mu_planned.x = qx;
+    setpoint->cablevectors[idx].mu_planned.y = qy;
+    setpoint->cablevectors[idx].mu_planned.z = qz;
+    setpoint->cablevectors[idx].qid_ref.x = qdx;
+    setpoint->cablevectors[idx].qid_ref.y = qdy;
+    setpoint->cablevectors[idx].qid_ref.z = qdz;
+    // printf("idx: %d, x, y, z: %f %f %f\n", setpoint->cablevectors[idx].id, setpoint->cablevectors[idx].qi_ref.x, setpoint->cablevectors[idx].qi_ref.y,setpoint->cablevectors[idx].qi_ref.z);
+}
 
 // void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z, float mdx, float mdy, float mdz)
 void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z)
