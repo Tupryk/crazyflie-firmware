@@ -1011,9 +1011,14 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         q_new[3*i + 1] = 0.0f;
         q_new[3*i + 2] = 0.0f;
       } else if (input->self->formation_control == 1) {
-        q_new[3*i]     = factor* input->self->desVirt_prev[i].x;
-        q_new[3*i + 1] = factor* input->self->desVirt_prev[i].y;
-        q_new[3*i + 2] = factor* input->self->desVirt_prev[i].z;
+        q_new[3*i]     = factor * input->self->desVirt_prev[i].x;
+        q_new[3*i + 1] = factor * input->self->desVirt_prev[i].y;
+        q_new[3*i + 2] = factor * input->self->desVirt_prev[i].z;
+      } else {
+        struct vec mu_planned  = input->team_state[i].mu_planned; 
+        q_new[3*i]     = factor * mu_planned.x;
+        q_new[3*i + 1] = factor * mu_planned.y; 
+        q_new[3*i + 2] = factor * mu_planned.z;
       }
     }
     osqp_update_lin_cost(workspace, q_new);
