@@ -1100,14 +1100,15 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
     qpinput.team_state[i].id = state->team_state[i].id;
     qpinput.team_state[i].pos = mkvec(state->team_state[i].pos.x, state->team_state[i].pos.y, state->team_state[i].pos.z);
     qpinput.team_state[i].mu_planned = setpoint->cablevectors[i].mu_planned;
-
-    for (uint8_t j = 0; j < state->num_uavs; ++j) {
-      if (self->attachement_points[j].id == state->team_state[i].id) {
-        qpinput.team_state[i].attPoint = self->attachement_points[j].point;
-        qpinput.team_state[i].l = self->attachement_points[j].l;
-        break;
-      }
-    }
+    qpinput.team_state[i].attPoint = self->attachement_points[i].point;
+    printf("idx: %d attPoint_ff: %f %f %f\n", i, qpinput.team_state[i].attPoint.x, qpinput.team_state[i].attPoint.y, qpinput.team_state[i].attPoint.z);
+    // for (uint8_t j = 0; j < state->num_uavs; ++j) {
+    //   if (self->attachement_points[j].id == state->team_state[i].id) {
+    //     qpinput.team_state[i].attPoint = self->attachement_points[j].point;
+    //     qpinput.team_state[i].l = self->attachement_points[j].l;
+    //     break;
+    //   }
+    // }
 
   }
 
@@ -1247,6 +1248,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     for (uint8_t i = 0; i < state->num_uavs; ++i) {
       if (self->attachement_points[i].id == state->team_state[0].id) {
         // this attachement point belongs to a neighbor
+
         attPoint = self->attachement_points[i].point;
         l = self->attachement_points[i].l;
         break;

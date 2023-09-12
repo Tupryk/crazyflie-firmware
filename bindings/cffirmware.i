@@ -139,6 +139,8 @@ void state_set_position(state_t *state, int idx, uint8_t id, float x, float y, f
     state->team_state[idx].pos.x = x;
     state->team_state[idx].pos.y = y;
     state->team_state[idx].pos.z = z;
+    printf("idx: %d, id: %d, attP: %f %f %f\n", idx, id, x,y,z);
+
 }
 
 struct vec controller_lee_payload_get_n(controllerLeePayload_t* self, int idx) 
@@ -165,6 +167,7 @@ void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int id
     self->attachement_points[idx].point.x = x;
     self->attachement_points[idx].point.y = y;
     self->attachement_points[idx].point.z = z;
+    // printf("idx: %d, id: %d, attP: %f %f %f\n", idx, id, x,y,z);
     // self->attachement_points[idx].mu_desired.x = mdx;
     // self->attachement_points[idx].mu_desired.y = mdy;
     // self->attachement_points[idx].mu_desired.z = mdz;
