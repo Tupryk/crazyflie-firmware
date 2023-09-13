@@ -1262,6 +1262,15 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       }
     }
 
+    // find the qid_ref for this UAV
+    struct vec qid_ref = vzero();
+    for (uint8_t j = 0; j < state->num_uavs; ++j) {
+      if (setpoint->cablevectors[j].id == state->team_state[0].id) {
+        qid_ref = setpoint->cablevectors[j].qid_ref;
+        break;
+      }
+    }
+
     // Set corresponding desired cable angles points
     // static int counter = 0;
     // if (counter % 100 == 0) {
@@ -1436,7 +1445,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     if (self->desVirtInp_tick != self->qdi_prev_tick) {
       if (self->en_qdidot) {
-        self->qdidot = setpoint->cablevectors[0].qid_ref;
+        self->qdidot = qid_ref;
       } else {
         self->qdidot = vzero();
       }
