@@ -1099,16 +1099,23 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
   for (uint8_t i = 0; i < state->num_uavs; ++i) {
     qpinput.team_state[i].id = state->team_state[i].id;
     qpinput.team_state[i].pos = mkvec(state->team_state[i].pos.x, state->team_state[i].pos.y, state->team_state[i].pos.z);
-    qpinput.team_state[i].mu_planned = setpoint->cablevectors[i].mu_planned;
-    qpinput.team_state[i].attPoint = self->attachement_points[i].point;
+    //qpinput.team_state[i].mu_planned = setpoint->cablevectors[i].mu_planned;
+    //qpinput.team_state[i].attPoint = self->attachement_points[i].point;
 
-    // for (uint8_t j = 0; j < state->num_uavs; ++j) {
-    //   if (self->attachement_points[j].id == state->team_state[i].id) {
-    //     qpinput.team_state[i].attPoint = self->attachement_points[j].point;
-    //     qpinput.team_state[i].l = self->attachement_points[j].l;
-    //     break;
-    //   }
-    // }
+    for (uint8_t j = 0; j < state->num_uavs; ++j) {
+      if (self->attachement_points[j].id == state->team_state[i].id) {
+        qpinput.team_state[i].attPoint = self->attachement_points[j].point;
+        qpinput.team_state[i].l = self->attachement_points[j].l;
+        break;
+      }
+    }
+
+    for (uint8_t j = 0; j < state->num_uavs; ++j) {
+      if (setpoint->cablevectors[j].id == state->team_state[i].id) {
+        qpinput.team_state[i].mu_planned = setpoint->cablevectors[j].mu_planned;
+        break;
+      }
+    }
 
   }
 

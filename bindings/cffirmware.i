@@ -139,7 +139,6 @@ void state_set_position(state_t *state, int idx, uint8_t id, float x, float y, f
     state->team_state[idx].pos.x = x;
     state->team_state[idx].pos.y = y;
     state->team_state[idx].pos.z = z;
-
 }
 
 struct vec controller_lee_payload_get_n(controllerLeePayload_t* self, int idx) 
