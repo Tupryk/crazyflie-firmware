@@ -139,7 +139,6 @@ void state_set_position(state_t *state, int idx, uint8_t id, float x, float y, f
     state->team_state[idx].pos.x = x;
     state->team_state[idx].pos.y = y;
     state->team_state[idx].pos.z = z;
-    printf("idx: %d, id: %d, attP: %f %f %f\n", idx, id, x,y,z);
 
 }
 
@@ -157,7 +156,6 @@ void set_setpoint_qi_ref(setpoint_t *setpoint, int idx, uint8_t id, float qx, fl
     setpoint->cablevectors[idx].qid_ref.x = qdx;
     setpoint->cablevectors[idx].qid_ref.y = qdy;
     setpoint->cablevectors[idx].qid_ref.z = qdz;
-    // printf("idx: %d, x, y, z: %f %f %f\n", setpoint->cablevectors[idx].id, setpoint->cablevectors[idx].qi_ref.x, setpoint->cablevectors[idx].qi_ref.y,setpoint->cablevectors[idx].qi_ref.z);
 }
 
 // void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z, float mdx, float mdy, float mdz)
