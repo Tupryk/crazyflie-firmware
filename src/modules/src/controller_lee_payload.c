@@ -1101,7 +1101,7 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
     qpinput.team_state[i].pos = mkvec(state->team_state[i].pos.x, state->team_state[i].pos.y, state->team_state[i].pos.z);
     qpinput.team_state[i].mu_planned = setpoint->cablevectors[i].mu_planned;
     qpinput.team_state[i].attPoint = self->attachement_points[i].point;
-    printf("idx: %d attPoint_ff: %f %f %f\n", i, qpinput.team_state[i].attPoint.x, qpinput.team_state[i].attPoint.y, qpinput.team_state[i].attPoint.z);
+
     // for (uint8_t j = 0; j < state->num_uavs; ++j) {
     //   if (self->attachement_points[j].id == state->team_state[i].id) {
     //     qpinput.team_state[i].attPoint = self->attachement_points[j].point;

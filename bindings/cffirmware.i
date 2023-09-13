@@ -165,7 +165,6 @@ void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int id
     self->attachement_points[idx].point.x = x;
     self->attachement_points[idx].point.y = y;
     self->attachement_points[idx].point.z = z;
-    // printf("idx: %d, id: %d, attP: %f %f %f\n", idx, id, x,y,z);
     // self->attachement_points[idx].mu_desired.x = mdx;
     // self->attachement_points[idx].mu_desired.y = mdy;
     // self->attachement_points[idx].mu_desired.z = mdz;
