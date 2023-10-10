@@ -40,24 +40,23 @@ TODO
 #include "scaling.h"
 #include "auxil.h"
 extern OSQPWorkspace workspace_2uav_2hp;
-extern OSQPWorkspace workspace_3uav_2hp;
-extern OSQPWorkspace workspace_4uav_5hp;
-extern OSQPWorkspace workspace_5uav_9hp;
-extern OSQPWorkspace workspace_6uav_14hp;
-extern OSQPWorkspace workspace_7uav_42hp;
-extern OSQPWorkspace workspace_8uav_56hp;
-extern OSQPWorkspace workspace_9uav_72hp;
-extern OSQPWorkspace workspace_10uav_90hp;
-extern OSQPWorkspace workspace_3uav_2hp_rig  ;
-extern OSQPWorkspace workspace_2uav_1hp_rod  ;
-extern OSQPWorkspace workspace_4uav_12hp_rig ;
-extern OSQPWorkspace workspace_5uav_20hp_rig ;
-extern OSQPWorkspace workspace_6uav_30hp_rig ;
-extern OSQPWorkspace workspace_7uav_42hp_rig ;
-extern OSQPWorkspace workspace_8uav_56hp_rig ;
-extern OSQPWorkspace workspace_9uav_72hp_rig ;
-extern OSQPWorkspace workspace_10uav_90hp_rig;
-extern OSQPWorkspace workspace_3uav_6hp_rig;
+// extern OSQPWorkspace workspace_3uav_2hp;
+// extern OSQPWorkspace workspace_4uav_5hp;
+// extern OSQPWorkspace workspace_5uav_9hp;
+// extern OSQPWorkspace workspace_6uav_14hp;
+// extern OSQPWorkspace workspace_7uav_42hp;
+// extern OSQPWorkspace workspace_8uav_56hp;
+// extern OSQPWorkspace workspace_9uav_72hp;
+// extern OSQPWorkspace workspace_10uav_90hp;
+// extern OSQPWorkspace workspace_2uav_1hp_rod  ;
+// extern OSQPWorkspace workspace_3uav_6hp_rig  ;
+// extern OSQPWorkspace workspace_4uav_12hp_rig ;
+// extern OSQPWorkspace workspace_5uav_20hp_rig ;
+// extern OSQPWorkspace workspace_6uav_30hp_rig ;
+// extern OSQPWorkspace workspace_7uav_42hp_rig ;
+// extern OSQPWorkspace workspace_8uav_56hp_rig ;
+// extern OSQPWorkspace workspace_9uav_72hp_rig ;
+// extern OSQPWorkspace workspace_10uav_90hp_rig;
 extern OSQPWorkspace workspace_hyperplane;
 extern OSQPWorkspace workspace_hyperplane_rb;
 extern OSQPWorkspace workspace_compute_Fd_pair;
@@ -766,23 +765,24 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     OSQPWorkspace* workspace = 0;
     if (input->num_uavs == 2) {
       workspace = &workspace_2uav_2hp;
-    } else if (input->num_uavs == 3) {
-      workspace = &workspace_3uav_2hp;
-    } else if (input->num_uavs == 4) {
-      workspace = &workspace_4uav_5hp;
-    } else if (input->num_uavs == 5) {
-      workspace = &workspace_5uav_9hp;
-    }  else if (input->num_uavs == 6) {
-      workspace = &workspace_6uav_14hp;
-    } else if (input->num_uavs == 7) {
-      workspace = &workspace_7uav_42hp;
-    } else if (input->num_uavs == 8){
-      workspace = &workspace_8uav_56hp;
-    } else if (input->num_uavs == 9) {
-      workspace = &workspace_9uav_72hp;
-    } else if (input->num_uavs == 10) {
-      workspace = &workspace_10uav_90hp;
-    }
+    } 
+    // else if (input->num_uavs == 3) {
+    //   workspace = &workspace_3uav_2hp;
+    // } else if (input->num_uavs == 4) {
+    //   workspace = &workspace_4uav_5hp;
+    // } else if (input->num_uavs == 5) {
+    //   workspace = &workspace_5uav_9hp;
+    // }  else if (input->num_uavs == 6) {
+    //   workspace = &workspace_6uav_14hp;
+    // } else if (input->num_uavs == 7) {
+    //   workspace = &workspace_7uav_42hp;
+    // } else if (input->num_uavs == 8){
+    //   workspace = &workspace_8uav_56hp;
+    // } else if (input->num_uavs == 9) {
+    //   workspace = &workspace_9uav_72hp;
+    // } else if (input->num_uavs == 10) {
+    //   workspace = &workspace_10uav_90hp;
+    // }
     // workspace structure
     workspace->settings->warm_start = 1;
     osqp_prepare_update(workspace);
@@ -884,6 +884,11 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     output->desVirtInp.x = input->self->desVirt[0].x; 
     output->desVirtInp.y = input->self->desVirt[0].y; 
     output->desVirtInp.z = input->self->desVirt[0].z; 
+
+    for (uint8_t i = 0; i < input->num_uavs; ++i) { 
+      DEBUG_PRINT("mu_des_i: %d = [%f %f %f] \n", i, (double) input->self->desVirt[i].x, (double) input->self->desVirt[i].y, (double) input->self->desVirt[i].z);
+      DEBUG_PRINT("Fd: %d = [%f %f %f] \n", i, (double) input->F_d.x, (double) input->F_d.y, (double) input->F_d.z);
+    }
   } else {
     // rigid general case
     struct vec M_d = input->M_d;
@@ -909,25 +914,27 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     struct mat33 R0t = mtranspose(quat2rotmat(input->plStquat));
 
     OSQPWorkspace* workspace = 0;
-    if (input->num_uavs == 2) {
-      workspace = &workspace_2uav_1hp_rod;
-    } else if (input->num_uavs == 3) {
-      workspace = &workspace_3uav_6hp_rig;
-    } else if (input->num_uavs == 4) {
-      workspace = &workspace_4uav_12hp_rig;
-    } else if (input->num_uavs == 5) {
-      workspace = &workspace_5uav_20hp_rig;
-    } else if (input->num_uavs == 6) {
-      workspace = &workspace_6uav_30hp_rig;
-    } else if (input->num_uavs == 7) {
-      workspace = &workspace_7uav_42hp_rig;
-    } else if (input->num_uavs == 8) {
-      workspace = &workspace_8uav_56hp_rig;
-    } else if (input->num_uavs == 9) {
-      workspace = &workspace_9uav_72hp_rig;
-    } else if (input->num_uavs == 10) {
-      workspace = &workspace_10uav_90hp_rig;
-    }
+    // if (input->num_uavs == 2) {
+    //   workspace = &workspace_2uav_1hp_rod;
+    // } else if (input->num_uavs == 3) {
+    //   workspace = &workspace_3uav_6hp_rig;
+    // } 
+    // else if (input->num_uavs == 4) {
+    //   workspace = &workspace_4uav_12hp_rig;
+    // } 
+    // else if (input->num_uavs == 5) {
+    //   workspace = &workspace_5uav_20hp_rig;
+    // } else if (input->num_uavs == 6) {
+    //   workspace = &workspace_6uav_30hp_rig;
+    // } else if (input->num_uavs == 7) {
+    //   workspace = &workspace_7uav_42hp_rig;
+    // } else if (input->num_uavs == 8) {
+    //   workspace = &workspace_8uav_56hp_rig;
+    // } else if (input->num_uavs == 9) {
+    //   workspace = &workspace_9uav_72hp_rig;
+    // } else if (input->num_uavs == 10) {
+    //   workspace = &workspace_10uav_90hp_rig;
+    // }
     
     // workspace structure
     workspace->settings->warm_start = 1;
@@ -1234,18 +1241,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // rotational states of the payload
     struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
     struct vec plomega = mkvec(state->payload_omega.x, state->payload_omega.y, state->payload_omega.z);
-    // if (state->num_neighbors == 1) {
-    //   struct vec rpy = quat2rpy(plquat);
-    //   rpy.y = 0;
-    //   plquat = rpy2quat(rpy);
-    //   plomega.y = 0;
-    // }
 
     // errors
     struct vec plpos_e = vclampnorm(vsub(plPos_d, plStPos), self->Kpos_P_limit);
     struct vec plvel_e = vclampnorm(vsub(plVel_d, plStVel), self->Kpos_D_limit);
     self->i_error_pos = vclampnorm(vadd(self->i_error_pos, vscl(dt, plpos_e)), self->Kpos_I_limit);
-
+    DEBUG_PRINT("desPos: %f %f %f\n", (double) plPos_d.x, (double) plPos_d.y, (double) plPos_d.z);
+    DEBUG_PRINT("setpoint: %f %f %f\n", (double) setpoint->position.x, (double) setpoint->position.y, (double) setpoint->position.z);
+    DEBUG_PRINT("PlStPos: %f %f %f\n", (double) plStPos.x, (double) plStPos.y, (double) plStPos.z);
     // Lee's integral error (30)
     self->delta_bar_x0 = vadd(self->delta_bar_x0, vscl(self->h_x0/self->mp*dt, vadd(plvel_e, vscl(self->c_x, plpos_e))));
 
@@ -1387,6 +1390,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       computeDesiredVirtualInput(self, state, setpoint, self->F_d, self->M_d, tick, &self->desVirtInp, &self->desVirtInp_tick);
     }
     else {
+      // DEBUG_PRINT("we are here\n");
       self->desVirtInp.x = self->F_d.x;
       self->desVirtInp.y = self->F_d.y;
       self->desVirtInp.z = self->F_d.z;

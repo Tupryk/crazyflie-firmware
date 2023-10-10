@@ -171,12 +171,12 @@ typedef struct controllerLeePayload_s {
     // struct vec desiredCableUnitVec[MAX_TEAM_SIZE];
     // struct vec desiredCableUnitVec2;
 
-    #ifndef CRAZYFLIE_FW
+    // #ifndef CRAZYFLIE_FW
     float solve_time_Fd; // ms
     float solve_time_svm; // ms
     float solve_time_mu; // ms
     float solve_time_total; //ms
-    #endif
+    // #endif
 
 
 } controllerLeePayload_t;

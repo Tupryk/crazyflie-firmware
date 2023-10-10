@@ -390,9 +390,9 @@ static void desCableAnglesDecoder(setpoint_t *setpoint, uint8_t type, const void
 
   setpoint->num_cables = datalen / 5;
   for (int i = 0; i < setpoint->num_cables; ++i) {
-    setpoint->cableAngles[i].id = values[i].id;
-    setpoint->cableAngles[i].az = values[i].az / 1000.0f;
-    setpoint->cableAngles[i].el = values[i].el / 1000.0f;
+    setpoint->cablevectors[i].id = values[i].id;
+    setpoint->cablevectors[i].az = values[i].az / 1000.0f;
+    setpoint->cablevectors[i].el = values[i].el / 1000.0f;
   }
 }
 
