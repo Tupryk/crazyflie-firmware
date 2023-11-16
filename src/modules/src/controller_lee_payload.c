@@ -1224,7 +1224,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     
     struct vec plPos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
     struct vec plVel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
-    struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z);
+    struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
 
     struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
     struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
