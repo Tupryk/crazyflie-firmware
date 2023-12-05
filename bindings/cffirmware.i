@@ -149,9 +149,9 @@ struct vec controller_lee_payload_get_n(controllerLeePayload_t* self, int idx)
 void set_setpoint_qi_ref(setpoint_t *setpoint, int idx, uint8_t id, float qx, float qy, float qz, float qdx, float qdy, float qdz) 
 {     
     setpoint->cablevectors[idx].id = id;
-    setpoint->cablevectors[idx].mu_planned.x = qx;
-    setpoint->cablevectors[idx].mu_planned.y = qy;
-    setpoint->cablevectors[idx].mu_planned.z = qz;
+    setpoint->cablevectors[idx].mu_ref.x = qx;
+    setpoint->cablevectors[idx].mu_ref.y = qy;
+    setpoint->cablevectors[idx].mu_ref.z = qz;
     setpoint->cablevectors[idx].qid_ref.x = qdx;
     setpoint->cablevectors[idx].qid_ref.y = qdy;
     setpoint->cablevectors[idx].qid_ref.z = qdz;

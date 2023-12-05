@@ -77,7 +77,7 @@ struct QPInput
     uint8_t id;
     struct vec pos;
     struct vec attPoint;
-    struct vec mu_planned; // from the planner
+    struct vec mu_ref; // from the planner
     float l;
   } team_state[MAX_TEAM_SIZE];
 
@@ -836,11 +836,11 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         q_new[3*i + 1] = factor * input->self->desVirt_prev[i].y;
         q_new[3*i + 2] = factor * input->self->desVirt_prev[i].z;
       } else {
-        struct vec mu_planned  = input->team_state[i].mu_planned; 
+        struct vec mu_ref  = input->team_state[i].mu_ref; 
 
-        q_new[3*i]     = factor * mu_planned.x;
-        q_new[3*i + 1] = factor * mu_planned.y; 
-        q_new[3*i + 2] = factor * mu_planned.z;
+        q_new[3*i]     = factor * mu_ref.x;
+        q_new[3*i + 1] = factor * mu_ref.y; 
+        q_new[3*i + 2] = factor * mu_ref.z;
 
       }
     }
@@ -1022,10 +1022,10 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         q_new[3*i + 1] = factor * input->self->desVirt_prev[i].y;
         q_new[3*i + 2] = factor * input->self->desVirt_prev[i].z;
       } else {
-        struct vec mu_planned  = input->team_state[i].mu_planned; 
-        q_new[3*i]     = factor * mu_planned.x;
-        q_new[3*i + 1] = factor * mu_planned.y; 
-        q_new[3*i + 2] = factor * mu_planned.z;
+        struct vec mu_ref  = input->team_state[i].mu_ref; 
+        q_new[3*i]     = factor * mu_ref.x;
+        q_new[3*i + 1] = factor * mu_ref.y; 
+        q_new[3*i + 2] = factor * mu_ref.z;
       }
     }
     osqp_update_lin_cost(workspace, q_new);
@@ -1106,7 +1106,7 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
   for (uint8_t i = 0; i < state->num_uavs; ++i) {
     qpinput.team_state[i].id = state->team_state[i].id;
     qpinput.team_state[i].pos = mkvec(state->team_state[i].pos.x, state->team_state[i].pos.y, state->team_state[i].pos.z);
-    //qpinput.team_state[i].mu_planned = setpoint->cablevectors[i].mu_planned;
+    //qpinput.team_state[i].mu_ref = setpoint->cablevectors[i].mu_ref;
     //qpinput.team_state[i].attPoint = self->attachement_points[i].point;
 
     for (uint8_t j = 0; j < state->num_uavs; ++j) {
@@ -1119,7 +1119,7 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
 
     for (uint8_t j = 0; j < state->num_uavs; ++j) {
       if (setpoint->cablevectors[j].id == state->team_state[i].id) {
-        qpinput.team_state[i].mu_planned = setpoint->cablevectors[j].mu_planned;
+        qpinput.team_state[i].mu_ref = setpoint->cablevectors[j].mu_ref;
         break;
       }
     }
@@ -1231,7 +1231,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     
     struct vec plPos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
     struct vec plVel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
-    struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z);
+    struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z + GRAVITY_MAGNITUDE);
 
     struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
     struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
@@ -1246,9 +1246,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec plpos_e = vclampnorm(vsub(plPos_d, plStPos), self->Kpos_P_limit);
     struct vec plvel_e = vclampnorm(vsub(plVel_d, plStVel), self->Kpos_D_limit);
     self->i_error_pos = vclampnorm(vadd(self->i_error_pos, vscl(dt, plpos_e)), self->Kpos_I_limit);
-    DEBUG_PRINT("desPos: %f %f %f\n", (double) plPos_d.x, (double) plPos_d.y, (double) plPos_d.z);
-    DEBUG_PRINT("setpoint: %f %f %f\n", (double) setpoint->position.x, (double) setpoint->position.y, (double) setpoint->position.z);
-    DEBUG_PRINT("PlStPos: %f %f %f\n", (double) plStPos.x, (double) plStPos.y, (double) plStPos.z);
+
+    // static int counter = 0;
+    // ++counter;
+    // if (counter % 1000 == 0) {
+    //   DEBUG_PRINT("desPos: %f %f %f\n", (double) plPos_d.x, (double) plPos_d.y, (double) plPos_d.z);
+    //   DEBUG_PRINT("setpoint: %f %f %f\n", (double) setpoint->position.x, (double) setpoint->position.y, (double) setpoint->position.z);
+    //   DEBUG_PRINT("PlStPos: %f %f %f\n", (double) plStPos.x, (double) plStPos.y, (double) plStPos.z);
+    // }
     // Lee's integral error (30)
     self->delta_bar_x0 = vadd(self->delta_bar_x0, vscl(self->h_x0/self->mp*dt, vadd(plvel_e, vscl(self->c_x, plpos_e))));
 
@@ -1395,11 +1400,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       self->desVirtInp.y = self->F_d.y;
       self->desVirtInp.z = self->F_d.z;
     }
-    // static int counter = 0;
-    // ++counter;
-    // if (counter % 100 == 0) {
-    //   DEBUG_PRINT("db %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
-    // }
+    static int counter = 0;
+    ++counter;
+    if (counter % 1000 == 0) {
+      DEBUG_PRINT("db %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
+    }
 
     // if we don't have a desVirtInp (yet), skip this round
     if (vmag2(self->desVirtInp) == 0) {
@@ -1488,11 +1493,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     );
 
     self->u_i = vadd(u_parallel, u_perpind);
-    self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
-    self->rpy = quat2rpy(self->q);
-    self->R = quat2rotmat(self->q);
-    struct vec e3 = mkvec(0,0,1);
-    control->thrustSI = vdot(self->u_i, mvmul( self->R,e3));
+    // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
+    // self->rpy = quat2rpy(self->q);
+    // self->R = quat2rotmat(self->q);
+    // struct vec e3 = mkvec(0,0,1);
+    // control->thrustSI = vdot(self->u_i, mvmul( self->R,e3));
+
+    control->thrustSI = vmag(self->u_i);
+    
     control->u_all[0] = self->u_i.x;
     control->u_all[1] = self->u_i.y;
     control->u_all[2] = self->u_i.z;

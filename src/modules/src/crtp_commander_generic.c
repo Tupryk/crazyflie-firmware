@@ -77,6 +77,7 @@ enum packet_type {
   fullStateType     = 6,
   positionType      = 7,
   desCableAnglesType= 8,
+  desCableStatesType= 9,
 };
 
 /* ---===== 2 - Decoding functions =====--- */
@@ -376,8 +377,7 @@ static void positionDecoder(setpoint_t *setpoint, uint8_t type, const void *data
   setpoint->attitude.yaw = values->yaw;
 }
 
-/* positionDecoder
- * Set the absolute postition and orientation
+/* desired cable angles decoder
  */
  struct desCableAnglesPacket_s {
   uint8_t id;
@@ -388,11 +388,38 @@ static void desCableAnglesDecoder(setpoint_t *setpoint, uint8_t type, const void
 {
   const struct desCableAnglesPacket_s *values = data;
 
-  setpoint->num_cables = datalen / 5;
+  setpoint->num_cables = datalen / sizeof(values);
   for (int i = 0; i < setpoint->num_cables; ++i) {
     setpoint->cablevectors[i].id = values[i].id;
     setpoint->cablevectors[i].az = values[i].az / 1000.0f;
     setpoint->cablevectors[i].el = values[i].el / 1000.0f;
+  }
+}
+
+/* desired cable states decoder
+ */
+ struct desCableStatesPacket_s {
+  uint8_t id;
+  int16_t mu_ref_x; // milli
+  int16_t mu_ref_y; // milli
+  int16_t mu_ref_z; // milli
+  int16_t qid_ref_x; // milli
+  int16_t qid_ref_y; // milli
+  int16_t qid_ref_z; // milli
+ } __attribute__((packed));
+static void desCableStatesDecoder(setpoint_t *setpoint, uint8_t type, const void *data, size_t datalen)
+{
+  const struct desCableStatesPacket_s *values = data;
+
+  setpoint->num_cables = datalen / sizeof(values);
+  for (int i = 0; i < setpoint->num_cables; ++i) {
+    setpoint->cablevectors[i].id = values[i].id;
+    setpoint->cablevectors[i].mu_ref.x = values[i].mu_ref_x / 1000.0f;
+    setpoint->cablevectors[i].mu_ref.y = values[i].mu_ref_y / 1000.0f;
+    setpoint->cablevectors[i].mu_ref.z = values[i].mu_ref_z / 1000.0f;
+    setpoint->cablevectors[i].qid_ref.x = values[i].qid_ref_x / 1000.0f;
+    setpoint->cablevectors[i].qid_ref.y = values[i].qid_ref_y / 1000.0f;
+    setpoint->cablevectors[i].qid_ref.z = values[i].qid_ref_z / 1000.0f;
   }
 }
 
@@ -407,6 +434,7 @@ const static packetDecoder_t packetDecoders[] = {
   [fullStateType]     = fullStateDecoder,
   [positionType]      = positionDecoder,
   [desCableAnglesType]= desCableAnglesDecoder,
+  [desCableStatesType]= desCableStatesDecoder,
 };
 
 /* Decoder switch */

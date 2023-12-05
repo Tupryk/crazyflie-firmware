@@ -291,7 +291,7 @@ typedef struct setpoint_s {
     uint8_t id;
     float az; // rad
     float el; // rad
-    struct vec mu_planned;
+    struct vec mu_ref;
     struct vec qid_ref;
   } cablevectors[MAX_TEAM_SIZE];
 
