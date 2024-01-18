@@ -884,11 +884,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     output->desVirtInp.x = input->self->desVirt[0].x; 
     output->desVirtInp.y = input->self->desVirt[0].y; 
     output->desVirtInp.z = input->self->desVirt[0].z; 
-
-    for (uint8_t i = 0; i < input->num_uavs; ++i) { 
-      DEBUG_PRINT("mu_des_i: %d = [%f %f %f] \n", i, (double) input->self->desVirt[i].x, (double) input->self->desVirt[i].y, (double) input->self->desVirt[i].z);
-      DEBUG_PRINT("Fd: %d = [%f %f %f] \n", i, (double) input->F_d.x, (double) input->F_d.y, (double) input->F_d.z);
-    }
+    #ifdef CRAZYFLIE_FW
+      for (uint8_t i = 0; i < input->num_uavs; ++i) { 
+        DEBUG_PRINT("mu_des_i: %d = [%f %f %f] \n", i, (double) input->self->desVirt[i].x, (double) input->self->desVirt[i].y, (double) input->self->desVirt[i].z);
+        DEBUG_PRINT("Fd: %d = [%f %f %f] \n", i, (double) input->F_d.x, (double) input->F_d.y, (double) input->F_d.z);
+      }
+    #endif
   } else {
     // rigid general case
     struct vec M_d = input->M_d;
@@ -1402,10 +1403,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     }
     static int counter = 0;
     ++counter;
-    if (counter % 1000 == 0) {
-      DEBUG_PRINT("db %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
-    }
-
+    #ifdef CRAZYFLIE_FW
+      if (counter % 1000 == 0) {
+        DEBUG_PRINT("db %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
+      }
+    #endif
+    
     // if we don't have a desVirtInp (yet), skip this round
     if (vmag2(self->desVirtInp) == 0) {
       return;
