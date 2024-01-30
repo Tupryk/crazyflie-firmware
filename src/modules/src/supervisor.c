@@ -43,6 +43,7 @@
 static bool canFly;
 static bool isFlying;
 static bool isTumbled;
+static uint16_t infoBitfield;
 
 bool supervisorCanFly()
 {
@@ -142,3 +143,20 @@ LOG_ADD_CORE(LOG_UINT8, isFlying, &isFlying)
  */
 LOG_ADD_CORE(LOG_UINT8, isTumbled, &isTumbled)
 LOG_GROUP_STOP(sys)
+/**
+ * The purpose of the supervisor is to monitor the system and its state. Depending on the situation, the supervisor
+ * can enable/disable functionality as well as take action to protect the system or humans close by.
+ */
+LOG_GROUP_START(supervisor)
+/**
+ * @brief Bitfield containing information about the supervisor status
+ * Bit 0 = Can be armed - the system can be armed and will accept an arming command
+ * Bit 1 = is armed - the system is armed
+ * Bit 2 = auto arm - the system is configured to automatically arm
+ * Bit 3 = can fly - the Crazyflie is ready to fly
+ * Bit 4 = is flying - the Crazyflie is flying.
+ * Bit 5 = is tumbled - the Crazyflie is up side down.
+ * Bit 6 = is locked - the Crazyflie is in the locked state and must be restarted.
+ */
+LOG_ADD(LOG_UINT16, info, &infoBitfield)
+LOG_GROUP_STOP(supervisor)
