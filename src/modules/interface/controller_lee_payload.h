@@ -113,8 +113,10 @@ typedef struct controllerLeePayload_s {
     uint8_t en_qdidot; // 0: use qdidot = vzero(), 1: estimate numerically
     uint8_t en_accrb;
     struct vec qdidot;
+    struct vec qid_ref;
     // desired value from the QP
     struct vec desVirtInp;
+    struct vec mu_ref;
 
     struct vec desVirt[MAX_TEAM_SIZE];
     struct vec desVirt_prev[MAX_TEAM_SIZE];
