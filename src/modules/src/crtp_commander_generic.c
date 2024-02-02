@@ -450,8 +450,8 @@ void crtpCommanderGenericDecodeSetpoint(setpoint_t *setpoint, CRTPPacket *pk)
 
   uint8_t type = pk->data[0];
 
-  if (type != desCableAnglesType) {
-    // sizeof(setpoint_original_t): scary hack to avoid resetting the desCableAngles part
+  if (!(type == desCableAnglesType || type == desCableStatesType)) {
+    // scary hack to avoid resetting the desCableAngles part
     memset(setpoint, 0, sizeof(setpoint_original_t));
   }
 
