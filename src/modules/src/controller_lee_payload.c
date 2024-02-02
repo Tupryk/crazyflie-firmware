@@ -836,12 +836,10 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         q_new[3*i + 1] = factor * input->self->desVirt_prev[i].y;
         q_new[3*i + 2] = factor * input->self->desVirt_prev[i].z;
       } else {
-        struct vec mu_ref  = input->team_state[i].mu_ref; 
-
-        q_new[3*i]     = factor * mu_ref.x;
-        q_new[3*i + 1] = factor * mu_ref.y; 
-        q_new[3*i + 2] = factor * mu_ref.z;
-
+        DEBUG_PRINT("mu_ref: %f %f %f\n", (double) input->team_state[i].mu_ref.x, (double) input->team_state[i].mu_ref.y, (double) input->team_state[i].mu_ref.z);
+        q_new[3*i]     = factor * input->team_state[i].mu_ref.x;
+        q_new[3*i + 1] = factor * input->team_state[i].mu_ref.y; 
+        q_new[3*i + 2] = factor * input->team_state[i].mu_ref.z;
       }
     }
     // printf("q_new: %f %f %f %f %f %f\n",q_new[0], q_new[1], q_new[2], q_new[3], q_new[4],q_new[5]);
@@ -885,10 +883,14 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     output->desVirtInp.y = input->self->desVirt[0].y; 
     output->desVirtInp.z = input->self->desVirt[0].z; 
     #ifdef CRAZYFLIE_FW
-      for (uint8_t i = 0; i < input->num_uavs; ++i) { 
-        DEBUG_PRINT("mu_des_i: %d = [%f %f %f] \n", i, (double) input->self->desVirt[i].x, (double) input->self->desVirt[i].y, (double) input->self->desVirt[i].z);
-        DEBUG_PRINT("Fd: %d = [%f %f %f] \n", i, (double) input->F_d.x, (double) input->F_d.y, (double) input->F_d.z);
-      }
+      // for (uint8_t i = 0; i < input->num_uavs; ++i) { 
+      //   DEBUG_PRINT("mu_des: %d = [%f %f %f] \n", i, (double) input->self->desVirt[i].x, (double) input->self->desVirt[i].y, (double) input->self->desVirt[i].z);
+      // }
+
+      // for (uint8_t i = 0; i < input->num_uavs; ++i) { 
+        // DEBUG_PRINT("mu_des_i: %d = [%f %f %f] \n", i, (double) input->self->desVirt[i].x, (double) input->self->desVirt[i].y, (double) input->self->desVirt[i].z);
+        // DEBUG_PRINT("Fd: %d = [%f %f %f] \n", i, (double) input->F_d.x, (double) input->F_d.y, (double) input->F_d.z);
+      // }
     #endif
   } else {
     // rigid general case
@@ -1117,14 +1119,13 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
         break;
       }
     }
-
     for (uint8_t j = 0; j < state->num_uavs; ++j) {
       if (setpoint->cablevectors[j].id == state->team_state[i].id) {
         qpinput.team_state[i].mu_ref = setpoint->cablevectors[j].mu_ref;
         break;
       }
     }
-
+    self->mu_ref = qpinput.team_state[0].mu_ref;
   }
 
   qpinput.self = self;
@@ -1177,6 +1178,7 @@ void controllerLeePayloadQPTask(void * prm)
 
 void controllerLeePayloadReset(controllerLeePayload_t* self)
 {
+  DEBUG_PRINT("RST\n");
   self->i_error_pos = vzero();
   self->i_error_att = vzero();
   self->i_error_q = vzero();
@@ -1203,7 +1205,7 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
 {
   // copy default values (bindings), or NOP (firmware)
   *self = g_self;
-
+  DEBUG_PRINT("R3\n");
   controllerLeePayloadReset(self);
 }
 
@@ -1272,10 +1274,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     }
 
     // find the qid_ref for this UAV
-    struct vec qid_ref = vzero();
+    self->qid_ref = vzero();
     for (uint8_t j = 0; j < state->num_uavs; ++j) {
       if (setpoint->cablevectors[j].id == state->team_state[0].id) {
-        qid_ref = setpoint->cablevectors[j].qid_ref;
+        self->qid_ref = setpoint->cablevectors[j].qid_ref;
         break;
       }
     }
@@ -1409,8 +1411,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       }
     #endif
     
-    // if we don't have a desVirtInp (yet), skip this round
+    // if we don't have a desVirtInp (yet), skip this 
     if (vmag2(self->desVirtInp) == 0) {
+      DEBUG_PRINT("zero\n");
+
       return;
     }
 
@@ -1457,7 +1461,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     if (self->desVirtInp_tick != self->qdi_prev_tick) {
       if (self->en_qdidot) {
-        self->qdidot = qid_ref;
+        self->qdidot = self->qid_ref;
       } else {
         self->qdidot = vzero();
       }
@@ -1511,6 +1515,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     self->thrustSI = control->thrustSI;
     //  Reset the accumulated error while on the ground
     if (control->thrustSI < 0.01f) {
+      DEBUG_PRINT("R1\n");
       controllerLeePayloadReset(self);
     }
   
@@ -1535,6 +1540,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     
     self->R_des = mcolumns(xdes, ydes, zdes);
   } else {
+    DEBUG_PRINT("R2\n");
     // we only support position control
     control->controlMode = controlModeForceTorque;
     control->thrustSI  = 0;
@@ -1965,30 +1971,18 @@ LOG_ADD(LOG_FLOAT, qdidotx, &g_self.qdidot.x)
 LOG_ADD(LOG_FLOAT, qdidoty, &g_self.qdidot.y)
 LOG_ADD(LOG_FLOAT, qdidotz, &g_self.qdidot.z)
 
+LOG_ADD(LOG_FLOAT, qidrefx, &g_self.qid_ref.x)
+LOG_ADD(LOG_FLOAT, qidrefy, &g_self.qid_ref.y)
+LOG_ADD(LOG_FLOAT, qidrefz, &g_self.qid_ref.z)
+
 // hyperplanes
-// LOG_ADD(LOG_FLOAT, n1x, &g_self.n1.x)
-// LOG_ADD(LOG_FLOAT, n1y, &g_self.n1.y)
-// LOG_ADD(LOG_FLOAT, n1z, &g_self.n1.z)
+LOG_ADD(LOG_FLOAT, n1x, &g_self.n[0].x)
+LOG_ADD(LOG_FLOAT, n1y, &g_self.n[0].y)
+LOG_ADD(LOG_FLOAT, n1z, &g_self.n[0].z)
 
-// LOG_ADD(LOG_FLOAT, n2x, &g_self.n2.x)
-// LOG_ADD(LOG_FLOAT, n2y, &g_self.n2.y)
-// LOG_ADD(LOG_FLOAT, n2z, &g_self.n2.z)
-
-// LOG_ADD(LOG_FLOAT, n3x, &g_self.n3.x)
-// LOG_ADD(LOG_FLOAT, n3y, &g_self.n3.y)
-// LOG_ADD(LOG_FLOAT, n3z, &g_self.n3.z)
-
-// LOG_ADD(LOG_FLOAT, n4x, &g_self.n4.x)
-// LOG_ADD(LOG_FLOAT, n4y, &g_self.n4.y)
-// LOG_ADD(LOG_FLOAT, n4z, &g_self.n4.z)
-
-// LOG_ADD(LOG_FLOAT, n5x, &g_self.n5.x)
-// LOG_ADD(LOG_FLOAT, n5y, &g_self.n5.y)
-// LOG_ADD(LOG_FLOAT, n5z, &g_self.n5.z)
-
-// LOG_ADD(LOG_FLOAT, n6x, &g_self.n6.x)
-// LOG_ADD(LOG_FLOAT, n6y, &g_self.n6.y)
-// LOG_ADD(LOG_FLOAT, n6z, &g_self.n6.z)
+LOG_ADD(LOG_FLOAT, n2x, &g_self.n[1].x)
+LOG_ADD(LOG_FLOAT, n2y, &g_self.n[1].y)
+LOG_ADD(LOG_FLOAT, n2z, &g_self.n[1].z)
 
 // computed desired payload force
 LOG_ADD(LOG_FLOAT, Fdx, &g_self.F_d.x)
@@ -2003,6 +1997,12 @@ LOG_ADD(LOG_FLOAT, Mdz, &g_self.M_d.z)
 LOG_ADD(LOG_FLOAT, desVirtInpx, &g_self.desVirtInp.x)
 LOG_ADD(LOG_FLOAT, desVirtInpy, &g_self.desVirtInp.y)
 LOG_ADD(LOG_FLOAT, desVirtInpz, &g_self.desVirtInp.z)
+
+
+// computed virtual input
+LOG_ADD(LOG_FLOAT, mu_refx, &g_self.mu_ref.x)
+LOG_ADD(LOG_FLOAT, mu_refy, &g_self.mu_ref.y)
+LOG_ADD(LOG_FLOAT, mu_refz, &g_self.mu_ref.z)
 
 
 // LOG_ADD(LOG_FLOAT, desCableVecx, &g_self.desiredCableUnitVec[0].x)
