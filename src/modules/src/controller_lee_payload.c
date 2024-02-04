@@ -1094,7 +1094,10 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
 {
   struct QPInput qpinput;
   struct QPOutput qpoutput;
-
+  // dirty hack: need to rewrite it
+  for (uint8_t i = 0; i < state->num_uavs; ++i) {
+    qpinput.team_state[i].mu_ref = vzero();
+  }
   // push the latest change to the QP
   qpinput.F_d = F_d;
   qpinput.M_d = M_d;
