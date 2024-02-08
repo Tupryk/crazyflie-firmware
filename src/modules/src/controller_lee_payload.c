@@ -836,7 +836,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         q_new[3*i + 1] = factor * input->self->desVirt_prev[i].y;
         q_new[3*i + 2] = factor * input->self->desVirt_prev[i].z;
       } else {
-        DEBUG_PRINT("mu_ref: %f %f %f\n", (double) input->team_state[i].mu_ref.x, (double) input->team_state[i].mu_ref.y, (double) input->team_state[i].mu_ref.z);
+        // DEBUG_PRINT("mu_ref: %f %f %f\n", (double) input->team_state[i].mu_ref.x, (double) input->team_state[i].mu_ref.y, (double) input->team_state[i].mu_ref.z);
         q_new[3*i]     = factor * input->team_state[i].mu_ref.x;
         q_new[3*i + 1] = factor * input->team_state[i].mu_ref.y; 
         q_new[3*i + 2] = factor * input->team_state[i].mu_ref.z;
@@ -1095,9 +1095,10 @@ static void computeDesiredVirtualInput(controllerLeePayload_t* self, const state
   struct QPInput qpinput;
   struct QPOutput qpoutput;
   // dirty hack: need to rewrite it
-  for (uint8_t i = 0; i < state->num_uavs; ++i) {
-    qpinput.team_state[i].mu_ref = vzero();
-  }
+  memset(&qpinput, 0, sizeof(qpinput));
+  // for (uint8_t i = 0; i < state->num_uavs; ++i) {
+  //   qpinput.team_state[i].mu_ref = vzero();
+  // }
   // push the latest change to the QP
   qpinput.F_d = F_d;
   qpinput.M_d = M_d;
