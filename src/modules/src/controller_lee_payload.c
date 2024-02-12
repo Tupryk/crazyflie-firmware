@@ -40,8 +40,8 @@ TODO
 #include "scaling.h"
 #include "auxil.h"
 extern OSQPWorkspace workspace_2uav_2hp;
-// extern OSQPWorkspace workspace_3uav_2hp;
-// extern OSQPWorkspace workspace_4uav_5hp;
+extern OSQPWorkspace workspace_3uav_2hp;
+extern OSQPWorkspace workspace_4uav_5hp;
 // extern OSQPWorkspace workspace_5uav_9hp;
 // extern OSQPWorkspace workspace_6uav_14hp;
 // extern OSQPWorkspace workspace_7uav_42hp;
@@ -766,11 +766,12 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     if (input->num_uavs == 2) {
       workspace = &workspace_2uav_2hp;
     } 
-    // else if (input->num_uavs == 3) {
-    //   workspace = &workspace_3uav_2hp;
-    // } else if (input->num_uavs == 4) {
-    //   workspace = &workspace_4uav_5hp;
-    // } else if (input->num_uavs == 5) {
+    else if (input->num_uavs == 3) {
+      workspace = &workspace_3uav_2hp;
+    } else if (input->num_uavs == 4) {
+      workspace = &workspace_4uav_5hp;
+    } 
+    // else if (input->num_uavs == 5) {
     //   workspace = &workspace_5uav_9hp;
     // }  else if (input->num_uavs == 6) {
     //   workspace = &workspace_6uav_14hp;
