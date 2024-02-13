@@ -388,7 +388,7 @@ static void desCableAnglesDecoder(setpoint_t *setpoint, uint8_t type, const void
 {
   const struct desCableAnglesPacket_s *values = data;
 
-  setpoint->num_cables = datalen / sizeof(values);
+  setpoint->num_cables = datalen / sizeof(*values);
   for (int i = 0; i < setpoint->num_cables; ++i) {
     setpoint->cablevectors[i].id = values[i].id;
     setpoint->cablevectors[i].az = values[i].az / 1000.0f;
@@ -411,7 +411,7 @@ static void desCableStatesDecoder(setpoint_t *setpoint, uint8_t type, const void
 {
   const struct desCableStatesPacket_s *values = data;
 
-  setpoint->num_cables = datalen / sizeof(values);
+  setpoint->num_cables = datalen / sizeof(*values);
   for (int i = 0; i < setpoint->num_cables; ++i) {
     setpoint->cablevectors[i].id = values[i].id;
     setpoint->cablevectors[i].mu_ref.x = values[i].mu_ref_x / 1000.0f;
