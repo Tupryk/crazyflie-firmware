@@ -26,7 +26,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-
+#include "debug.h"
 #include "crtp_commander.h"
 
 #include "commander.h"
@@ -412,14 +412,32 @@ static void desCableStatesDecoder(setpoint_t *setpoint, uint8_t type, const void
   const struct desCableStatesPacket_s *values = data;
 
   setpoint->num_cables = datalen / sizeof(*values);
+  // DEBUG_PRINT("num_cables: %d, datalen: %d, sizeof(*values): %d\n", setpoint->num_cables, datalen, sizeof(*values));
+
   for (int i = 0; i < setpoint->num_cables; ++i) {
-    setpoint->cablevectors[i].id = values[i].id;
-    setpoint->cablevectors[i].mu_ref.x = values[i].mu_ref_x / 1000.0f;
-    setpoint->cablevectors[i].mu_ref.y = values[i].mu_ref_y / 1000.0f;
-    setpoint->cablevectors[i].mu_ref.z = values[i].mu_ref_z / 1000.0f;
-    setpoint->cablevectors[i].qid_ref.x = values[i].qid_ref_x / 1000.0f;
-    setpoint->cablevectors[i].qid_ref.y = values[i].qid_ref_y / 1000.0f;
-    setpoint->cablevectors[i].qid_ref.z = values[i].qid_ref_z / 1000.0f;
+    // DEBUG_PRINT("r id: %d\n", values[i].id);
+
+    bool found = false;
+    for (int j = 0; j < MAX_TEAM_SIZE; ++j) {
+      // DEBUG_PRINT("c id: %d\n", setpoint->cablevectors[j].id);
+
+      if (setpoint->cablevectors[j].id == values[i].id || setpoint->cablevectors[j].id == 0) {
+        setpoint->cablevectors[j].id = values[i].id;
+        setpoint->cablevectors[j].mu_ref.x = values[i].mu_ref_x / 1000.0f;
+        setpoint->cablevectors[j].mu_ref.y = values[i].mu_ref_y / 1000.0f;
+        setpoint->cablevectors[j].mu_ref.z = values[i].mu_ref_z / 1000.0f;
+        setpoint->cablevectors[j].qid_ref.x = values[i].qid_ref_x / 1000.0f;
+        setpoint->cablevectors[j].qid_ref.y = values[i].qid_ref_y / 1000.0f;
+        setpoint->cablevectors[j].qid_ref.z = values[i].qid_ref_z / 1000.0f;
+        DEBUG_PRINT("f id: %d, mu_ref_order: %f %f %f\n", values[i].id, (double) values[i].mu_ref_x, (double) values[i].mu_ref_y, (double) values[i].mu_ref_z);
+
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      ASSERT(0);
+    }
   }
 }
 
