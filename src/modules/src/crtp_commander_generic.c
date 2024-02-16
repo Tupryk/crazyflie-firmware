@@ -429,7 +429,7 @@ static void desCableStatesDecoder(setpoint_t *setpoint, uint8_t type, const void
         setpoint->cablevectors[j].qid_ref.x = values[i].qid_ref_x / 1000.0f;
         setpoint->cablevectors[j].qid_ref.y = values[i].qid_ref_y / 1000.0f;
         setpoint->cablevectors[j].qid_ref.z = values[i].qid_ref_z / 1000.0f;
-        DEBUG_PRINT("f id: %d, mu_ref_order: %f %f %f\n", values[i].id, (double) values[i].mu_ref_x, (double) values[i].mu_ref_y, (double) values[i].mu_ref_z);
+        // DEBUG_PRINT("f id: %d, mu_ref_order: %f %f %f\n", values[i].id, (double) values[i].mu_ref_x, (double) values[i].mu_ref_y, (double) values[i].mu_ref_z);
 
         found = true;
         break;
