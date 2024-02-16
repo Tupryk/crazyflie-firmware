@@ -1458,8 +1458,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     struct vec u_parallel = vadd3(virtualInp, vscl(self->mass*l*vmag2(wi), self->qi), vscl(self->mass, mvmul(qiqiT, acc_)));
     
     // Compute Perpindicular Component
-    struct vec qdi = vneg(vnormalize(self->desVirtInp));
-    struct vec eq  = vcross(qdi, self->qi);
+    self->qdi = vneg(vnormalize(self->desVirtInp));
+    struct vec eq  = vcross(self->qdi, self->qi);
     self->i_error_q = vadd(self->i_error_q, vscl(dt, eq));
     struct mat33 skewqi = mcrossmat(self->qi);
     struct mat33 skewqi2 = mmul(skewqi,skewqi);
@@ -1470,10 +1470,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       } else {
         self->qdidot = vzero();
       }
-      self->qdi_prev = qdi;
+      self->qdi_prev = self->qdi;
       self->qdi_prev_tick = self->desVirtInp_tick;
     }
-    struct vec wdi = vcross(qdi, self->qdidot);
+    struct vec wdi = vcross(self->qdi, self->qdidot);
     struct vec ew = vadd(wi, mvmul(skewqi2, wdi));
 
     // Lee's integral error (32)
@@ -1975,6 +1975,12 @@ LOG_ADD(LOG_FLOAT, qidotz, &g_self.qidot.z)
 LOG_ADD(LOG_FLOAT, qdidotx, &g_self.qdidot.x)
 LOG_ADD(LOG_FLOAT, qdidoty, &g_self.qdidot.y)
 LOG_ADD(LOG_FLOAT, qdidotz, &g_self.qdidot.z)
+
+// Cable States
+LOG_ADD(LOG_FLOAT, qdix, &g_self.qdi.x)
+LOG_ADD(LOG_FLOAT, qdiy, &g_self.qdi.y)
+LOG_ADD(LOG_FLOAT, qdiz, &g_self.qdi.z)
+
 
 LOG_ADD(LOG_FLOAT, qidrefx, &g_self.qid_ref.x)
 LOG_ADD(LOG_FLOAT, qidrefy, &g_self.qid_ref.y)
