@@ -13,6 +13,7 @@ include = [
     "src/config",
     "src/drivers/interface",
     "src/platform/interface",
+    "src/lib/osqp/include",
 ]
 
 fw_sources = [
@@ -32,6 +33,23 @@ fw_sources = [
     "src/modules/src/controller_sjc.c",
     "src/modules/src/controller_lee.c",
     "src/modules/src/controller_lee_payload.c",
+    "src/lib/osqp/src/osqp/auxil.c",
+    "src/lib/osqp/src/osqp/error.c",
+    "src/lib/osqp/src/osqp/kkt.c",
+    "src/lib/osqp/src/osqp/lin_alg.c",
+    "src/lib/osqp/src/osqp/osqp.c",
+    "src/lib/osqp/src/osqp/proj.c",
+    "src/lib/osqp/src/osqp/qdldl_interface.c",
+    "src/lib/osqp/src/osqp/qdldl.c",
+    "src/lib/osqp/src/osqp/scaling.c",
+    "src/lib/osqp/src/osqp/util.c",
+    "src/lib/osqp/src/osqp/workspace_2uav_2hp.c",
+    "src/lib/osqp/src/osqp/workspace_3uav_2hp.c",
+    "src/lib/osqp/src/osqp/workspace_3uav_2hp_rig.c",
+    "src/lib/osqp/src/osqp/workspace_2uav_1hp_rod.c",
+    "src/lib/osqp/src/osqp/workspace_hyperplane.c",
+    "src/lib/osqp/src/osqp/workspace_hyperplane_rb.c",
+    "src/lib/osqp/src/osqp/workspace_compute_Fd_pair.c",
 ]
 
 cffirmware = Extension(

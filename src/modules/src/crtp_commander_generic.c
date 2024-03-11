@@ -76,6 +76,7 @@ enum packet_type {
   hoverType         = 5,
   fullStateType     = 6,
   positionType      = 7,
+  desCableAnglesType= 8,
 };
 
 /* ---===== 2 - Decoding functions =====--- */
@@ -406,6 +407,26 @@ static void positionDecoder(setpoint_t *setpoint, uint8_t type, const void *data
   setpoint->attitude.yaw = values->yaw;
 }
 
+/* positionDecoder
+ * Set the absolute postition and orientation
+ */
+ struct desCableAnglesPacket_s {
+  uint8_t id;
+  int16_t az; // mrad
+  int16_t el; // mrad
+ } __attribute__((packed));
+static void desCableAnglesDecoder(setpoint_t *setpoint, uint8_t type, const void *data, size_t datalen)
+{
+  const struct desCableAnglesPacket_s *values = data;
+
+  setpoint->num_cables = datalen / 5;
+  for (int i = 0; i < setpoint->num_cables; ++i) {
+    setpoint->cableAngles[i].id = values[i].id;
+    setpoint->cableAngles[i].az = values[i].az / 1000.0f;
+    setpoint->cableAngles[i].el = values[i].el / 1000.0f;
+  }
+}
+
  /* ---===== 3 - packetDecoders array =====--- */
 const static packetDecoder_t packetDecoders[] = {
   [stopType]          = stopDecoder,
@@ -416,6 +437,7 @@ const static packetDecoder_t packetDecoders[] = {
   [hoverType]         = hoverDecoder,
   [fullStateType]     = fullStateDecoder,
   [positionType]      = positionDecoder,
+  [desCableAnglesType]= desCableAnglesDecoder,
 };
 
 /* Decoder switch */
@@ -431,7 +453,10 @@ void crtpCommanderGenericDecodeSetpoint(setpoint_t *setpoint, CRTPPacket *pk)
 
   uint8_t type = pk->data[0];
 
-  memset(setpoint, 0, sizeof(setpoint_t));
+  if (type != desCableAnglesType) {
+    // sizeof(setpoint_original_t): scary hack to avoid resetting the desCableAngles part
+    memset(setpoint, 0, sizeof(setpoint_original_t));
+  }
 
   if (type<nTypes && (packetDecoders[type] != NULL)) {
     packetDecoders[type](setpoint, type, ((char*)pk->data)+1, pk->size-1);

@@ -31,10 +31,24 @@
 typedef struct controllerLeePayload_s {
     float mass; // TODO: should be CF global for other modules
     float mp; // mass payload
-    float l; // length of cable;
     float thrustSI;
     struct vec J; // Inertia matrix (diagonal matrix); kg m^2
-    float offset; // offset for reference
+    struct vec offset; // offset for reference
+
+    struct {
+        uint8_t id;
+        struct vec point;
+        float l; // cable length; set to <= 0 to compute automatically based on the measurements
+
+        struct vec mu_desired; // desired mu (if lambda is < 0)
+    } attachement_points[3];
+
+    struct {
+        uint8_t id1;
+        uint8_t id2;
+        struct mat66 Pinv;
+    } Pinvs[3];
+    
     //Position PID
     struct vec Kpos_P;
     float Kpos_P_limit;
@@ -42,30 +56,45 @@ typedef struct controllerLeePayload_s {
     float Kpos_D_limit;
     struct vec Kpos_I;
     float Kpos_I_limit;
+    
+    // Payload attitude control gains
+    struct vec Kprot_P;
+    float Kprot_P_limit;
+    struct vec Kprot_D;
+    float Kprot_D_limit;
+    struct vec Kprot_I;
+    float Kprot_I_limit;
 
     struct vec i_error_pos;
     struct vec i_error_att;
+    struct vec i_error_q; // cable
+    struct vec i_error_pl_att; // payload attitude
 
    // Cable PD 
     struct vec K_q;
+    float K_q_limit;
     struct vec K_w;
+    float K_w_limit;
+    struct vec K_q_I;
 
    // Cable errors
     struct vec plp_error;
     struct vec plv_error;
 
-   //Attitude PID
+    //Attitude PID
     struct vec KR;
+    float KR_limit;
     struct vec Komega;
+    float Komega_limit;
     struct vec KI;
 
     // Logging variables
     struct vec qi_prev;
     struct vec qdi_prev;
+    uint32_t qdi_prev_tick;
     struct vec payload_vel_prev;
     struct vec rpy;
     struct vec rpy_des;
-    struct vec qr;
     struct mat33 R_des;
     struct quat q;
     struct mat33 R;
@@ -75,7 +104,80 @@ typedef struct controllerLeePayload_s {
     struct vec u_i;
     struct vec qidot_prev;
     struct vec acc_prev;
+    struct vec F_d;
+    struct vec M_d; // control moments of the payload
+    struct quat qp_des; // desired quaternion orientation for the payload
+    struct vec wp_des;  // desired omega for the payload
+    struct vec omega_pr;
+    struct vec qi;
+    struct vec qidot;
+    struct vec qdi;
+    uint8_t en_qdidot; // 0: use qdidot = vzero(), 1: estimate numerically
+    uint8_t en_accrb;
+    struct vec qdidot;
+    // desired value from the QP
+    struct vec desVirtInp;
 
+    struct vec desVirt_prev;
+    struct vec desVirt2_prev;
+    struct vec desVirt3_prev;
+    uint32_t desVirtInp_tick;
+
+    float lambdaa; // regularization on how close to stay to previous value
+    float lambda_svm; // regularization value on how close the hyperplane should be to Fd
+
+    uint8_t gen_hp; // 0: "old" geometric method, 1: "new" SVM method
+
+    uint8_t formation_control; // 0: disabled, 1 - use regularization with previous value; 2: use mu_desired from attachement points
+
+    uint8_t en_num_omega; // 0 - use Lee's method, 1 - use numeric estimate
+    struct quat prev_q_des;
+    uint32_t prev_q_tick;
+
+    struct vec n1;
+    struct vec n2;
+    struct vec n3;
+    struct vec n4;
+    struct vec n5;
+    struct vec n6;
+    float radius;
+
+    // osqp warm start aid
+    struct osqp_warmstart_hyperplane_rb {
+        float x[6];
+        float y[8];
+    } osqp_warmstart_hyperplane_rbs[3];
+
+    struct osqp_warmstart_compute_Fd_pair {
+        float x[9];
+        float y[6];
+    } osqp_warmstart_compute_Fd_pairs[3];
+
+    struct osqp_warmstart_hyperplane {
+        float x[4];
+        float y[3];
+    } osqp_warmstart_hyperplanes[3];
+
+    // integral state (30), (31), (32) in Lee's paper
+    struct vec delta_bar_x0;
+    struct vec delta_bar_R0;
+    struct vec delta_bar_xi;
+
+    // integral gains
+    float h_x0;
+    float h_R0;
+    float h_xi;
+    float c_x;
+    float c_R;
+    float c_q;
+
+    // manual rotation control via params
+    float roll_des;
+    float pitch_des;
+
+    // desired cable unit vector
+    struct vec desiredCableUnitVec[3];
+    // struct vec desiredCableUnitVec2;
 } controllerLeePayload_t;
 
 
@@ -87,6 +189,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
                                          const uint32_t tick);
 
 #ifdef CRAZYFLIE_FW
+void controllerLeePayloadFirmwareTaskInit(void);
 void controllerLeePayloadFirmwareInit(void);
 bool controllerLeePayloadFirmwareTest(void);
 void controllerLeePayloadFirmware(control_t *control, setpoint_t *setpoint,

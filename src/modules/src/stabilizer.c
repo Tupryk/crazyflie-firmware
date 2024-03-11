@@ -58,6 +58,7 @@
 #include "rateSupervisor.h"
 #include "peer_localization.h"
 #include "math3d.h"
+#include "controller_lee_payload.h"
 
 static bool isInit;
 static bool emergencyStop = false;
@@ -100,7 +101,7 @@ static struct {
   int16_t rateRoll;
   int16_t ratePitch;
   int16_t rateYaw;
-
+  
   // payload position - mm
   int16_t px;
   int16_t py;
@@ -128,9 +129,12 @@ static struct {
 } setpointCompressed;
 
 // for payloads
-static float payload_alpha = 0.9; // between 0...1; 1: no filter
+static float payload_alpha_v = 0.9; // between 0...1; 1: no filter
+static float payload_alpha_w = 0.9; // between 0...1; 1: no filter
 static point_t payload_pos_last;         // m   (world frame)
+static quaternion_t payload_quat_last;
 static velocity_t payload_vel_last;      // m/s (world frame)
+static Axis3f payload_omega_last;
 
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
 
@@ -209,6 +213,8 @@ void stabilizerInit(StateEstimatorType estimator)
 
   STATIC_MEM_TASK_CREATE(stabilizerTask, stabilizerTask, STABILIZER_TASK_NAME, NULL, STABILIZER_TASK_PRI);
 
+  controllerLeePayloadFirmwareTaskInit();
+
   isInit = true;
 }
 
@@ -286,50 +292,105 @@ static void stabilizerTask(void* param)
         control.controlMode = controlModeLegacy;
         controllerInit(controllerType);
         controllerType = getControllerType();
+
+        // Make sure we use the correct setpoint (for UAV or payload)
+        crtpCommanderHighLevelTellState(&state);
+        if (!crtpCommanderHighLevelIsStopped()) {
+          // Disable forces the go to command to plan from the current state, rather then current setpoint
+          crtpCommanderHighLevelDisable();
+          crtpCommanderHighLevelGoTo(0, 0, 0, 0, 1.0, true);
+        }
       }
 
       stateEstimator(&state, tick);
 
-      // add the payload state here
-      peerLocalizationOtherPosition_t* payloadPos = peerLocalizationGetPositionByID(255);
-      if (payloadPos != NULL) {
-        
-        // if we got a new state
-        if (payload_pos_last.timestamp < payloadPos->pos.timestamp) {
-          struct vec vel_filtered = vzero();
-          // in the beginning, estimate the velocity to be zero, otherwise use
-          // numeric estimation with filter
-          if (payload_pos_last.timestamp != 0) {
-            // estimate the velocity numerically
-            const float dt = (payloadPos->pos.timestamp - payload_pos_last.timestamp) / 1000.0f; //s
-            struct vec pos = mkvec(payloadPos->pos.x, payloadPos->pos.y, payloadPos->pos.z);
-            struct vec last_pos = mkvec(payload_pos_last.x, payload_pos_last.y, payload_pos_last.z);
-            struct vec vel = vdiv(vsub(pos, last_pos), dt);
+      // add the payload and neighbor states here
+      uint8_t num_neighbors = 0;
+      for (int i = 0; i < PEER_LOCALIZATION_MAX_NEIGHBORS; ++i) {
 
-            // apply a simple complementary filter
-            struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
-            vel_filtered = vadd(vscl(1.0f - payload_alpha, vel_old), vscl(payload_alpha, vel));
+        peerLocalizationOtherPosition_t const *other = peerLocalizationGetPositionByIdx(i);
+
+        if (other == NULL || other->id == 0) {
+          continue;
+        }
+
+        if (other->id == 255) {
+          // handle the payload
+
+          // if we got a new state
+          if (payload_pos_last.timestamp < other->timestamp) {
+            struct vec vel_filtered = vzero();
+            struct vec omega_filtered = vzero();
+            // in the beginning, estimate the velocity to be zero, otherwise use
+            // numeric estimation with filter
+            if (payload_pos_last.timestamp != 0) {
+              // estimate the velocity numerically
+              const float dt = (other->timestamp - payload_pos_last.timestamp) / 1000.0f; //s
+              struct vec pos = mkvec(other->pos.x, other->pos.y, other->pos.z);
+              struct vec last_pos = mkvec(payload_pos_last.x, payload_pos_last.y, payload_pos_last.z);
+              struct vec vel = vdiv(vsub(pos, last_pos), dt);
+              vel = vclampnorm(vel, 2.0); // rescale to avoid weird outliers
+
+              // apply a simple complementary filter
+              struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
+              vel_filtered = vadd(vscl(1.0f - payload_alpha_v, vel_old), vscl(payload_alpha_v, vel));
+
+              // estimate omega numerically
+              struct quat q = mkquat(other->orientation.x, other->orientation.y, other->orientation.z, other->orientation.w);
+              struct quat last_q = mkquat(payload_quat_last.x, payload_quat_last.y, payload_quat_last.z, payload_quat_last.w);
+              struct vec omega = quat2omega(last_q, q, dt);
+              omega = vclampnorm(omega, 20.0); // rescale to avoid weird outliers
+
+              struct vec omega_old = mkvec(payload_omega_last.x, payload_omega_last.y, payload_omega_last.z);
+              omega_filtered = vadd(vscl(1.0f - payload_alpha_w, omega_old), vscl(payload_alpha_w, omega));
+            }
+            // update the position
+            state.payload_pos.x = other->pos.x;
+            state.payload_pos.y = other->pos.y;
+            state.payload_pos.z = other->pos.z;
+            state.payload_pos.timestamp = other->timestamp;
+
+            // update the orientation
+            state.payload_quat.x = other->orientation.x;
+            state.payload_quat.y = other->orientation.y;
+            state.payload_quat.z = other->orientation.z;
+            state.payload_quat.w = other->orientation.w;
+            state.payload_quat.timestamp = other->timestamp;
+
+            // update the velocity
+            state.payload_vel.x = vel_filtered.x;
+            state.payload_vel.y = vel_filtered.y;
+            state.payload_vel.z = vel_filtered.z;
+            state.payload_vel.timestamp = other->timestamp;
+
+            // update the angular velocity
+            state.payload_omega.x = omega_filtered.x;
+            state.payload_omega.y = omega_filtered.y;
+            state.payload_omega.z = omega_filtered.z;
+            
+            // update state
+            payload_pos_last = state.payload_pos;
+            payload_quat_last = state.payload_quat;
+            payload_vel_last = state.payload_vel;
+            payload_omega_last = state.payload_omega;
+          } else {
+            state.payload_pos = payload_pos_last;
+            state.payload_quat = payload_quat_last;
+            state.payload_vel = payload_vel_last;
+            state.payload_omega = payload_omega_last;
           }
-          // update the position
-          state.payload_pos.x = payloadPos->pos.x;
-          state.payload_pos.y = payloadPos->pos.y;
-          state.payload_pos.z = payloadPos->pos.z;
-          state.payload_pos.timestamp = payloadPos->pos.timestamp;
 
-          // update the velocity
-          state.payload_vel.x = vel_filtered.x;
-          state.payload_vel.y = vel_filtered.y;
-          state.payload_vel.z = vel_filtered.z;
-          state.payload_vel.timestamp = payloadPos->pos.timestamp;
-          
-          // update state
-          payload_pos_last = state.payload_pos;
-          payload_vel_last = state.payload_vel;
-        } else {
-          state.payload_pos = payload_pos_last;
-          state.payload_vel = payload_vel_last;
+        } else if (num_neighbors < MAX_NEIGHBOR_UAVS) {
+          // handle regular team members
+          state.neighbors[num_neighbors].id = other->id;
+          state.neighbors[num_neighbors].pos.x = other->pos.x;
+          state.neighbors[num_neighbors].pos.y = other->pos.y;
+          state.neighbors[num_neighbors].pos.z = other->pos.z;
+          ++num_neighbors;
         }
       }
+      state.num_neighbors = num_neighbors;
+
       compressState();
 
       if (crtpCommanderHighLevelGetSetpoint(&tempSetpoint, &state, tick)) {
@@ -429,7 +490,9 @@ PARAM_ADD_CORE(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD_CORE(PARAM_UINT8, stop, &emergencyStop)
 
 
-PARAM_ADD_CORE(PARAM_FLOAT, pAlpha, &payload_alpha)
+PARAM_ADD_CORE(PARAM_FLOAT, pAlphaV, &payload_alpha_v)
+
+PARAM_ADD_CORE(PARAM_FLOAT, pAlphaW, &payload_alpha_w)
 
 PARAM_GROUP_STOP(stabilizer)
 
@@ -798,6 +861,73 @@ LOG_ADD_CORE(LOG_FLOAT, qz, &state.attitudeQuaternion.z)
  * @brief Attitude as a quaternion, w
  */
 LOG_ADD_CORE(LOG_FLOAT, qw, &state.attitudeQuaternion.w)
+
+
+/**
+ * @brief The position of the payload in the global reference frame, X [m]
+ */
+LOG_ADD(LOG_FLOAT, px, &state.payload_pos.x)
+
+/**
+ * @brief The position of the payload in the global reference frame, Y [m]
+ */
+LOG_ADD(LOG_FLOAT, py, &state.payload_pos.y)
+
+/**
+ * @brief The position of the payload in the global reference frame, Z [m]
+ */
+LOG_ADD(LOG_FLOAT, pz, &state.payload_pos.z)
+
+/**
+ * @brief The orientation of the payload in the global reference frame
+ */
+LOG_ADD(LOG_FLOAT, pqx, &state.payload_quat.x)
+
+/**
+ * @brief The orientation of the payload in the global reference frame
+ */
+LOG_ADD(LOG_FLOAT, pqy, &state.payload_quat.y)
+
+/**
+ * @brief The orientation of the payload in the global reference frame
+ */
+LOG_ADD(LOG_FLOAT, pqz, &state.payload_quat.z)
+
+/**
+ * @brief The orientation of the payload in the global reference frame
+ */
+LOG_ADD(LOG_FLOAT, pqw, &state.payload_quat.w)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, X [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pvx, &state.payload_vel.x)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, Y [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pvy, &state.payload_vel.y)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, Z [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pvz, &state.payload_vel.z)
+
+/**
+ * @brief Angular velocity of the payload, X [rad/s]
+ */
+LOG_ADD(LOG_FLOAT, pwx, &state.payload_omega.x)
+
+/**
+ * @brief Angular velocity of the payload, Y [rad/s]
+ */
+LOG_ADD(LOG_FLOAT, pwy, &state.payload_omega.y)
+
+/**
+ * @brief Angular velocity of the payload, Z [rad/s]
+ */
+LOG_ADD(LOG_FLOAT, pwz, &state.payload_omega.z)
+
 LOG_GROUP_STOP(stateEstimate)
 
 /**

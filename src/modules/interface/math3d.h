@@ -197,6 +197,12 @@ static inline struct vec vclampnorm(struct vec v, float maxnorm) {
 	}
 	return v;
 }
+// scale the Euclidean norm of a vector to the desired value
+static inline struct vec vsclnorm(struct vec v, float desired_norm) {
+	float const norm = vmag(v);
+	return vscl(desired_norm / norm, v);
+}
+
 // vector cross product.
 static inline struct vec vcross(struct vec a, struct vec b) {
 	return mkvec(a.y*b.z - a.z*b.y, a.z*b.x - a.x*b.z, a.x*b.y - a.y*b.x);
@@ -327,7 +333,129 @@ static inline void vstoref(struct vec v, float *f) {
 static inline float vindex(struct vec v, int i) {
 	return ((float const *)&v.x)[i];
 }
+// -----------------------FOR QP----------------------------//
+// ------------------------------2x6 matrices------------------------------//
+struct mat26 {
+	float m[2][6];
+};
 
+static inline struct mat26 zero26() {
+	struct mat26 A_zero;
+  	for (int i = 0; i < 2; ++i) {
+		  for (int j = 0; j < 6; ++j) {
+		  	A_zero.m[i][j] = 0;
+		  }
+	}
+	return A_zero;
+}
+static inline struct mat26 addrows(struct vec vector1, struct vec vector2) {
+	struct mat26 A = zero26();	
+	A.m[0][0] = vector1.x;
+	A.m[0][1] = vector1.y;
+	A.m[0][2] = vector1.z;
+	A.m[1][3] = vector2.x;
+	A.m[1][4] = vector2.y;
+	A.m[1][5] = vector2.z;
+	return A;
+}
+// -----------------------FOR QP----------------------------//
+// ------------------------------3x6 matrices------------------------------
+struct mat36 {
+	float m[3][6];
+};
+
+static inline struct mat36 zero36(void) {
+  struct mat36 m;
+  	for (int i = 0; i < 3; ++i) {
+		  for (int j = 0; j < 6; ++j) {
+		  	m.m[i][j] = 0;
+		  }
+	}
+	return m;
+}
+// concatenate 2 identity matrices in the mat36 for two UAVs
+//      [1 0 0 1 0 0
+// P =  0 1 0 0 1 0
+//      0 0 1 0 0 1]
+static inline struct mat36 ones36(void) {
+  struct mat36 P_alloc = zero36();
+  P_alloc.m[0][0] = 1;
+  P_alloc.m[1][1] = 1;
+  P_alloc.m[2][2] = 1;
+  P_alloc.m[0][3] = 1;
+  P_alloc.m[1][4] = 1;
+  P_alloc.m[2][5] = 1;
+  return P_alloc;
+}
+// -----------------------FOR QP----------------------------//
+// ------------------------------6x6 matrices -----------------------------//
+struct mat66 {
+	float m[6][6];
+};
+
+static inline struct mat66 zero66(void) {
+  struct mat66 m;
+  	for (int i = 0; i < 6; ++i) {
+		  for (int j = 0; j < 6; ++j) {
+		  	m.m[i][j] = 0;
+		  }
+	}
+	return m;
+}
+
+// multiply two matrices.
+static inline struct mat66 mmul66(struct mat66 a, struct mat66 b) {
+	struct mat66 ab;
+	for (int i = 0; i < 6; ++i) {
+		for (int j = 0; j < 6; ++j) {
+			float accum = 0;
+			for (int k = 0; k < 6; ++k) {
+				accum += a.m[i][k] * b.m[k][j];
+			}
+			ab.m[i][j] = accum;
+		}
+	}
+	return ab;
+}
+
+static inline struct mat66 eye66(void) {
+  struct mat66 P = zero66();
+  P.m[0][0] = 1;
+  P.m[1][1] = 1;
+  P.m[2][2] = 1;
+  P.m[3][3] = 1;
+  P.m[4][4] = 1;
+  P.m[5][5] = 1;
+  return P;
+}
+static inline struct mat66 setnm(struct mat66 P, float value, int diagID) {
+	P.m[diagID][diagID] = value;
+	return P;
+}
+// -----------------------FOR QP----------------------------//
+//-------------------------------6x1 vectors-------------------------------//
+struct vec6{
+	float a; float b; float c; float x; float y; float z;
+};
+// set the values of 6 Dimensional vector to zero
+static inline struct vec6 zero6() {
+	struct vec6 vector;
+	vector.a = 0;
+	vector.b = 0;
+	vector.c = 0;
+	vector.x = 0;
+	vector.y = 0;
+	vector.z = 0;
+	return vector;
+}
+
+// multiply a matrix by a vector.
+static inline struct vec mvmul6(struct mat66 a, struct vec6 v) {
+	float x = a.m[0][0] * v.x + a.m[0][1] * v.y + a.m[0][2] * v.z;
+	float y = a.m[1][0] * v.x + a.m[1][1] * v.y + a.m[1][2] * v.z;
+	float z = a.m[2][0] * v.x + a.m[2][1] * v.y + a.m[2][2] * v.z;
+	return mkvec(x, y, z);
+}
 
 // ---------------------------- 3x3 matrices ------------------------------
 
@@ -393,7 +521,7 @@ static inline struct mat33 vecmult(struct vec a) {
 	m.m[1][1] = a.y*a.y;
 	m.m[2][1] = a.z*a.y;
 
-	m.m[0][2] = a.x*a.x;
+	m.m[0][2] = a.x*a.z;
 	m.m[1][2] = a.y*a.z;
 	m.m[2][2] = a.z*a.z;
 
@@ -851,6 +979,27 @@ static inline struct quat qslerp(struct quat a, struct quat b, float t)
 		return mkquat(
 			s*a.x + t*b.x, s*a.y + t*b.y, s*a.z + t*b.z, s*a.w + t*b.w);
 	}
+}
+
+// numerically estimate angular velocity from two quaternions, in body frame
+// where q0 is the rotation at time t, and q1 is the rotation at time t+dt
+// see e.g., https://fgiesen.wordpress.com/2012/08/24/quaternion-differentiation/
+// https://math.stackexchange.com/questions/2282938/converting-from-quaternion-to-angular-velocity-then-back-to-quaternion
+// https://faculty.sites.iastate.edu/jia/files/inline-files/quaternion.pdf (eq. 30)
+static inline struct vec quat2omega(struct quat q0, struct quat q1, float dt)
+{
+	// omega = vectorpart_of(2 * qdot * q_inv)
+	struct quat q_dot = mkquat(
+		(q1.x - q0.x) / dt,
+		(q1.y - q0.y) / dt,
+		(q1.z - q0.z) / dt,
+		(q1.w - q0.w) / dt);
+
+	struct quat q_inv = qinv(q0);
+
+	struct quat r = qqmul(q_dot, q_inv);
+	struct vec omega = vscl(2, quatimagpart(r));
+	return omega;
 }
 
 //

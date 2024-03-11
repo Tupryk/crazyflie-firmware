@@ -31,6 +31,8 @@
 #include "imu_types.h"
 #include "lighthouse_types.h"
 
+#define MAX_NEIGHBOR_UAVS (3)
+
 /* Data structure used by the stabilizer subsystem.
  * All have a timestamp to be set when the data is calculated.
  */
@@ -167,10 +169,17 @@ typedef struct state_s {
   point_t position;         // m
   velocity_t velocity;      // m/s
   acc_t acc;                // Gs (but acc.z without considering gravity)
-
+  // positions of the neighboring UAVs
+  uint8_t num_neighbors;
+  struct {
+    uint8_t id;
+    point_t pos;
+  } neighbors[MAX_NEIGHBOR_UAVS];
   // Measured state of the payload
   point_t payload_pos;         // m   (world frame)
+  quaternion_t payload_quat;   // orientation (world frame)
   velocity_t payload_vel;      // m/s (world frame)
+  Axis3f payload_omega;        // rad/s (world frame)
 } state_t;
 
 typedef enum control_mode_e {
@@ -227,6 +236,31 @@ typedef enum mode_e {
   modeVelocity
 } stab_mode_t;
 
+typedef struct setpoint_original_s {
+  uint32_t timestamp;
+
+  attitude_t attitude;      // deg
+  attitude_t attitudeRate;  // deg/s
+  quaternion_t attitudeQuaternion;
+  float thrust;
+  point_t position;         // m
+  velocity_t velocity;      // m/s
+  acc_t acceleration;       // m/s^2
+  jerk_t jerk;              // m/s^3
+  bool velocity_body;       // true if velocity is given in body frame; false if velocity is given in world frame
+
+  struct {
+    stab_mode_t x;
+    stab_mode_t y;
+    stab_mode_t z;
+    stab_mode_t roll;
+    stab_mode_t pitch;
+    stab_mode_t yaw;
+    stab_mode_t quat;
+  } mode;
+
+} setpoint_original_t;
+
 typedef struct setpoint_s {
   uint32_t timestamp;
 
@@ -249,6 +283,14 @@ typedef struct setpoint_s {
     stab_mode_t yaw;
     stab_mode_t quat;
   } mode;
+
+  uint8_t num_cables;
+  struct {
+    uint8_t id;
+    float az; // rad
+    float el; // rad
+  } cableAngles[3];
+
 } setpoint_t;
 
 /** Estimate of position */

@@ -91,8 +91,8 @@
 #define SPI_END_TRANSACTION     spiEndTransaction
 #endif
 
-#define MAX_USD_LOG_VARIABLES_PER_EVENT   (54)
-#define MAX_USD_LOG_EVENTS                (5)
+#define MAX_USD_LOG_VARIABLES_PER_EVENT   (80)
+#define MAX_USD_LOG_EVENTS                (2)
 #define FIXED_FREQUENCY_EVENT_ID          (0xFFFF)
 #define FIXED_FREQUENCY_EVENT_NAME        "fixedFrequency"
 
@@ -417,7 +417,8 @@ TCHAR* f_gets_without_comments (
   while (n < len - 1) { /* Read characters until buffer gets filled */
     f_read(fp, &c, 1, &rc);
     if (rc != 1) {
-      break;
+      *p = 0;
+      return 0; /* When no data read (eof or error), return with error. */
     }
     if (c == '\n') {
       if (isPureComment){
@@ -442,7 +443,7 @@ TCHAR* f_gets_without_comments (
     }
   }
   *p = 0;
-  return n ? buff : 0;      /* When no data read (eof or error), return with error. */
+  return buff;
 }
 
 
@@ -638,8 +639,13 @@ static void usdLogTask(void* prm)
           cfg->numBytes = 0;
           while (true) {
             line = f_gets_without_comments(readBuffer, sizeof(readBuffer), &logFile);
-            if (!line || strncmp(line, "on:", 3) == 0)
+            if (!line || strncmp(line, "on:", 3) == 0) {
               break;
+            }
+            // skip lines that do not have at least two characters (1 for group, 1 for '.', 1 for name)
+            if (strlen(line) <= 3) {
+              continue;
+            }
             char *group = line;
             char *name = 0;
             for (int i = 0; i < strlen(line); ++i) {
@@ -664,7 +670,7 @@ static void usdLogTask(void* prm)
               continue;
             }
           }
-          if (usdLogConfig.numEventConfigs < MAX_USD_LOG_EVENTS - 1) {
+          if (usdLogConfig.numEventConfigs < MAX_USD_LOG_EVENTS) {
             ++usdLogConfig.numEventConfigs;
             cfg = &usdLogConfig.eventConfigs[usdLogConfig.numEventConfigs];
           } else {
@@ -805,9 +811,14 @@ static void usdWriteData(const void *data, size_t size)
 {
   UINT bytesWritten;
   FRESULT status = f_write(&logFile, data, size, &bytesWritten);
-  ASSERT(status == FR_OK);
-  crc32Update(&crcContext, data, size);
-  STATS_CNT_RATE_MULTI_EVENT(&fatWriteRate, bytesWritten);
+  // ASSERT(status == FR_OK);
+  if (status != FR_OK) {
+    DEBUG_PRINT("usd deck write failure %d\n", status);
+    enableLogging = false;
+  } else {
+    crc32Update(&crcContext, data, size);
+    STATS_CNT_RATE_MULTI_EVENT(&fatWriteRate, bytesWritten);
+  }
 }
 
 static void usdWriteTask(void* prm)
