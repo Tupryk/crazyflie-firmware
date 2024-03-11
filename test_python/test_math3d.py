@@ -37,6 +37,7 @@ def test_shortest_signed_angle_radians():
         # Assert
         expected = np.arctan2(np.sin(goal - start), np.cos(goal - start))
         assert np.allclose(expected, actual)
+        
 def test_quat2omega():
     # Fixture
     q0 = cffirmware.mkquat(0,0,0,1)
