@@ -34,6 +34,8 @@
 #include "config.h"
 #include "math.h"
 #include "platform_defaults.h"
+#include "pm.h"
+#include "motors.h"
 
 #ifndef CONFIG_MOTORS_DEFAULT_IDLE_THRUST
 #  define DEFAULT_IDLE_THRUST 0
@@ -50,6 +52,50 @@ static float thrustToTorque = 0.005964552f;
 //          thrust is in Newtons (per rotor)
 static float pwmToThrustA = 0.091492681f;
 static float pwmToThrustB = 0.067673604f;
+
+// voltage, thrust -> pwm
+static float d00 = 0.5543364748044269;
+static float d10 = 0.11442589787133063;
+static float d01 = -0.5067031467944692;
+static float d20 = -0.002283966554392003;
+static float d11 = -0.03255320005438393;
+
+// voltage, pwm -> max_thrust
+static float e00 = -10.291152501242268;
+static float e10 = 3.926415845326646;
+static float e01 = 26.077196474667165;
+
+// // computes maximum thrust in grams given the current battery state
+// static float estimateMaxThrust(float batteryVoltage)
+// {
+//   // normalized voltage
+//   float v = pmGetBatteryVoltage() / 4.2f;
+//   // normalized (average) pwm
+//   uint32_t pwm_sum = 0;
+//   for (int i = 0; i < STABILIZER_NR_OF_MOTORS; ++i) {
+//     pwm_sum += motorsGetRatio(i);
+//   }
+//   float pwm = pwm_sum / 4.0f / UINT16_MAX;
+
+//   float maxThrust = clamp(e00 + e10 * pwm + e01 * v, 8, 50);
+
+//   return maxThrust;
+// }
+
+// set thrust for motor (in grams)
+static uint16_t thrustToPWM(float batteryVoltage, float thrustGram)
+{
+  if (thrustGram > 0) {
+    // normalized voltage
+    float v = batteryVoltage / 4.2f;
+    // normalized pwm:
+    float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+
+    return pwm * UINT16_MAX;
+  }
+
+  return 0;
+}
 
 int powerDistributionMotorType(uint32_t id)
 {
@@ -104,14 +150,18 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
   motorForces[2] = thrustPart + rollPart + pitchPart - yawPart;
   motorForces[3] = thrustPart + rollPart - pitchPart + yawPart;
 
+  float batteryVoltage = pmGetBatteryVoltage();
   for (int motorIndex = 0; motorIndex < STABILIZER_NR_OF_MOTORS; motorIndex++) {
     float motorForce = motorForces[motorIndex];
     if (motorForce < 0.0f) {
       motorForce = 0.0f;
     }
 
-    float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
-    motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
+    // float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
+    // motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
+
+    float motorForceInGrams = motorForce * 1000.0f / 9.81f;
+    motorThrustUncapped->list[motorIndex] = thrustToPWM(batteryVoltage, motorForceInGrams);
   }
 }
 
@@ -209,3 +259,21 @@ PARAM_ADD(PARAM_FLOAT, pwmToThrustB, &pwmToThrustB)
  */
 PARAM_ADD(PARAM_FLOAT, armLength, &armLength)
 PARAM_GROUP_STOP(quadSysId)
+
+
+/**
+ * ToDo: This should move into quadSysId and replace pwmToThrust etc.
+ */
+PARAM_GROUP_START(pwm)
+
+  PARAM_ADD(PARAM_FLOAT, d00, &d00)
+  PARAM_ADD(PARAM_FLOAT, d10, &d10)
+  PARAM_ADD(PARAM_FLOAT, d01, &d01)
+  PARAM_ADD(PARAM_FLOAT, d20, &d20)
+  PARAM_ADD(PARAM_FLOAT, d11, &d11)
+
+  PARAM_ADD(PARAM_FLOAT, e00, &e00)
+  PARAM_ADD(PARAM_FLOAT, e10, &e10)
+  PARAM_ADD(PARAM_FLOAT, e01, &e01)
+
+PARAM_GROUP_STOP(pwm)

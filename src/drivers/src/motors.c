@@ -46,21 +46,6 @@
 //Logging includes
 #include "log.h"
 #include "param.h"
-#include "math3d.h"
-
-// Data for CF14
-static float d00 = 0.5543364748044269;
-static float d10 = 0.11442589787133063;
-static float d01 = -0.5067031467944692;
-static float d20 = -0.002283966554392003;
-static float d11 = -0.03255320005438393;
-
-static float e00 = -10.291152501242268;
-static float e10 = 3.926415845326646;
-static float e01 = 26.077196474667165;
-
-static float maxThrust;
-static bool new_thrust_comp = false;
 
 static uint8_t motorSetEnable = 0;
 static uint16_t motorPowerSet[] = {0, 0, 0, 0}; // user-requested PWM signals (overrides)
@@ -111,8 +96,6 @@ const MotorHealthTestDef unknownMotorHealthTestSettings = {
 };
 
 static bool isInit = false;
-
-
 static uint64_t lastCycleTime;
 static uint32_t cycleTime;
 
@@ -493,7 +476,7 @@ void motorsBurstDshot()
 #endif
 
 
-// Ithrust is thrust mapped for 65536 <==> 15 grams (per rotor)
+// Ithrust is thrust mapped for 65536 <==> 60 grams
 void motorsSetRatio(uint32_t id, uint16_t ithrust)
 {
   if (isInit) {
@@ -606,42 +589,6 @@ int motorsGetRatio(uint32_t id)
   ASSERT(id < NBR_OF_MOTORS);
 
   return motor_ratios[id];
-}
-
-
-// computes maximum thrust in grams given the current battery state
-float motorsGetMaxThrust()
-{
-  // normalized voltage
-  float v = pmGetBatteryVoltage() / 4.2f;
-  // normalized pwm
-  float pwm = (motor_ratios[0] + motor_ratios[1] + motor_ratios[2] + motor_ratios[3]) / 4.0f / UINT16_MAX;
-
-  maxThrust = clamp(e00 + e10 * pwm + e01 * v, 8, 50);
-
-  return maxThrust;
-}
-
-// set thrust for motor (in grams)
-void motorsSetThrust(uint32_t id, float thrustGram)
-{
-  if (motorMap[id]->drvType == BRUSHED)
-  {
-    if (thrustGram > 0) {
-      // normalized voltage
-      float v = pmGetBatteryVoltage() / 4.2f;
-      // normalized pwm:
-      float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
-
-      motor_ratios[id] = pwm * UINT16_MAX;
-    } else {
-      motor_ratios[id] = 0;
-    }
-
-    motorMap[id]->setCompare(motorMap[id]->tim, motorsConv16ToBits(motor_ratios[id]));
-  } else {
-    ASSERT(false);
-  }
 }
 
 void motorsBeep(int id, bool enable, uint16_t frequency, uint16_t ratio)
@@ -828,28 +775,5 @@ LOG_ADD(LOG_UINT16, m3_pwm, &motor_ratios[2])
 /**
  * @brief Current motor 4 PWM output
  */ 
-LOG_ADD(LOG_UINT32, m4_pwm, &motor_ratios[3])
-/**
- * @brief Cycle time of M1 output in microseconds
- */
-LOG_ADD(LOG_UINT32, cycletime, &cycleTime)
-
-LOG_ADD(LOG_FLOAT, maxThrust, &maxThrust)
+LOG_ADD(LOG_UINT16, m4_pwm, &motor_ratios[3])
 LOG_GROUP_STOP(pwm)
-
-PARAM_GROUP_START(pwm)
-
-  PARAM_ADD(PARAM_FLOAT, d00, &d00)
-  PARAM_ADD(PARAM_FLOAT, d10, &d10)
-  PARAM_ADD(PARAM_FLOAT, d01, &d01)
-  PARAM_ADD(PARAM_FLOAT, d20, &d20)
-  PARAM_ADD(PARAM_FLOAT, d11, &d11)
-
-  PARAM_ADD(PARAM_FLOAT, e00, &e00)
-  PARAM_ADD(PARAM_FLOAT, e10, &e10)
-  PARAM_ADD(PARAM_FLOAT, e01, &e01)
-  
-  PARAM_ADD(PARAM_UINT8, new_thrust_comp, &new_thrust_comp)
-
-
-PARAM_GROUP_STOP(pwm)
