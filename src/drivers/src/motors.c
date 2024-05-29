@@ -116,6 +116,7 @@ static bool isInit = false;
 static uint64_t lastCycleTime;
 static uint32_t cycleTime;
 
+
 /* Private functions */
 
 #ifndef CONFIG_MOTORS_ESC_PROTOCOL_DSHOT
