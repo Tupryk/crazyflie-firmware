@@ -32,7 +32,7 @@
 #include "lighthouse_types.h"
 #include "math3d.h"
 
-#define MAX_TEAM_SIZE (12)
+#define MAX_TEAM_SIZE (3)
 
 /* Data structure used by the stabilizer subsystem.
  * All have a timestamp to be set when the data is calculated.
