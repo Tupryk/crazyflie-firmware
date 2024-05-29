@@ -39,9 +39,6 @@ static ControllerFcns controllerFunctions[] = {
   #ifdef CONFIG_CONTROLLER_OOT
   {.init = controllerOutOfTreeInit, .test = controllerOutOfTreeTest, .update = controllerOutOfTree, .name = "OutOfTree"},
   #endif
-  #ifdef CONFIG_CONTROLLER_OOT
-  {.init = controllerOutOfTreeInit, .test = controllerOutOfTreeTest, .update = controllerOutOfTree, .name = "OutOfTree"},
-  #endif
 };
 
 
