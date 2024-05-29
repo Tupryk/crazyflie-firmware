@@ -162,7 +162,7 @@ void radiolinkSyslinkDispatch(SyslinkPacket *slp)
   if (slp->type == SYSLINK_RADIO_RAW)
   {
     slp->length--; // Decrease to get CRTP size.
-    // Assert that we are not dopping any packets
+    // Assert that we are not dropping any packets
     ASSERT(xQueueSend(crtpPacketDelivery, &slp->length, 0) == pdPASS);
     ++count_rx_unicast;
     ledseqRun(&seq_linkUp);

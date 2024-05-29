@@ -27,17 +27,17 @@ choice
 
 config PLATFORM_CF2
     bool "Build for CF2"
-    select SENSORS_BMI088_BMP388
+    select SENSORS_BMI088_BMP3XX
     select SENSORS_MPU9250_LPS25H
 
 config PLATFORM_BOLT
     bool "Build for Bolt"
-    select SENSORS_BMI088_BMP388
+    select SENSORS_BMI088_BMP3XX
     select SENSORS_BMI088_SPI
 
 config PLATFORM_TAG
     bool "Build for the roadrunner"
-    select SENSORS_BMI088_BMP388
+    select SENSORS_BMI088_BMP3XX
 
 endchoice
 ```
@@ -53,21 +53,21 @@ choice
 
 config PLATFORM_CF2
     bool "Build for CF2"
-    select SENSORS_BMI088_BMP388
+    select SENSORS_BMI088_BMP3XX
     select SENSORS_MPU9250_LPS25H
 
 config PLATFORM_BOLT
     bool "Build for Bolt"
-    select SENSORS_BMI088_BMP388
+    select SENSORS_BMI088_BMP3XX
     select SENSORS_BMI088_SPI
 
 config PLATFORM_TAG
     bool "Build for the roadrunner"
-    select SENSORS_BMI088_BMP388
+    select SENSORS_BMI088_BMP3XX
 
 config PLATFORM_RINCEWIND
     bool "Build for the Rincewind platform"
-    select SENSORS_BMI088_BMP388
+    select SENSORS_BMI088_BMP3XX
     select SENSORS_BMI088_SPI
 
 endchoice
@@ -116,7 +116,7 @@ static platformConfig_t configs[] = {
   {
     .deviceType = "CB10",
     .deviceTypeName = "Rincewind",
-    .sensorImplementation = SensorImplementation_bmi088_spi_bmp388,
+    .sensorImplementation = SensorImplementation_bmi088_spi_bmp3xx,
     .physicalLayoutAntennasAreClose = false,
     .motorMap = motorMapBoltBrushless,
   }
@@ -195,8 +195,8 @@ To make it easier for people to build for `RINCEWIND` we can add a `defconfig` f
 ```Makefile
 CONFIG_PLATFORM_BOLT=y
 
-CONFIG_ESTIMATOR_ANY=y
-CONFIG_CONTROLLER_ANY=y
+CONFIG_ESTIMATOR_AUTO_SELECT=y
+CONFIG_CONTROLLER_AUTO_SELECT=y
 ```
 
 Based on this a start of `rincewind_defconfig` could be:
@@ -204,8 +204,8 @@ Based on this a start of `rincewind_defconfig` could be:
 ```Makefile
 CONFIG_PLATFORM_RINCEWIND=y
 
-CONFIG_ESTIMATOR_ANY=y
-CONFIG_CONTROLLER_ANY=y
+CONFIG_ESTIMATOR_AUTO_SELECT=y
+CONFIG_CONTROLLER_AUTO_SELECT=y
 ```
 
 Then `RINCEWIND` platform could be built by:
@@ -270,7 +270,8 @@ endchoice
 
 The next step is to add an implementation of the power distribution function. Copy
 `power_distribution_quadrotor.c` into a new file, `power_distribution_car.c` and modify the
-`powerDistribution()` function to fit your needs.
+`powerDistribution()` function to fit your needs. Also modify the `powerDistributionCap()`, this function is responsible
+for limiting the thrust to the valid range [0 - UINT16_MAX].
 
 The final step is to add the c file to the build. Open `src/modules/src/Kbuild` and add your new file.
 ```Makefile

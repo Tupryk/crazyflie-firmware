@@ -5,8 +5,6 @@
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
  *
- * LPS node firmware.
- *
  * Copyright 2019, Bitcraze AB
  *
  * This program is free software: you can redistribute it and/or modify
@@ -48,7 +46,7 @@ void __attribute__((weak)) appInit()
     return;
   }
 
-  STATIC_MEM_TASK_CREATE(appTask, appTask, "app", NULL, CONFIG_APP_PRIORITY);
+  STATIC_MEM_TASK_CREATE(appTask, appTask, APP_TASK_NAME, NULL, CONFIG_APP_PRIORITY);
   isInit = true;
 }
 

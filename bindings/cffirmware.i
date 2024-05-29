@@ -58,10 +58,16 @@
 #include "filter.h"
 #include "num.h"
 #include "controller_mellinger.h"
+#include "controller_brescianini.h"
+#include "controller_lee.h"
 #include "power_distribution.h"
 #include "controller_sjc.h"
 #include "controller_lee.h"
 #include "controller_lee_payload.h"
+#include "axis3fSubSampler.h"
+#include "outlierFilterTdoa.h"
+#include "kalman_core.h"
+#include "mm_tdoa.h"
 %}
 
 %include "math3d.h"
@@ -72,10 +78,17 @@
 %include "controller_pid.h"
 %include "imu_types.h"
 %include "controller_mellinger.h"
+%include "controller_brescianini.h"
+%include "controller_lee.h"
 %include "power_distribution.h"
 %include "controller_sjc.h"
 %include "controller_lee.h"
 %include "controller_lee_payload.h"
+%include "axis3fSubSampler.h"
+%include "outlierFilterTdoa.h"
+%include "kalman_core.h"
+%include "mm_tdoa.h"
+
 
 %inline %{
 struct poly4d* piecewise_get(struct piecewise_traj *pp, int i)
@@ -174,6 +187,13 @@ void controller_lee_payload_set_Pinv(controllerLeePayload_t* self, int idx, int 
     self->Pinvs[idx].id1 = id1;
     self->Pinvs[idx].id2 = id2;
     self->Pinvs[idx].Pinv.m[row][column] = value;
+}
+
+void assertFail(char *exp, char *file, int line) {
+    char buf[150];
+    sprintf(buf, "%s in File: \"%s\", line %d\n", exp, file, line);
+
+    PyErr_SetString(PyExc_AssertionError, buf);
 }
 %}
 

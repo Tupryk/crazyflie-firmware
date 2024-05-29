@@ -38,8 +38,10 @@
 #include "usb.h"
 #include "motors.h"
 #include "serial_4way.h"
+#include "msp.h"
 #include "uart_syslink.h"
 #include "sensors.h"
+#include "param.h"
 
 static TaskHandle_t passthroughTaskHandle;
 STATIC_MEM_TASK_ALLOC(passthroughTask, PASSTHROUGH_TASK_STACKSIZE);
@@ -51,6 +53,14 @@ static xQueueHandle  ptRxQueue;
 STATIC_MEM_QUEUE_ALLOC(ptRxQueue, 512, sizeof(uint8_t));
 static xQueueHandle  ptTxQueue;
 STATIC_MEM_QUEUE_ALLOC(ptTxQueue, 512, sizeof(uint8_t));
+
+// Helper
+/*
+ * Performs a "handshake" that BLHeli Configurator uses during the connection.
+ * This "handshake" is done by sending some special MSP commands and responses.
+ * This method blocks until the handshake is complete.
+ */
+static void blHeliConfigHandshake();
 
 void passthroughTask(void *param);
 
@@ -102,12 +112,16 @@ void passthroughVcpTxSend(uint8_t Ch)
   ASSERT(xQueueSend(ptTxQueue, &Ch, 0) == pdTRUE);
 }
 
-int  passthroughVcpTxReceiveFromISR(uint8_t* receiveChPtr)
+void passthroughVcpTxSendBlock(uint8_t Ch)
+{
+  ASSERT(xQueueSend(ptTxQueue, &Ch, portMAX_DELAY) == pdTRUE);
+}
+
+int passthroughVcpTxReceiveFromISR(uint8_t* receiveChPtr)
 {
   BaseType_t xHigherPriorityTaskWoken;
   return xQueueReceiveFromISR(ptTxQueue, receiveChPtr, &xHigherPriorityTaskWoken);
 }
-
 
 void passthroughTask(void *param)
 {
@@ -117,6 +131,9 @@ void passthroughTask(void *param)
   {
     // Wait for interface to be activated, typically when ACM or COM port control message is sent
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    // Before we start the 4way process, we must perform a "handshake" with the blheli configurator.
+    blHeliConfigHandshake();
 
     // ESC 1-wire interface is bit-banging so some interrupts must be suspended
     uartslkPauseRx();
@@ -131,8 +148,51 @@ void passthroughTask(void *param)
     uartslkResumeRx();
     sensorsResume();
 
+    // The ability to set the powers of the motors directly might be changed
+    // during the 4way process (for instance while using the motor sliders in ESC Configurator ).
+    // Here we'll just make sure that the ability is set to false, so we don't accidentally start the motors.
+    paramVarId_t motorPowerSetEnableParam;
+    motorPowerSetEnableParam = paramGetVarId("motorPowerSet", "enable");
+    paramSetInt(motorPowerSetEnableParam, 0);
+
     // Clear any notifications that was queued during 4way process.
     ulTaskNotifyValueClear(NULL, 0xFFFFFFFF);
   }
 }
 
+static uint8_t readByteBlocking()
+{
+    uint8_t byte;
+    passthroughVcpRxReceiveBlock(&byte);
+    return byte;
+}
+
+static void mspCallback(uint8_t* pBuffer, uint32_t bufferLen)
+{
+  // Sent all data through serial
+  for (int i = 0; i < bufferLen; i++)
+  {
+    uint8_t byte = pBuffer[i];
+    passthroughVcpTxSendBlock(byte);
+  }
+}
+
+static void blHeliConfigHandshake()
+{
+  static bool isInit = false;
+  static MspObject pMspObject;
+
+  if (!isInit)
+  {
+    isInit = true;
+    mspInit(&pMspObject, mspCallback);
+  }
+
+  while (!mspHasSet4WayIf())
+  {
+    uint8_t byte = readByteBlocking();
+    mspProcessByte(&pMspObject, byte);
+  }
+
+  mspResetSet4WayIf();
+}

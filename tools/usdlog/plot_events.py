@@ -21,8 +21,6 @@ if __name__ == "__main__":
 
     # decode binary log data
     data_usd = cfusdlog.decode(args.file_usd)
-    # print(data_usd)
-    # exit()
 
     # find start time
     start_time = None
@@ -33,11 +31,10 @@ if __name__ == "__main__":
             start_time = min(start_time, data['timestamp'][0])
 
     # new figure
-    plt.rcParams.update({'font.size': 8})
     fig, ax = plt.subplots(len(data_usd.keys()),1,sharex=True,squeeze=False)
 
     for k, (event_name, data) in enumerate(data_usd.items()):
-        print(k, event_name)
+        # print(k, event_name)
         t = (data['timestamp'] - start_time) / 1000
         ax[k,0].scatter(t, t*0)
         ax[k,0].set_title(event_name)

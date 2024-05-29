@@ -7,7 +7,7 @@
  *
  * Crazyflie control firmware
  *
- * Copyright (C) 2011-2013 Bitcraze AB
+ * Copyright (C) 2011-2023 Bitcraze AB
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,6 +37,8 @@
 #include "commander.h"
 #include "uart1.h"
 #include "cppm.h"
+#include "crtp_commander.h"
+#include "supervisor.h"
 
 #define DEBUG_MODULE  "EXTRX"
 #include "debug.h"
@@ -71,13 +73,11 @@
 
 #define EXTRX_CH_ALTHOLD   4
 #define EXTRX_CH_ARM       5
+#define EXTRX_CH_MODE     6
 
 #define EXTRX_SIGN_ALTHOLD   (-1)
 #define EXTRX_SIGN_ARM       (-1)
-
-#define EXTRX_SCALE_ROLL   (40.0f)
-#define EXTRX_SCALE_PITCH  (40.0f)
-#define EXTRX_SCALE_YAW    (200.0f)
+#define EXTRX_SIGN_MODE       (-1)
 
 #define EXTRX_DEADBAND_ROLL (0.05f)
 #define EXTRX_DEADBAND_PITCH (0.05f)
@@ -87,24 +87,23 @@
 
 bool extRxArm = false;
 bool extRxAltHold = false;
-  
-#ifndef EXTRX_ARMING
-  #define EXTRX_ARMING    false
-#endif
-#if EXTRX_ARMING
+bool extRxModeRate = false;
+
+#if CONFIG_DECK_EXTRX_ARMING
   bool extRxArmPrev = false;
   int8_t arm_cnt = 0;
 #endif
 
-#ifndef EXTRX_ALT_HOLD
-  #define EXTRX_ALT_HOLD    false
-#endif
-#if EXTRX_ALT_HOLD
+#if CONFIG_DECK_EXTRX_ALT_HOLD
   #define EXTRX_DEADBAND_ZVEL  (0.25f)
   bool extRxAltHoldPrev = false;
   int8_t altHold_cnt = 0;
 #endif
 
+#if CONFIG_DECK_EXTRX_MODE_RATE
+  bool extRxModeRatePrev = false;
+  int8_t modeRate_cnt = 0;
+#endif
 
 static setpoint_t extrxSetpoint;
 static uint16_t ch[EXTRX_NR_CHANNELS] = {0};
@@ -125,7 +124,7 @@ void extRxInit(void)
 
 #ifdef ENABLE_CPPM
   cppmInit();
-  #ifdef EXTRX_TAER
+  #ifdef CONFIG_DECK_EXTRX_TAER
     DEBUG_PRINT("CPPM initialized, expecting TAER channel mapping\n");
   #else
     DEBUG_PRINT("CPPM initialized, expecting AETR channel mapping\n");
@@ -155,17 +154,20 @@ static void extRxTask(void *param)
 
 static void extRxDecodeChannels(void)
 {
-  
-  #if EXTRX_ARMING
+
+  #if CONFIG_DECK_EXTRX_ARMING
   if (EXTRX_SIGN_ARM * cppmConvert2Float(ch[EXTRX_CH_ARM], -1, 1, 0.0) > 0.5f) // channel needs to be 75% or more to work correctly with 2/3 way switches
   {
     if (arm_cnt < EXTRX_SWITCH_MIN_CNT) arm_cnt++;
     else extRxArm = true;
-    
+
     if (extRxArmPrev != extRxArm)
     {
-      DEBUG_PRINT("Engines armed\n");
-      systemSetArmed(extRxArm);
+      if (supervisorRequestArming(extRxArm)) {
+        DEBUG_PRINT("System armed\n");
+      } else {
+        DEBUG_PRINT("Arming failed\n");
+      }
     }
   }
   else
@@ -175,15 +177,15 @@ static void extRxDecodeChannels(void)
 
     if (extRxArmPrev != extRxArm)
     {
-      DEBUG_PRINT("Engines unarmed\n");
-      systemSetArmed(extRxArm);
+      DEBUG_PRINT("System unarmed\n");
+      supervisorRequestArming(extRxArm);
     }
   }
 
   extRxArmPrev = extRxArm;
   #endif
 
-  #if EXTRX_ALT_HOLD
+  #if CONFIG_DECK_EXTRX_ALT_HOLD
   if (EXTRX_SIGN_ALTHOLD * cppmConvert2Float(ch[EXTRX_CH_ALTHOLD], -1, 1, 0.0) > 0.5f)
   {
     if (altHold_cnt < EXTRX_SWITCH_MIN_CNT) altHold_cnt++;
@@ -199,28 +201,66 @@ static void extRxDecodeChannels(void)
     if (extRxAltHoldPrev != extRxAltHold) DEBUG_PRINT("Althold mode OFF\n");
   }
 
-  if (extRxAltHold) 
+  if (extRxAltHold)
   {
     extrxSetpoint.thrust = 0;
     extrxSetpoint.mode.z = modeVelocity;
 
     extrxSetpoint.velocity.z = cppmConvert2Float(ch[EXTRX_CH_THRUST], -1, 1, EXTRX_DEADBAND_ZVEL);
-  } 
-  else 
+  }
+  else
   {
     extrxSetpoint.mode.z = modeDisable;
     extrxSetpoint.thrust = cppmConvert2uint16(ch[EXTRX_CH_THRUST]);
   }
-  
+
   extRxAltHoldPrev = extRxAltHold;
   #else
+
   extrxSetpoint.mode.z = modeDisable;
   extrxSetpoint.thrust = cppmConvert2uint16(ch[EXTRX_CH_THRUST]);
   #endif
-  
-  extrxSetpoint.attitude.roll = EXTRX_SIGN_ROLL * EXTRX_SCALE_ROLL * cppmConvert2Float(ch[EXTRX_CH_ROLL], -1, 1, EXTRX_DEADBAND_ROLL);
-  extrxSetpoint.attitude.pitch = EXTRX_SIGN_PITCH * EXTRX_SCALE_PITCH * cppmConvert2Float(ch[EXTRX_CH_PITCH], -1, 1, EXTRX_DEADBAND_PITCH);
-  extrxSetpoint.attitudeRate.yaw = EXTRX_SIGN_YAW * EXTRX_SCALE_YAW *cppmConvert2Float(ch[EXTRX_CH_YAW], -1, 1, EXTRX_DEADBAND_YAW);
+
+  #if CONFIG_DECK_EXTRX_MODE_RATE
+  if (EXTRX_SIGN_MODE * cppmConvert2Float(ch[EXTRX_CH_MODE], -1, 1, 0.0) > 0.5f) // channel needs to be 75% or more to work correctly with 2/3 way switches
+  {
+    if (modeRate_cnt < EXTRX_SWITCH_MIN_CNT) modeRate_cnt++;
+    else extRxModeRate = true;
+
+    if (extRxModeRatePrev != extRxModeRate)
+    {
+      DEBUG_PRINT("Switched to rate mode\n");
+      extrxSetpoint.mode.roll = modeVelocity;
+      extrxSetpoint.mode.pitch = modeVelocity;
+    }
+  }
+  else
+  {
+    if (modeRate_cnt > 0) modeRate_cnt--;
+    else extRxModeRate = false;
+
+    if (extRxModeRatePrev != extRxModeRate)
+    {
+      DEBUG_PRINT("Switched to level mode\n");
+      extrxSetpoint.mode.roll = modeAbs;
+      extrxSetpoint.mode.pitch = modeAbs;
+    }
+  }
+
+  extRxModeRatePrev = extRxModeRate;
+  #endif
+
+  if (extRxModeRate)
+  {
+    extrxSetpoint.attitudeRate.roll = EXTRX_SIGN_ROLL * getCPPMRollRateScale() * cppmConvert2Float(ch[EXTRX_CH_ROLL], -1, 1, EXTRX_DEADBAND_ROLL);
+    extrxSetpoint.attitudeRate.pitch = EXTRX_SIGN_PITCH * getCPPMPitchRateScale() * cppmConvert2Float(ch[EXTRX_CH_PITCH], -1, 1, EXTRX_DEADBAND_PITCH);
+  }
+  else
+  {
+    extrxSetpoint.attitude.roll = EXTRX_SIGN_ROLL * getCPPMRollScale() * cppmConvert2Float(ch[EXTRX_CH_ROLL], -1, 1, EXTRX_DEADBAND_ROLL);
+    extrxSetpoint.attitude.pitch = EXTRX_SIGN_PITCH * getCPPMPitchScale() * cppmConvert2Float(ch[EXTRX_CH_PITCH], -1, 1, EXTRX_DEADBAND_PITCH);
+  }
+  extrxSetpoint.attitudeRate.yaw = EXTRX_SIGN_YAW * getCPPMYawRateScale() * cppmConvert2Float(ch[EXTRX_CH_YAW], -1, 1, EXTRX_DEADBAND_YAW);
 
   commanderSetSetpoint(&extrxSetpoint, COMMANDER_PRIORITY_EXTRX);
 }
@@ -332,8 +372,8 @@ LOG_ADD(LOG_UINT16, ch7, &ch[7])
 LOG_GROUP_STOP(extrx_raw)
 
 /**
- * External receiver (RX) log group. This contains setpoints for 
- * thrust, roll, pitch, yaw rate, z velocity, and arming and 
+ * External receiver (RX) log group. This contains setpoints for
+ * thrust, roll, pitch, yaw rate, z velocity, and arming and
  * altitude-hold signals
  */
 LOG_GROUP_START(extrx)
@@ -349,6 +389,14 @@ LOG_ADD(LOG_FLOAT, roll, &extrxSetpoint.attitude.roll)
  * @brief External RX pitch setpoint
  */
 LOG_ADD(LOG_FLOAT, pitch, &extrxSetpoint.attitude.pitch)
+/**
+ * @brief External RX roll rate setpoint
+ */
+LOG_ADD(LOG_FLOAT, rollRate, &extrxSetpoint.attitudeRate.roll)
+/**
+ * @brief External RX pitch rate setpoint
+ */
+LOG_ADD(LOG_FLOAT, pitchRate, &extrxSetpoint.attitudeRate.pitch)
 /**
  * @brief External RX yaw rate setpoint
  */

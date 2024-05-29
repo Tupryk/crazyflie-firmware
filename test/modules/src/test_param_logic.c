@@ -9,7 +9,6 @@
 #include "unity.h"
 
 #include "mock_crtp.h"
-#include "mock_cfassert.h"
 #include "mock_storage.h"
 #include "crc32.h"
 
@@ -32,6 +31,7 @@ static int8_t myInt8 = 0;
 static int16_t myInt16 = 0;
 static int32_t myInt32 = 0;
 static int32_t myPersistent = 0;
+static float myPersistentFloat = 0;
 static int8_t myShortPersistent = 0;
 static float myFloat = 0.0f;
 
@@ -50,6 +50,7 @@ PARAM_ADD(PARAM_INT16, myInt16, &myInt16)
 PARAM_ADD(PARAM_INT32, myInt32, &myInt32)
 PARAM_ADD(PARAM_FLOAT, myFloat, &myFloat)
 PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, myPersistent, &myPersistent)
+PARAM_ADD_CORE(PARAM_FLOAT | PARAM_PERSISTENT, myPersistentFloat, &myPersistentFloat)
 PARAM_ADD_CORE(PARAM_INT8 | PARAM_PERSISTENT, myShortPersistent, &myShortPersistent)
 PARAM_GROUP_STOP(myGroup)
 
@@ -82,7 +83,8 @@ void testSetUint8(void) {
   // Fixture
   uint8_t expected = UINT8_MAX - 1;
 
-  crtpSendPacketBlock_StubWithCallback(crtpReply);
+  crtpIsConnected_IgnoreAndReturn(0);
+  crtpSendPacket_StubWithCallback(crtpReply);
   paramVarId_t varid = paramGetVarId("myGroup", "myUint8");
 
   // Test
@@ -96,7 +98,8 @@ void testSetUint16(void) {
   // Fixture
   uint16_t expected = UINT16_MAX - 1;
 
-  crtpSendPacketBlock_StubWithCallback(crtpReply);
+  crtpIsConnected_IgnoreAndReturn(0);
+  crtpSendPacket_StubWithCallback(crtpReply);
   paramVarId_t varid = paramGetVarId("myGroup", "myUint16");
 
   // Test
@@ -110,7 +113,8 @@ void testSetUint32(void) {
   // Fixture
   uint32_t expected = UINT32_MAX - 1;
 
-  crtpSendPacketBlock_StubWithCallback(crtpReply);
+  crtpIsConnected_IgnoreAndReturn(0);
+  crtpSendPacket_StubWithCallback(crtpReply);
   paramVarId_t varid = paramGetVarId("myGroup", "myUint32");
 
   // Test
@@ -124,7 +128,8 @@ void testSetInt8(void) {
   // Fixture
   uint8_t expected = INT8_MAX - 1;
 
-  crtpSendPacketBlock_StubWithCallback(crtpReply);
+  crtpIsConnected_IgnoreAndReturn(0);
+  crtpSendPacket_StubWithCallback(crtpReply);
   paramVarId_t varid = paramGetVarId("myGroup", "myInt8");
 
   // Test
@@ -138,7 +143,8 @@ void testSetInt16(void) {
   // Fixture
   uint16_t expected =UINT16_MAX - 1;
 
-  crtpSendPacketBlock_StubWithCallback(crtpReply);
+  crtpIsConnected_IgnoreAndReturn(0);
+  crtpSendPacket_StubWithCallback(crtpReply);
   paramVarId_t varid = paramGetVarId("myGroup", "myInt16");
 
   // Test
@@ -152,7 +158,8 @@ void testSetInt32(void) {
   // Fixture
   uint32_t expected = INT32_MAX - 1;
 
-  crtpSendPacketBlock_StubWithCallback(crtpReply);
+  crtpIsConnected_IgnoreAndReturn(0);
+  crtpSendPacket_StubWithCallback(crtpReply);
   paramVarId_t varid = paramGetVarId("myGroup", "myInt32");
 
   // Test
@@ -171,7 +178,7 @@ void testGetUint8(void) {
   paramVarId_t varid = paramGetVarId("myGroup", "myUint8");
 
   // Test
-  const float actual = paramGetInt(varid);
+  const uint8_t actual = paramGetInt(varid);
 
   // Assert
   TEST_ASSERT_EQUAL_UINT8(expected, actual);
@@ -185,7 +192,7 @@ void testGetUint16(void) {
   paramVarId_t varid = paramGetVarId("myGroup", "myUint16");
 
   // Test
-  const float actual = paramGetInt(varid);
+  const uint16_t actual = paramGetInt(varid);
 
   // Assert
   TEST_ASSERT_EQUAL_UINT16(expected, actual);
@@ -199,7 +206,7 @@ void testGetUint32(void) {
   paramVarId_t varid = paramGetVarId("myGroup", "myUint32");
 
   // Test
-  const float actual = paramGetInt(varid);
+  const uint32_t actual = paramGetInt(varid);
 
   // Assert
   TEST_ASSERT_EQUAL_UINT32(expected, actual);
@@ -213,7 +220,7 @@ void testGetInt8(void) {
   paramVarId_t varid = paramGetVarId("myGroup", "myInt8");
 
   // Test
-  const float actual = paramGetInt(varid);
+  const int8_t actual = paramGetInt(varid);
 
   // Assert
   TEST_ASSERT_EQUAL_INT8(expected, actual);
@@ -227,7 +234,7 @@ void testGetInt16(void) {
   paramVarId_t varid = paramGetVarId("myGroup", "myInt16");
 
   // Test
-  const float actual = paramGetInt(varid);
+  const int16_t actual = paramGetInt(varid);
 
   // Assert
   TEST_ASSERT_EQUAL_INT16(expected, actual);
@@ -241,7 +248,7 @@ void testGetInt32(void) {
   paramVarId_t varid = paramGetVarId("myGroup", "myInt32");
 
   // Test
-  const float actual = paramGetInt(varid);
+  const int32_t actual = paramGetInt(varid);
 
   // Assert
   TEST_ASSERT_EQUAL_INT32(expected, actual);
@@ -255,6 +262,24 @@ void testGetFloat(void) {
 
   // Test
   const float actual = paramGetFloat(varid);
+
+  // Assert
+  TEST_ASSERT_EQUAL_FLOAT(expected, actual);
+}
+
+void testPersistentSetGetFloat(void) {
+  // Fixture
+  float expected = 10.88f;
+  float actual;
+
+  paramVarId_t varid = paramGetVarId("myGroup", "myPersistentFloat");
+
+  crtpIsConnected_IgnoreAndReturn(0);
+  crtpSendPacket_StubWithCallback(crtpReply);
+
+  // Test
+  paramSetFloat(varid, expected);
+  actual = paramGetFloat(varid);
 
   // Assert
   TEST_ASSERT_EQUAL_FLOAT(expected, actual);

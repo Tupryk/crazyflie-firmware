@@ -62,7 +62,7 @@ class CollectData:
         # The definition of the logconfig can be made before connecting
         self._lg_stab = LogConfig(name='data', period_in_ms=10)
         self._lg_stab.add_variable('loadcell.weight', 'float')
-        self._lg_stab.add_variable('pwm.m1_pwm', 'uint16_t')
+        self._lg_stab.add_variable('motor.m1', 'uint16_t')
         self._lg_stab.add_variable('pm.vbat', 'float')
         self._lg_stab.add_variable('rpm.m1', 'uint16_t')
         self._lg_stab.add_variable('rpm.m2', 'uint16_t')
@@ -103,8 +103,8 @@ class CollectData:
     def _stab_log_data(self, timestamp, data, logconf):
         """Callback froma the log API when data arrives"""
         # print('[%d][%s]: %s' % (timestamp, logconf.name, data))
-        # self._file.write("{},{},{}\n".format(data['loadcell.weight'], data['pwm.m1_pwm'], data['pm.vbat']))
-        if self.desiredThrust == data['pwm.m1_pwm']:
+        # self._file.write("{},{},{}\n".format(data['loadcell.weight'], data['motor.m1'], data['pm.vbat']))
+        if self.desiredThrust == data['motor.m1']:
             self.measurements.append(np.array([data['loadcell.weight'], data['pm.vbat']]))
         # pass
 
@@ -137,10 +137,8 @@ class CollectData:
 
     def _ramp_motors(self):
 
-        self._cf.param.set_value('motor.batCompensation', 0)
         self._cf.param.set_value('motorPowerSet.m1', 0)
         self._cf.param.set_value('motorPowerSet.enable', 2)
-        self._cf.param.set_value('system.forceArm', 1)
 
         while self.is_connected: #thrust >= 0:
             # randomply sample PWM

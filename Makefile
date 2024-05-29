@@ -37,7 +37,7 @@ LIB = $(srctree)/src/lib
 PROCESSOR = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
 LINKER_DIR = $(srctree)/tools/make/F405/linker
 
-LDFLAGS += --specs=nosys.specs --specs=nano.specs $(PROCESSOR) -nostdlib
+LDFLAGS += --specs=nosys.specs --specs=nano.specs $(PROCESSOR)
 image_LDFLAGS += -Wl,-Map=$(PROG).map,--cref,--gc-sections,--undefined=uxTopUsedPriority
 image_LDFLAGS += -L$(srctree)/tools/make/F405/linker
 image_LDFLAGS += -T $(LINKER_DIR)/FLASH_CLOAD.ld
@@ -51,7 +51,8 @@ INCLUDES += -I$(srctree)/src/deck/interface -I$(srctree)/src/deck/drivers/interf
 INCLUDES += -I$(srctree)/src/drivers/interface -I$(srctree)/src/drivers/bosch/interface
 INCLUDES += -I$(srctree)/src/drivers/esp32/interface
 INCLUDES += -I$(srctree)/src/hal/interface
-INCLUDES += -I$(srctree)/src/modules/interface -I$(srctree)/src/modules/interface/kalman_core -I$(srctree)/src/modules/interface/lighthouse
+INCLUDES += -I$(srctree)/src/modules/interface -I$(srctree)/src/modules/interface/kalman_core -I$(srctree)/src/modules/interface/lighthouse  -I$(srctree)/src/modules/interface/outlierfilter
+INCLUDES += -I$(srctree)/src/modules/interface/cpx -I$(srctree)/src/modules/interface/p2pDTR -I$(srctree)/src/modules/interface/controller  -I$(srctree)/src/modules/interface/estimator
 INCLUDES += -I$(srctree)/src/utils/interface -I$(srctree)/src/utils/interface/kve -I$(srctree)/src/utils/interface/lighthouse -I$(srctree)/src/utils/interface/tdoa
 INCLUDES += -I$(LIB)/FatFS
 INCLUDES += -I$(LIB)/CMSIS/STM32F4xx/Include
@@ -103,6 +104,11 @@ ifeq ($(CONFIG_PLATFORM_BOLT), y)
 PLATFORM = bolt
 endif
 
+ifeq ($(CONFIG_PLATFORM_FLAPPER),y)
+PLATFORM = flapper
+endif
+
+
 PLATFORM  ?= cf2
 PROG ?= $(PLATFORM)
 
@@ -115,16 +121,9 @@ endif
 _all:
 
 all: $(PROG).hex $(PROG).bin
-	@echo "Build for the $(PLATFORM)!"
+	@echo "Build for the $(PLATFORM) platform!"
 	@$(PYTHON) $(srctree)/tools/make/versionTemplate.py --crazyflie-base $(srctree) --print-version
 	@$(PYTHON) $(srctree)/tools/make/size.py $(SIZE) $(PROG).elf $(MEM_SIZE_FLASH_K) $(MEM_SIZE_RAM_K) $(MEM_SIZE_CCM_K)
-
-	#
-	# Create symlinks to the ouput files in the build directory
-	#
-	for f in $$(ls $(PROG).*); do \
-		ln -sf $(KBUILD_OUTPUT)/$$f $(srctree)/$$(basename $$f); \
-	done
 
 include tools/make/targets.mk
 
@@ -165,12 +164,12 @@ flash_verify:
 #sends a usb message to the CF to place it in DFU mode, then updates firmware over usb
 flash_dfu:
 	$(PYTHON) $(srctree)/tools/make/usb-bootloader.py
-	$(DFU_UTIL) -d 0483:df11 -a 0 -s 0x08004000:leave -D $(PROG).bin 
+	$(DFU_UTIL) -d 0483:df11 -a 0 -s 0x08004000:leave -D $(PROG).bin
 
 #uses the dfu utility to flash the firmware at 0x08004000, just after the bootloader
 #call this target directly if CF cannont be flashed automatically through flash_dfu
 flash_dfu_manual:
-	$(DFU_UTIL) -d 0483:df11 -a 0 -s 0x08004000:leave -D $(PROG).bin 
+	$(DFU_UTIL) -d 0483:df11 -a 0 -s 0x08004000:leave -D $(PROG).bin
 
 #STM utility targets
 halt:
@@ -211,14 +210,16 @@ ifeq ($(KBUILD_SRC),)
 MOD_INC = src/modules/interface
 MOD_SRC = src/modules/src
 
-bindings_python cffirmware.py: bindings/setup.py $(MOD_SRC)/*.c
-	swig -python -I$(MOD_INC) -Isrc/hal/interface -Isrc/utils/interface -o build/cffirmware_wrap.c bindings/cffirmware.i
+bindings_python build/cffirmware.py: bindings/setup.py $(MOD_SRC)/*.c
+	swig -python -I$(MOD_INC) -Isrc/hal/interface -Isrc/utils/interface -I$(MOD_INC)/controller -Isrc/platform/interface -I$(MOD_INC)/outlierfilter -I$(MOD_INC)/kalman_core -o build/cffirmware_wrap.c bindings/cffirmware.i
 	$(PYTHON) bindings/setup.py build_ext --inplace
-	mv build/cffirmware.py cffirmware.py
+	cp cffirmware_setup.py build/setup.py
 
-test_python: cffirmware.py
-	$(PYTHON) -m pytest test_python
+test_python: build/cffirmware.py
+	PYTHONPATH=build $(PYTHON) -m pytest test_python
+
+python_wheel: build/cffirmware.py
+	$(PYTHON) bindings/setup.py bdist_wheel
 endif
 
-.PHONY: all clean build compile unit prep erase flash check_submodules trace openocd gdb halt reset flash_dfu flash_dfu_manual flash_verify cload size print_version clean_version bindings_python
-
+.PHONY: all clean build compile unit prep erase flash check_submodules trace openocd gdb halt reset flash_dfu flash_dfu_manual flash_verify cload size print_version clean_version bindings_python test_python python_wheel

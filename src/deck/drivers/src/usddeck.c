@@ -809,7 +809,6 @@ static void usdWriteData(const void *data, size_t size)
 {
   UINT bytesWritten;
   FRESULT status = f_write(&logFile, data, size, &bytesWritten);
-  // ASSERT(status == FR_OK);
   if (status != FR_OK) {
     DEBUG_PRINT("usd deck write failure %d\n", status);
     enableLogging = false;

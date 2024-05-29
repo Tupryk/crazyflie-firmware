@@ -43,13 +43,14 @@
 #include "nvicconf.h"
 #include "static_mem.h"
 
-/** This uart is conflicting with SPI2 DMA used in sensors_bmi088_spi_bmp388.c
+/** This uart is conflicting with SPI2 DMA used in sensors_bmi088_spi_bmp3xx.c
  *  which is used in CF-Bolt. So for other products this can be enabled.
  */
 //#define ENABLE_UART1_DMA
 
+#define QUEUE_LENGTH 64
 static xQueueHandle uart1queue;
-STATIC_MEM_QUEUE_ALLOC(uart1queue, 64, sizeof(uint8_t));
+STATIC_MEM_QUEUE_ALLOC(uart1queue, QUEUE_LENGTH, sizeof(uint8_t));
 
 static bool isInit = false;
 static bool hasOverrun = false;
@@ -99,7 +100,7 @@ static void uart1DmaInit(void)
   DMA_InitStructureShare.DMA_Channel = UART1_DMA_CH;
 
   NVIC_InitStructure.NVIC_IRQChannel = UART1_DMA_IRQ;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_MID_PRI;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_UART1_DMA_PRI;
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStructure);
@@ -164,7 +165,7 @@ void uart1InitWithParity(const uint32_t baudrate, const uart1Parity_t parity)
   uart1DmaInit();
 
   NVIC_InitStructure.NVIC_IRQChannel = UART1_IRQ;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_MID_PRI;
+  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = NVIC_UART1_PRI;
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStructure);
@@ -200,6 +201,13 @@ bool uart1GetDataWithTimeout(uint8_t *c, const uint32_t timeoutTicks)
 bool uart1GetDataWithDefaultTimeout(uint8_t *c)
 {
   return uart1GetDataWithTimeout(c, UART1_DATA_TIMEOUT_TICKS);
+}
+
+void uart1GetBytesWithDefaultTimeout(uint32_t size, uint8_t* data)
+{
+  for (size_t i = 0; i < size; i++) {
+    xQueueReceive(uart1queue, &data[i], portMAX_DELAY);
+  }
 }
 
 void uart1SendData(uint32_t size, uint8_t* data)
@@ -254,6 +262,16 @@ int uart1Putchar(int ch)
 void uart1Getchar(char * ch)
 {
   xQueueReceive(uart1queue, ch, portMAX_DELAY);
+}
+
+uint32_t uart1bytesAvailable()
+{
+  return uxQueueMessagesWaiting(uart1queue);
+}
+
+uint32_t uart1QueueMaxLength()
+{
+  return QUEUE_LENGTH;
 }
 
 bool uart1DidOverrun()
