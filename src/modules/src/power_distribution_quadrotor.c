@@ -34,8 +34,8 @@
 #include "config.h"
 #include "math.h"
 #include "platform_defaults.h"
-#include "pm.h"
-#include "motors.h"
+// #include "pm.h"
+// #include "motors.h"
 
 #ifndef CONFIG_MOTORS_DEFAULT_IDLE_THRUST
 #  define DEFAULT_IDLE_THRUST 0

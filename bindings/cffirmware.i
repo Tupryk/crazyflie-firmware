@@ -68,6 +68,7 @@
 #include "outlierFilterTdoa.h"
 #include "kalman_core.h"
 #include "mm_tdoa.h"
+// #include "pm.h"
 %}
 
 %include "math3d.h"
@@ -88,6 +89,8 @@
 %include "outlierFilterTdoa.h"
 %include "kalman_core.h"
 %include "mm_tdoa.h"
+// %include "pm.h"
+
 
 
 %inline %{
@@ -194,6 +197,12 @@ void assertFail(char *exp, char *file, int line) {
     sprintf(buf, "%s in File: \"%s\", line %d\n", exp, file, line);
 
     PyErr_SetString(PyExc_AssertionError, buf);
+}
+
+float pmGetBatteryVoltage()
+{
+    float battery_vol = 3.8f;
+  return battery_vol;
 }
 %}
 
