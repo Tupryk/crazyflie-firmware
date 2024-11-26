@@ -98,6 +98,7 @@ typedef struct controllerLeePayload_s {
     struct mat33 R;
     struct vec omega;
     struct vec omega_r;
+    struct vec omega_des;
     struct vec u;
     struct vec u_i;
     struct vec qidot_prev;
@@ -113,6 +114,7 @@ typedef struct controllerLeePayload_s {
     uint8_t en_qdidot; // 0: use qdidot = vzero(), 1: estimate numerically
     uint8_t en_accrb;
     struct vec qdidot;
+    struct vec tau_ff;
     // desired value from the QP
     struct vec desVirtInp;
 

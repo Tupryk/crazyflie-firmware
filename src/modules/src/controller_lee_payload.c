@@ -648,7 +648,7 @@ static bool compute_Fd_pair_qp(struct quat payload_quat, struct vec attPoint1, s
 
 
 static controllerLeePayload_t g_self = {
-  .mass = 0.034,
+  .mass = 0.0356,
   .mp   = 0.01,
   // Inertia matrix (diagonal matrix), see
   // System Identification of the Crazyflie 2.0 Nano Quadrocopter
@@ -694,7 +694,7 @@ static controllerLeePayload_t g_self = {
   .en_accrb = 1,
   .formation_control = 0,
 
-  .radius = 0.15,
+  .radius = 0.1,
 
   .lambdaa = 0.0,
   .lambda_svm = 0.0,
@@ -787,6 +787,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     workspace->settings->warm_start = 1;
     osqp_prepare_update(workspace);
     c_float* x = workspace->data->A->x;
+    // c_float* P_mat = workspace->data->P->x;
     // printf("lenx: %d\n",workspace->data->A->nzmax);
     //  The new code
     uint8_t jump = 2*num_uavs + 2;
@@ -806,8 +807,18 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
         jump_counter = 1;
       }
     }
-    osqp_finalize_update(workspace);
    
+  c_float x_warm_init[3*num_uavs];
+  for (uint8_t i = 0; i < num_uavs; ++i) {
+    struct vec mu_warm  = input->team_state[i].mu_planned;
+    x_warm_init[3*i] =   mu_warm.x;
+    x_warm_init[3*i+1] = mu_warm.y;
+    x_warm_init[3*i+2] = mu_warm.z;
+  }
+  // warm start primal variables
+  osqp_finalize_update(workspace);
+  osqp_warm_start_x(workspace, x_warm_init);
+
   
     c_float l_new[3 + num_hps];
     c_float u_new[3 + num_hps];
@@ -825,7 +836,7 @@ static void runQP(const struct QPInput *input, struct QPOutput* output)
     }
     
     const float factor = - 2.0f * input->self->lambdaa / (1.0f + 2.0f * input->self->lambdaa);
-    
+
     for (uint8_t i = 0; i < num_uavs; ++i) {
       if (input->self->formation_control == 0) {
         q_new[3*i]     = 0.0f;
@@ -1264,9 +1275,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
     // find the qid_ref for this UAV
     struct vec qid_ref = vzero();
+    struct vec wid_ref = vzero();
     for (uint8_t j = 0; j < state->num_uavs; ++j) {
       if (setpoint->cablevectors[j].id == state->team_state[0].id) {
         qid_ref = setpoint->cablevectors[j].qid_ref;
+        wid_ref = setpoint->cablevectors[j].wid_ref;
         break;
       }
     }
@@ -1361,14 +1374,31 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
     // Lee (20)
     // Note that the last component is not included here, since it would require
     // computing delta_bar_xi for all i, on each robot
-    self->F_d = vsub(
+    // self->F_d = vscl(self->mp ,vadd4(
+    //       plAcc_d,
+    //       veltmul(self->Kpos_P, plpos_e),
+    //       veltmul(self->Kpos_D, plvel_e),
+    //       veltmul(self->Kpos_I, self->i_error_pos)));
+    // printf("position_part: %f %f %f\n", veltmul(self->Kpos_P, plpos_e).x, veltmul(self->Kpos_P, plpos_e).y, veltmul(self->Kpos_P, plpos_e).z);
+    // printf("velocity_part: %f %f %f\n", veltmul(self->Kpos_D, plvel_e).x, veltmul(self->Kpos_D, plvel_e).y, veltmul(self->Kpos_D, plvel_e).z);
+    // printf("Integral_part: %f %f %f\n", veltmul(self->Kpos_I, self->i_error_pos).x, veltmul(self->Kpos_I, self->i_error_pos).y, veltmul(self->Kpos_I, self->i_error_pos).z);
+    // printf("accelera_part: %f %f %f\n", self->mp*plAcc_d.x, self->mp*plAcc_d.y, self->mp*plAcc_d.z);
+    // self->F_d = vsub(
+    //     vscl(self->mp ,vadd4(
+    //       plAcc_d,
+    //       veltmul(self->Kpos_P, plpos_e),
+    //       veltmul(self->Kpos_D, plvel_e),
+    //       veltmul(self->Kpos_I, self->i_error_pos))), // not in the original formulation
+    //     self->delta_bar_x0
+    //   );
+    self->F_d =
         vscl(self->mp ,vadd4(
           plAcc_d,
           veltmul(self->Kpos_P, plpos_e),
           veltmul(self->Kpos_D, plvel_e),
-          veltmul(self->Kpos_I, self->i_error_pos))), // not in the original formulation
-        self->delta_bar_x0
-      );
+          veltmul(self->Kpos_I, self->i_error_pos))); // not in the original formulation
+
+
 
     // Lee (21)
     // Note that the part with omega_0_d and omega_0_d_dot are not included, as they are zero in our case
@@ -1422,13 +1452,13 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
       self->qidot = vdiv(vsub(plStVel, stateVel), l);
     }
 
-    struct vec wi = vcross(self->qi, self->qidot);
+    struct vec wi = vcross(self->qi, self->qidot);    
     struct mat33 qiqiT = vecmult(self->qi);
     struct vec virtualInp = mvmul(qiqiT,self->desVirtInp);
 
     
     // Compute parallel component
-    struct vec acc_ = plAcc_d;
+    struct vec acc_ = vscl(1/self->mp, self->F_d);
     if (!isnanf(plquat.w)) {
       if (self->en_accrb) {
         acc_ = vadd(plAcc_d, qvrot(plquat, mvmul(mmul(mcrossmat(plomega), mcrossmat(plomega)), attPoint)));
@@ -1471,17 +1501,15 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
 
       self->delta_bar_xi = vadd(self->delta_bar_xi, vscl(dt, vadd(term1, term2)));
     }
-
-    // Lee (27)
-    struct vec u_perpind = vsub2(
-      vscl(self->mass*l, mvmul(skewqi, vadd4(
+    struct vec u_perpind = vsub(
+      vscl(self->mass*l, 
+      mvmul(skewqi, 
+      vadd4(
         vneg(veltmul(self->K_q, vclampnorm(eq, self->K_q_limit))),
         vneg(veltmul(self->K_w, vclampnorm(ew, self->K_w_limit))),
-        vneg(veltmul(self->K_q_I, self->i_error_q)), // main difference to Lee: Lee multiplies again by skewqui and normalizes by cable length
-        vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
-      vscl(self->mass, mvmul(skewqi2, acc_)),
-      vneg(mvmul(skewqi2, self->delta_bar_xi))
-    );
+        vneg(vscl(vdot(self->qi, wdi), self->qidot)),
+        vneg(mvmul(skewqi2, wid_ref))))),
+      vscl(self->mass, mvmul(skewqi2, acc_)));
 
     self->u_i = vadd(u_parallel, u_perpind);
     self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
@@ -1592,13 +1620,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, setp
   self->i_error_att = vadd(self->i_error_att, vscl(dt, eR));
 
   // compute moments
-  // M = -kR eR - kw ew + w x Jw - J(w x wr)
-  self->u = vadd4(
+  // M = tau_feedforward - kR eR - kw ew + w x Jw - J(w x wr)
+    self->u = vadd4(
+    self->tau_ff,
+    vcross(self->omega, veltmul(self->J, self->omega)),
     vneg(veltmul(self->KR, vclampnorm(eR, self->KR_limit))),
-    vneg(veltmul(self->Komega, vclampnorm(omega_error, self->Komega_limit))),
-    vneg(veltmul(self->KI, self->i_error_att)),
-    vcross(self->omega, veltmul(self->J, self->omega)));
-
+    vneg(veltmul(self->Komega, vclampnorm(omega_error, self->Komega_limit))));
   // if (enableNN > 1) {
   //   u = vsub(u, tau_a);
   // }

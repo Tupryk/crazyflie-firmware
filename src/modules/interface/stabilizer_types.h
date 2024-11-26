@@ -293,6 +293,7 @@ typedef struct setpoint_s {
     // float el; // rad
     struct vec mu_planned;
     struct vec qid_ref;
+    struct vec wid_ref;
   } cablevectors[MAX_TEAM_SIZE];
 
 } setpoint_t;

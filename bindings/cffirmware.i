@@ -146,7 +146,7 @@ struct vec controller_lee_payload_get_n(controllerLeePayload_t* self, int idx)
     struct vec n = mkvec(self->n[idx].x, self->n[idx].y, self->n[idx].z);
     return n;
 }
-void set_setpoint_qi_ref(setpoint_t *setpoint, int idx, uint8_t id, float qx, float qy, float qz, float qdx, float qdy, float qdz) 
+void set_setpoint_qi_ref(setpoint_t *setpoint, int idx, uint8_t id, float qx, float qy, float qz, float qdx, float qdy, float qdz, float wdx, float wdy, float wdz) 
 {     
     setpoint->cablevectors[idx].id = id;
     setpoint->cablevectors[idx].mu_planned.x = qx;
@@ -155,18 +155,33 @@ void set_setpoint_qi_ref(setpoint_t *setpoint, int idx, uint8_t id, float qx, fl
     setpoint->cablevectors[idx].qid_ref.x = qdx;
     setpoint->cablevectors[idx].qid_ref.y = qdy;
     setpoint->cablevectors[idx].qid_ref.z = qdz;
+
+    setpoint->cablevectors[idx].wid_ref.x = wdx;
+    setpoint->cablevectors[idx].wid_ref.y = wdy;
+    setpoint->cablevectors[idx].wid_ref.z = wdz;
 }
 
-// void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z, float mdx, float mdy, float mdz)
+void set_rot_des(controllerLeePayload_t* self, float x00, float x01, float x02, float x10, float x11, float x12, float x20, float x21, float x22)
+{
+    self->R_des.m[0][0] = x00;
+    self->R_des.m[0][1] = x01;
+    self->R_des.m[0][2] = x02;
+    self->R_des.m[1][0] = x10;
+    self->R_des.m[1][1] = x11;
+    self->R_des.m[1][2] = x12;
+    self->R_des.m[2][0] = x20;
+    self->R_des.m[2][1] = x21;
+    self->R_des.m[2][2] = x22;
+
+}
+
+
 void controller_lee_payload_set_attachement(controllerLeePayload_t* self, int idx, uint8_t id, float x, float y, float z)
 {
     self->attachement_points[idx].id = id;
     self->attachement_points[idx].point.x = x;
     self->attachement_points[idx].point.y = y;
     self->attachement_points[idx].point.z = z;
-    // self->attachement_points[idx].mu_desired.x = mdx;
-    // self->attachement_points[idx].mu_desired.y = mdy;
-    // self->attachement_points[idx].mu_desired.z = mdz;
 }
 
 void controller_lee_payload_set_Pinv(controllerLeePayload_t* self, int idx, int id1, int id2, int row, int column, float value)
