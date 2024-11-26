@@ -63,6 +63,9 @@ INCLUDES += -I$(LIB)/STM32F4xx_StdPeriph_Driver/inc
 INCLUDES += -I$(LIB)/vl53l1 -I$(LIB)/vl53l1/core/inc
 INCLUDES += -I$(KBUILD_OUTPUT)/include/generated
 
+INCLUDES += -I$(srctree)/vendor/stm32cubeai
+INCLUDES += -I$(srctree)/vendor/stm32cubeai/Inc
+
 # Here we tell Kbuild where to look for Kbuild files which will tell the
 # buildsystem which sources to build
 objs-y += src
@@ -119,7 +122,7 @@ PROG ?= $(PLATFORM)
 ifeq ($(CONFIG_DEBUG),y)
 ARCH_CFLAGS	+= -O0 -Wconversion
 else
-ARCH_CFLAGS += -Os -Werror
+ARCH_CFLAGS += -Os -Wno-error=date-time 
 endif
 
 _all:

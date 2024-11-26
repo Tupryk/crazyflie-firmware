@@ -284,3 +284,9 @@ obj-y += FreeRTOS/stream_buffer.o
 # libdw1000
 obj-y += libdw1000/src/libdw1000.o
 obj-y += libdw1000/src/libdw1000Spi.o
+
+#STM32Cube.AI
+obj-y += stm32cubeai/network_data_params.o
+obj-y += stm32cubeai/network_data.o
+obj-y += stm32cubeai/network.o
+obj-y += stm32cubeai/Lib/NetworkRuntime910_CM4_GCC.o
