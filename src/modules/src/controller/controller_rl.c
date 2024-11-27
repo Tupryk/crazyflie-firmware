@@ -49,7 +49,7 @@ static float angular_velocity[3];   // Angular velocity in drone's local frame (
 static float position_error[3];     // Position error in drone's local frame (x, y, z)
 
 // Action outputs
-static float action_output[4]; // Thrust commands for four motors
+static float action_output[4]; // Thrust commands for four motors clipped to [0, 0.118] (N)
 
 void controllerRLFirmwareInit(void)
 {
@@ -127,11 +127,22 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
     for (int i = 0; i < 4; i++)
     {
       control->thrust[i] = action_output[i];
+      // TODO: apply actions properly
+      // Thrust commands for four motors clipped to [0, 0.118] (N)
+      // 
+      // mapping: 
+      // 4 - 1
+      // |   |
+      // 3 - 2
+      //<site name="thrust1" pos="0.032527 0.032527 0"/>
+      // <site name="thrust2" pos="-0.032527 0.032527 0"/>
+      // <site name="thrust3" pos="-0.032527 -0.032527 0"/>
+      // <site name="thrust4" pos="0.032527 -0.032527 0"/>
     }
   }
   else
   {
-    LOG_ERROR("Skipping control update due to inference failure.");
+    LOG_ERROR("Inference Error. Not updating controller commands.");
   }
 }
 
