@@ -563,6 +563,8 @@ ifneq ($(OOT_USES_CXX),)
 	firmware-libs += -lstdc++
 endif
 
+firmware-libs += ../vendor/stm32cubeai/Lib/NetworkRuntime910_CM4_GCC.a
+
 quiet_cmd_firmware = LD      $@
       cmd_firmware = $(LD) $(image_LDFLAGS) $(LDFLAGS) $(firmware-objs) $(firmware-libs) -lm -o $@.elf
 
