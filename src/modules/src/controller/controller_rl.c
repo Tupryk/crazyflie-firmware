@@ -49,7 +49,10 @@ static float angular_velocity[3];   // Angular velocity in drone's local frame (
 static float position_error[3];     // Position error in drone's local frame (x, y, z)
 
 // Action outputs
-static float action_output[4]; // Thrust commands for four motors clipped to [0, 0.118] (N)
+static float action_output[4]; // action output from neural network [-1, 1]
+
+#define THRUST_MIN 0.0f     // Minimum thrust (N)
+#define THRUST_MAX 0.118f   // Maximum thrust (N)
 
 void controllerRLFirmwareInit(void)
 {
@@ -126,8 +129,29 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
     // Map nn output to control commands
     for (int i = 0; i < 4; i++)
     {
-      control->thrust[i] = action_output[i];
-      // TODO: apply actions properly
+      // clip thrust commands to [-1 1]
+      if (action_output[i] > 1.0f)
+      {
+        action_output[i] = 1.0f;
+      }
+      else if (action_output[i] < -1.0f)
+      {
+        action_output[i] = -1.0f;
+      }
+
+      // Thrust commands for four motors mapped to [0, 0.118] (N)
+      control->thrust[i] = THRUST_MIN + (0.5f * (action_output[i] + 1.0f)) * (THRUST_MAX - THRUST_MIN);
+
+
+      
+      
+      // TODO: apply actions properly. I think we need to scale and clip the action.
+      // python:
+      // # Post - process action
+      // # Rescale the action from[-1, 1] to[low, high]
+      // low, high = env.action_space.low, env.action_space.high action = low + (0.5 * (scaled_action + 1.0) * (high - low)) 
+      // action = np.clip(action, low, high)
+
       // Thrust commands for four motors clipped to [0, 0.118] (N)
       // 
       // mapping: 
