@@ -48,3 +48,7 @@ build/
 *.elf
 
 tools/dependency/web/data.js
+
+
+# add static cubeMX ai libary
+!/vendor/stm32cubeai/Lib/NetworkRuntime910_CM4_GCC.a

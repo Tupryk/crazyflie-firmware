@@ -289,4 +289,4 @@ obj-y += libdw1000/src/libdw1000Spi.o
 obj-y += stm32cubeai/network_data_params.o
 obj-y += stm32cubeai/network_data.o
 obj-y += stm32cubeai/network.o
-obj-y += stm32cubeai/Lib/NetworkRuntime910_CM4_GCC.o
+obj-y := stm32cubeai/Lib/NetworkRuntime910_CM4_GCC.a
