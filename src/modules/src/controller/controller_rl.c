@@ -32,6 +32,7 @@ SOFTWARE.
 #include "platform_defaults.h"
 #include "param.h"
 #include "log.h"
+#include "debug.h"
 
 #include "network.h"
 #include "network_data_params.h"
@@ -59,11 +60,11 @@ void controllerRLFirmwareInit(void)
   ai_error e = ai_network_create_and_init(&network, AI_NETWORK_DATA_ACTIVATIONS_TABLE_GET(), AI_NETWORK_DATA_WEIGHTS_TABLE_GET());
   if (e.type != AI_ERROR_NONE)
   {
-    LOG_ERROR("Failed to initialize network. Error code: %d", e.code);
+    DEBUG_PRINT("Failed to initialize network. Error code: %d", e.code);
   }
   else
   {
-    LOG_INFO("Neural network initialized successfully.");
+    DEBUG_PRINT("Neural network initialized successfully.");
   }
 
   // Initialize input and output buffers
@@ -110,7 +111,7 @@ bool runInference()
   if (batch != 1)
   {
     ai_error err = ai_network_get_error(network);
-    LOG_ERROR("Inference failed. Error code: %d", err.code);
+    DEBUG_PRINT("Inference failed. Error code: %d", err.code);
     return false;
   }
   return true;
@@ -140,7 +141,7 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
       }
 
       // Thrust commands for four motors mapped to [0, 0.118] (N)
-      control->thrust[i] = THRUST_MIN + (0.5f * (action_output[i] + 1.0f)) * (THRUST_MAX - THRUST_MIN);
+      // control->thrust[i] = THRUST_MIN + (0.5f * (action_output[i] + 1.0f)) * (THRUST_MAX - THRUST_MIN);
 
 
       
@@ -166,7 +167,7 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   }
   else
   {
-    LOG_ERROR("Inference Error. Not updating controller commands.");
+    DEBUG_PRINT("Inference Error. Not updating controller commands.");
   }
 }
 
