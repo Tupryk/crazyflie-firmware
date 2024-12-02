@@ -64,6 +64,7 @@ static controllerLee_t g_self = {
   .KR = {0.007, 0.007, 0.008},
   .Komega = {0.00115, 0.00115, 0.002},
   .KI = {0.03, 0.03, 0.03},
+  .kpw_xy = 0.0
 };
 
 static inline struct vec vclampscl(struct vec value, float min, float max) {
@@ -77,6 +78,10 @@ void controllerLeeReset(controllerLee_t* self)
 {
   self->i_error_pos = vzero();
   self->i_error_att = vzero();
+  self->prev_omega_roll = 0;
+  self->prev_omega_pitch = 0;
+  self->prev_setpoint_omega_roll = 0;
+  self->prev_setpoint_omega_pitch = 0;
 }
 
 void controllerLeeInit(controllerLee_t* self)
@@ -223,10 +228,10 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
   struct vec zdes = mcolumn(self->R_des, 2);
   struct vec hw = vzero();
   // Desired Jerk and snap for now are zeros vector
-  struct vec desJerk = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
+  self->desJerk = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
 
   if (control->thrustSi != 0) {
-    struct vec tmp = vsub(desJerk, vscl(vdot(zdes, desJerk), zdes));
+    struct vec tmp = vsub(self->desJerk, vscl(vdot(zdes, self->desJerk), zdes));
     hw = vscl(self->mass/control->thrustSi, tmp);
   }
   struct vec z_w = mkvec(0,0,1); 
@@ -240,13 +245,33 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
   // Integral part on angle
   self->i_error_att = vadd(self->i_error_att, vscl(dt, eR));
 
+  float err_d_roll = 0;
+  float err_d_pitch = 0;
+
+  float stateAttitudeRateRoll = radians(sensors->gyro.x);
+  float stateAttitudeRatePitch = -radians(sensors->gyro.y);
+
+
+  if (self->prev_omega_roll == self->prev_omega_roll) { /*d part initialized*/
+    err_d_roll = ((self->omega_r.x - self->prev_setpoint_omega_roll) - (stateAttitudeRateRoll - self->prev_omega_roll)) / dt;
+    err_d_pitch = (-(self->omega_r.y - self->prev_setpoint_omega_pitch) - (stateAttitudeRatePitch - self->prev_omega_pitch)) / dt;
+  }
+
+
+  self->prev_omega_roll = stateAttitudeRateRoll;
+  self->prev_omega_pitch = stateAttitudeRatePitch;
+  self->prev_setpoint_omega_roll = self->omega_r.x;
+  self->prev_setpoint_omega_pitch = self->omega_r.y;
+
+  struct vec error_ang = mkvec(err_d_roll, err_d_pitch, 0);
   // compute moments
   // M = -kR eR - kw ew + w x Jw - J(w x wr)
-  self->u = vadd4(
+  self->u = vadd5(
     vneg(veltmul(self->KR, eR)),
     vneg(veltmul(self->Komega, omega_error)),
     vneg(veltmul(self->KI, self->i_error_att)),
-    vcross(self->omega, veltmul(self->J, self->omega)));
+    vcross(self->omega, veltmul(self->J, self->omega)),
+    vscl(self->kpw_xy, error_ang));
 
   control->controlMode = controlModeForceTorque;
   control->torque[0] = self->u.x;
@@ -291,6 +316,7 @@ PARAM_ADD(PARAM_FLOAT, KI_z, &g_self.KI.z)
 PARAM_ADD(PARAM_FLOAT, Kw_x, &g_self.Komega.x)
 PARAM_ADD(PARAM_FLOAT, Kw_y, &g_self.Komega.y)
 PARAM_ADD(PARAM_FLOAT, Kw_z, &g_self.Komega.z)
+PARAM_ADD(PARAM_FLOAT, kpw_xy, &g_self.kpw_xy)
 
 // J
 PARAM_ADD(PARAM_FLOAT, J_x, &g_self.J.x)
@@ -338,6 +364,10 @@ LOG_ADD(LOG_FLOAT, thrustSi, &g_self.thrustSi)
 LOG_ADD(LOG_FLOAT, torquex, &g_self.u.x)
 LOG_ADD(LOG_FLOAT, torquey, &g_self.u.y)
 LOG_ADD(LOG_FLOAT, torquez, &g_self.u.z)
+
+LOG_ADD(LOG_FLOAT, desJerkx, &g_self.desJerk.x)
+LOG_ADD(LOG_FLOAT, desJerky, &g_self.desJerk.y)
+LOG_ADD(LOG_FLOAT, desJerkz, &g_self.desJerk.z)
 
 // current angles
 LOG_ADD(LOG_FLOAT, rpyx, &g_self.rpy.x)

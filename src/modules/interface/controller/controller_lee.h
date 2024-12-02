@@ -31,7 +31,7 @@ typedef struct controllerLee_s {
     float mass;
     float thrustSi;
     struct vec J; // Inertia matrix (diagonal matrix); kg m^2
-
+    struct vec desJerk;
     // Position PID
     struct vec Kpos_P; // Kp in paper
     float Kpos_P_limit;
@@ -54,6 +54,11 @@ typedef struct controllerLee_s {
     struct vec omega;
     struct vec omega_r;
     struct vec u;
+    float prev_omega_roll;
+    float prev_omega_pitch;
+    float prev_setpoint_omega_roll;
+    float prev_setpoint_omega_pitch;
+    float kpw_xy;
 } controllerLee_t;
 
 
