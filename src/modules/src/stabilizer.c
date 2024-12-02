@@ -252,15 +252,23 @@ static void setMotorRatios(const motors_thrust_pwm_t* motorPwm)
   motorsSetRatio(MOTOR_M4, motorPwm->motors.m4);
 }
 
-static void updateStateEstimatorAndControllerTypes() {
+static void updateStateEstimatorAndControllerTypes(const state_t* state) {
   if (stateEstimatorGetType() != estimatorType) {
     stateEstimatorSwitchTo(estimatorType);
     estimatorType = stateEstimatorGetType();
   }
 
   if (controllerGetType() != controllerType) {
+    ControllerType last_controllerType = controllerType;
     controllerInit(controllerType);
     controllerType = controllerGetType();
+
+    if (controllerType == ControllerTypeLeePayload || last_controllerType == ControllerTypeLeePayload) {
+      // we just switched to or from the payload controller -> re-compute trajectory
+      crtpCommanderHighLevelTellState(state); // make sure the last known state is the one from the payload
+      crtpCommanderHighLevelDisable(); // disable current plan (so the next call will plan from current state, not current setpoint)
+      crtpCommanderHighLevelGoTo(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z, 0.0, 1.0, false);
+    }
   }
 }
 
@@ -326,7 +334,7 @@ static void stabilizerTask(void* param)
     if (healthShallWeRunTest()) {
       healthRunTests(&sensorData);
     } else {
-      updateStateEstimatorAndControllerTypes();
+      updateStateEstimatorAndControllerTypes(&state);
 
       stateEstimator(&state, stabilizerStep);
 

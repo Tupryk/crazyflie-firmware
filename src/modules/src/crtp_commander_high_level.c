@@ -116,7 +116,6 @@ static float defaultLandingVelocity = 0.5f;
 static float yawrate = 0.0f;
 
 static ControllerType last_controller_type = ControllerTypeLee;
-static struct vec shift_pos;
 
 // Trajectory memory handling from the memory module
 static uint32_t handleMemGetSize(void) { return crtpCommanderHighLevelTrajectoryMemSize(); }
@@ -281,7 +280,6 @@ void crtpCommanderHighLevelInit(void)
   pos = vzero();
   vel = vzero();
   yaw = 0;
-  shift_pos = vzero();
 
   isBlocked = false;
 
@@ -321,29 +319,8 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
   if (!RATE_DO_EXECUTE(RATE_HL_COMMANDER, stabilizerStep) && !controller_type_changed) {
     return false;
   }
-  bool setpoint_changed = false;
 
   xSemaphoreTake(lockTraj, portMAX_DELAY);
-  if (controller_type == ControllerTypeLeePayload && last_controller_type != controller_type) {
-    // we just switched to the payload controller -> compute trajectory offset!
-    struct vec ppos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
-    struct vec pos = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
-    shift_pos = vsub(ppos, pos);
-    setpoint->position.x += shift_pos.x;
-    setpoint->position.y += shift_pos.y;
-    setpoint->position.z += shift_pos.z;
-    setpoint_changed = true;
-  }
-  if (last_controller_type == ControllerTypeLeePayload && last_controller_type != controller_type) {
-    // we just switched from the payload controller -> compute trajectory offset!
-    struct vec ppos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
-    struct vec pos = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
-    shift_pos = vsub(pos, ppos);
-    setpoint->position.x += shift_pos.x;
-    setpoint->position.y += shift_pos.y;
-    setpoint->position.z += shift_pos.z;
-    setpoint_changed = true;
-  }
   float t = usecTimestamp() / 1e6;
   struct traj_eval ev = plan_current_goal(&planner, t);
   xSemaphoreGive(lockTraj);
@@ -380,12 +357,12 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
       return true;
     }
     // Otherwise, do not mutate the setpoint.
-    return setpoint_changed;
+    return false;
   }
   else if (is_traj_eval_valid(&ev)) {
-    setpoint->position.x = ev.pos.x + shift_pos.x;
-    setpoint->position.y = ev.pos.y + shift_pos.y;
-    setpoint->position.z = ev.pos.z + shift_pos.z;
+    setpoint->position.x = ev.pos.x;
+    setpoint->position.y = ev.pos.y;
+    setpoint->position.z = ev.pos.z;
     setpoint->velocity.x = ev.vel.x;
     setpoint->velocity.y = ev.vel.y;
     setpoint->velocity.z = ev.vel.z;
