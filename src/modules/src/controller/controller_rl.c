@@ -76,7 +76,7 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
                           const uint32_t tick)
 {
   // TODO: limit to only 1 Hz for debugging
-  if (!RATE_DO_EXECUTE(250, tick)) {
+  if (!RATE_DO_EXECUTE(200, tick)) {
     return;
   }
 
@@ -97,9 +97,9 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   // velocity in body frame
   struct vec vel_world = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
   struct vec vel_body = qvrot(qinv(q), vel_world);
-  aiInData[9]  = 0.0f; //vel_body.x;
-  aiInData[10] = 0.0f; //vel_body.y;
-  aiInData[11] = 0.0f; //vel_body.z;
+  aiInData[9]  = vel_body.x;
+  aiInData[10] = vel_body.y;
+  aiInData[11] = vel_body.z;
 
   // angular_velocity in body frame
   aiInData[12] = radians(sensors->gyro.x);
@@ -113,9 +113,9 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
 
   struct vec pos_error_body = qvrot(qinv(q), pos_error_world);
 
-  aiInData[15] = 0.0f; // pos_error_body.x;
-  aiInData[16] = 0.0f; // pos_error_body.y;
-  aiInData[17] = 0.0f; // pos_error_body.z;
+  aiInData[15] = pos_error_body.x;
+  aiInData[16] = pos_error_body.y;
+  aiInData[17] = pos_error_body.z;
 
   // Bind input and output buffers
   ai_input[0].data = AI_HANDLE_PTR(aiInData);
