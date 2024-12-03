@@ -47,6 +47,10 @@ typedef struct controllerLee_s {
     struct vec Komega;
     struct vec KI;
     struct vec i_error_att;
+    // INDI
+    uint8_t indi;
+    struct vec omega_prev;
+    uint64_t timestamp_prev;
     // Logging variables
     struct vec rpy;
     struct vec rpy_des;

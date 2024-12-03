@@ -37,11 +37,18 @@ CDC 2010
 #include <math.h>
 #include <string.h>
 
+#include "log.h"
+#include "param.h"
+
 #include "math3d.h"
 #include "controller_lee.h"
 #include "physicalConstants.h"
 #include "power_distribution.h"
 #include "platform_defaults.h"
+
+#include "filter.h"
+#include "usec_time.h"
+#include "debug.h"
 
 static controllerLee_t g_self = {
   .mass = CF_MASS,
@@ -64,13 +71,41 @@ static controllerLee_t g_self = {
   .KR = {0.007, 0.007, 0.008},
   .Komega = {0.00115, 0.00115, 0.002},
   .KI = {0.03, 0.03, 0.03},
+
+  // INDI
+  .indi = 0,
 };
+
+
+static bool rpm_deck_available;
+static logVarId_t logVarRpm1;
+static logVarId_t logVarRpm2;
+static logVarId_t logVarRpm3;
+static logVarId_t logVarRpm4;
+
+static Butterworth2LowPass filter_acc_rpm[3];
+static Butterworth2LowPass filter_acc_imu[3];
+static Butterworth2LowPass filter_tau_rpm[3];
+static Butterworth2LowPass filter_angular_acc[3];
 
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
     clamp(value.x, min, max),
     clamp(value.y, min, max),
     clamp(value.z, min, max));
+}
+
+static inline void update_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3], struct vec value) {
+  update_butterworth_2_low_pass(&filter[0], value.x);
+  update_butterworth_2_low_pass(&filter[1], value.y);
+  update_butterworth_2_low_pass(&filter[2], value.z);
+}
+
+static inline struct vec get_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3]) {
+  float x = get_butterworth_2_low_pass(&filter[0]);
+  float y = get_butterworth_2_low_pass(&filter[1]);
+  float z = get_butterworth_2_low_pass(&filter[2]);
+  return mkvec(x, y, z);
 }
 
 void controllerLeeReset(controllerLee_t* self)
@@ -83,6 +118,26 @@ void controllerLeeInit(controllerLee_t* self)
 {
   // copy default values (bindings), or NOP (firmware)
   *self = g_self;
+
+  paramVarId_t idDeckBcRpm = paramGetVarId("deck", "bcRpm");
+  logVarRpm1 = logGetVarId("rpm", "m1");
+  logVarRpm2 = logGetVarId("rpm", "m2");
+  logVarRpm3 = logGetVarId("rpm", "m3");
+  logVarRpm4 = logGetVarId("rpm", "m4");
+
+  rpm_deck_available = (paramGetUint(idDeckBcRpm) == 1);
+
+	for (int8_t i = 0; i < 3; i++) {
+    const float cutoff = 30; // Hz
+		init_butterworth_2_low_pass(&filter_acc_rpm[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+		init_butterworth_2_low_pass(&filter_acc_imu[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+
+		init_butterworth_2_low_pass(&filter_tau_rpm[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+		init_butterworth_2_low_pass(&filter_angular_acc[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+	}
+
+  self->timestamp_prev = usecTimestamp();
+  self->omega_prev = vzero();
 
   controllerLeeReset(self);
 }
@@ -136,7 +191,8 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     self->p_error = pos_e;
     self->v_error = vel_e;
 
-    struct vec F_d = vadd4(
+    // desired acceleration
+    struct vec a_d = vadd4(
       acc_d,
       veltmul(self->Kpos_D, vel_e),
       veltmul(self->Kpos_P, pos_e),
@@ -145,7 +201,54 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     struct quat q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     struct mat33 R = quat2rotmat(q);
     struct vec z  = vbasis(2);
-    control->thrustSi = self->mass*vdot(F_d , mvmul(R, z));
+
+    // INDI
+    struct vec a_indi = vzero();
+    if (self->indi && rpm_deck_available) {
+      // compute expected acceleration based on rpm measurements (world frame)
+      uint16_t rpm1 = logGetUint(logVarRpm1);
+      uint16_t rpm2 = logGetUint(logVarRpm2);
+      uint16_t rpm3 = logGetUint(logVarRpm3);
+      uint16_t rpm4 = logGetUint(logVarRpm4);
+
+      const float kappa_f = 2.6835255e-10f;
+      const float t2t = 0.006f;
+      const float arm = 0.707106781f * 0.046f;
+
+      float t1 = kappa_f * powf(rpm1, 2);
+      float t2 = kappa_f * powf(rpm2, 2);
+      float t3 = kappa_f * powf(rpm3, 2);
+      float t4 = kappa_f * powf(rpm4, 2);
+
+      float f_rpm = t1 + t2 + t3 + t4;
+      struct vec tau_rpm = mkvec(
+        -arm * t1 - arm * t2 + arm * t3 + arm * t4,
+        -arm * t1 + arm * t2 + arm * t3 - arm * t4,
+        -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
+      );
+
+      struct vec a_rpm = vscl(f_rpm / self->mass, mvmul(R, z));
+      update_butterworth_2_low_pass_vec(filter_acc_rpm, a_rpm);
+
+      update_butterworth_2_low_pass_vec(filter_tau_rpm, tau_rpm);
+
+      // compute acceleration based on IMU (world frame, SI unit, no gravity)
+      struct vec a_imu = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z));
+      update_butterworth_2_low_pass_vec(filter_acc_imu, a_imu);
+
+      struct vec a_rpm_filtered = get_butterworth_2_low_pass_vec(filter_acc_rpm);
+      struct vec a_imu_filtered = get_butterworth_2_low_pass_vec(filter_acc_imu);
+
+      a_indi = vsub(a_rpm_filtered, a_imu_filtered);
+
+      // DEBUG
+      if (tick % 1000 == 0) {
+        DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)a_rpm_filtered.x, (double)a_rpm_filtered.y, (double)a_rpm_filtered.z, (double)a_imu_filtered.x, (double)a_imu_filtered.y, (double)a_imu_filtered.z);
+      }
+    }
+
+    control->thrustSi = self->mass*vdot(vadd(a_d, a_indi), mvmul(R, z));
+
     self->thrustSi = control->thrustSi;
     // Reset the accumulated error while on the ground
     if (control->thrustSi < 0.01f) {
@@ -160,7 +263,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     struct vec zdes = vbasis(2);
    
     if (normFd > 0) {
-      zdes = vnormalize(F_d);
+      zdes = vnormalize(vadd(a_d, a_indi));
     } 
     struct vec xcdes = mkvec(cosf(desiredYaw), sinf(desiredYaw), 0); 
     struct vec zcrossx = vcross(zdes, xcdes);
@@ -248,6 +351,31 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     vneg(veltmul(self->KI, self->i_error_att)),
     vcross(self->omega, veltmul(self->J, self->omega)));
 
+  struct vec indi_moments;
+  if (self->indi && rpm_deck_available) {
+    struct vec tau_rpm_filtered = get_butterworth_2_low_pass_vec(filter_tau_rpm);
+
+    // angular accelleration
+    uint64_t timestamp = usecTimestamp();
+    float dt = (timestamp - self->timestamp_prev) / 1e6;
+    struct vec angular_acc = vdiv(vsub(self->omega, self->omega_prev), dt);
+    update_butterworth_2_low_pass_vec(filter_angular_acc, angular_acc);
+
+    struct vec angular_acc_filtered = get_butterworth_2_low_pass_vec(filter_angular_acc);
+    struct vec tau_gyro_filtered = veltmul(self->J, angular_acc_filtered);
+
+    self->omega_prev = self->omega;
+    self->timestamp_prev = timestamp;
+
+    indi_moments = vsub(tau_rpm_filtered, tau_gyro_filtered);
+    self->u = vadd(self->u, indi_moments);
+
+    // DEBUG
+    if (tick % 1000 == 0) {
+      DEBUG_PRINT("INDI a %f %f %f, %f %f %f\n", (double)tau_rpm_filtered.x, (double)tau_rpm_filtered.y, (double)tau_rpm_filtered.z, (double)tau_gyro_filtered.x, (double)tau_gyro_filtered.y, (double)tau_gyro_filtered.z);
+    }
+  }
+
   control->controlMode = controlModeForceTorque;
   control->torque[0] = self->u.x;
   control->torque[1] = self->u.y;
@@ -314,6 +442,8 @@ PARAM_ADD(PARAM_FLOAT, Kpos_Iz, &g_self.Kpos_I.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &g_self.Kpos_I_limit)
 
 PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
+
+PARAM_ADD(PARAM_UINT8, indi, &g_self.indi)
 PARAM_GROUP_STOP(ctrlLee)
 
 

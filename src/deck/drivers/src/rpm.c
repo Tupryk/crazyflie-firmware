@@ -33,6 +33,7 @@
 #include "deck.h"
 #include "debug.h"
 #include "log.h"
+#include "param.h"
 
 //Hardware configuration
 #define ET_GPIO_PERIF   (RCC_AHB1Periph_GPIOA | RCC_AHB1Periph_GPIOB | RCC_AHB1Periph_GPIOC)
@@ -318,6 +319,14 @@ static const DeckDriver rpm_deck = {
 
 DECK_DRIVER(rpm_deck);
 
+PARAM_GROUP_START(deck)
+
+/**
+ * @brief Nonzero if [Z-ranger deck v2](%https://store.bitcraze.io/collections/decks/products/z-ranger-deck-v2) is attached
+ */
+PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcRpm, &isInit)
+
+PARAM_GROUP_STOP(deck)
 
 LOG_GROUP_START(rpm)
 LOG_ADD(LOG_UINT16, m1, &m1rpm)
