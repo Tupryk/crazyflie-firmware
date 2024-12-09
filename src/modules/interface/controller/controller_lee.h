@@ -51,6 +51,18 @@ typedef struct controllerLee_s {
     uint8_t indi;
     struct vec omega_prev;
     uint64_t timestamp_prev;
+    // INDI - logging
+    float f_rpm;
+    struct vec tau_rpm;
+    struct vec tau_rpm_filtered;
+    struct vec tau_gyro_filtered;
+    struct vec tau_gyro;
+
+    struct vec a_rpm;
+    struct vec a_rpm_filtered;
+    struct vec a_imu;
+    struct vec a_imu_filtered;
+
     // Logging variables
     struct vec rpy;
     struct vec rpy_des;
