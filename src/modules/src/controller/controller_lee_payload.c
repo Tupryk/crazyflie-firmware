@@ -34,6 +34,8 @@ TODO
 #include "controller_lee_payload.h"
 #include "stdio.h"
 #include "debug.h"
+#include "usec_time.h"
+#include "filter.h"
 // QP
 // #include "workspace_2uav_2hp.h"
 #include "osqp.h"
@@ -91,6 +93,8 @@ struct QPOutput
   uint32_t timestamp; // ticks (copied from input)
   bool success;
 };
+
+static uint64_t time_start;
 
 
 #ifdef CRAZYFLIE_FW
@@ -1181,6 +1185,23 @@ void controllerLeePayloadQPTask(void * prm)
 }
 #endif
 
+
+static inline void update_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3], struct vec value)
+{
+	update_butterworth_2_low_pass(&filter[0], value.x);
+	update_butterworth_2_low_pass(&filter[1], value.y);
+	update_butterworth_2_low_pass(&filter[2], value.z);
+}
+
+static inline struct vec get_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3]) {
+  float x = get_butterworth_2_low_pass(&filter[0]);
+  float y = get_butterworth_2_low_pass(&filter[1]);
+  float z = get_butterworth_2_low_pass(&filter[2]);
+  return mkvec(x, y, z);
+}
+
+static Butterworth2LowPass filter_payload_vel[3];
+
 void controllerLeePayloadReset(controllerLeePayload_t* self)
 {
   DEBUG_PRINT("RST\n");
@@ -1212,6 +1233,12 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
   *self = g_self;
   DEBUG_PRINT("R3\n");
   controllerLeePayloadReset(self);
+  time_start = usecTimestamp();
+
+    for (int8_t i = 0; i < 3; i++) {
+      const float cutoff = 70; // Hz
+      init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+    }
 }
 
 bool controllerLeePayloadTest(controllerLeePayload_t* self)
@@ -1235,7 +1262,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
   // Position controller
   if (   setpoint->mode.x == modeAbs
       || setpoint->mode.y == modeAbs
-      || setpoint->mode.z == modeAbs) {
+      || setpoint->mode.z == modeAbs) {  
     
     struct vec plPos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
     struct vec plVel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
@@ -1244,8 +1271,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
     struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
     struct vec plStPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
-    struct vec plStVel = mkvec(state->payload_vel.x, state->payload_vel.y, state->payload_vel.z);
+    struct vec plStVel_unfiltered = mkvec(state->payload_vel.x, state->payload_vel.y, state->payload_vel.z);
 
+    update_butterworth_2_low_pass_vec(filter_payload_vel, plStVel_unfiltered);
+
+    struct vec plStVel = get_butterworth_2_low_pass_vec(filter_payload_vel);
     // rotational states of the payload
     struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
     struct vec plomega = mkvec(state->payload_omega.x, state->payload_omega.y, state->payload_omega.z);
@@ -1418,9 +1448,27 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     
     // if we don't have a desVirtInp (yet), skip this 
     if (vmag2(self->desVirtInp) == 0) {
-      DEBUG_PRINT("zero\n");
+      // float force = vmag(vscl(1/state->num_uavs, self->F_d));
+      // struct vec hover_force = mkvec(0,0,self->mp*GRAVITY_MAGNITUDE);
+      // struct vec qi_tmp = vneg(vnormalize(vsub(plStPos, statePos)));
+      // float force_i = vdot(hover_force, qi_tmp);
+      // self->desVirtInp = vscl(force_i, qi_tmp);
+      // self->desVirtInp.z = force;
+      // DEBUG_PRINT("before QP db: %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
 
-      return;
+      float force = 9.81f * (self->mp / (state->num_uavs));
+      struct vec qi_tmp = vnormalize(vsub(plStPos, statePos));
+      self->desVirtInp = vsclnorm(vneg(qi_tmp), force);
+      // self->desVirtInp.z = force;
+      DEBUG_PRINT("before QP db: %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
+      
+      // return; 
+    } else {
+      // uint64_t t = usecTimestamp();
+      // uint64_t delta = t - time_start;
+      // DEBUG_PRINT("dvit %llu us\n", delta);
+      // DEBUG_PRINT("db %f %f %f\n", (double)self->desVirtInp.x, (double)self->desVirtInp.y, (double)self->desVirtInp.z);
+      // time_start = t;
     }
 
     // // if we don't have a desVirtInp (yet), estimate it based on the current cable state
@@ -1450,6 +1498,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     
     // Compute parallel component
     struct vec acc_ = plAcc_d;
+    // struct vec acc_ = vscl(1/self->mp, self->F_d);
     if (!isnanf(plquat.w)) {
       if (self->en_accrb) {
         acc_ = vadd(plAcc_d, qvrot(plquat, mvmul(mmul(mcrossmat(plomega), mcrossmat(plomega)), attPoint)));
@@ -1494,12 +1543,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     }
 
     // Lee (27)
+    // this term ((vscl(vdot(self->qi, wdi), self->qidot)) is not negative in: 
+    // https://ieeexplore.ieee.org/document/7040351 (not tested)
     struct vec u_perpind = vsub2(
       vscl(self->mass*l, mvmul(skewqi, vadd4(
         vneg(veltmul(self->K_q, vclampnorm(eq, self->K_q_limit))),
         vneg(veltmul(self->K_w, vclampnorm(ew, self->K_w_limit))),
         vneg(veltmul(self->K_q_I, self->i_error_q)), // main difference to Lee: Lee multiplies again by skewqui and normalizes by cable length
-        vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
+        (vscl(vdot(self->qi, wdi), self->qidot))))),
       vscl(self->mass, mvmul(skewqi2, acc_)),
       vneg(mvmul(skewqi2, self->delta_bar_xi))
     );
@@ -1508,10 +1559,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
-    // struct vec e3 = mkvec(0,0,1);
-    // control->thrustSI = vdot(self->u_i, mvmul( self->R,e3));
+    struct vec e3 = mkvec(0,0,1);
+    control->thrustSi = vdot(self->u_i, mvmul( self->R,e3));
 
-    control->thrustSi = vmag(self->u_i);
+    // control->thrustSi = vmag(self->u_i);
     
     // control->u_all[0] = self->u_i.x;
     // control->u_all[1] = self->u_i.y;
@@ -1520,7 +1571,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     self->thrustSI = control->thrustSi;
     //  Reset the accumulated error while on the ground
     if (control->thrustSi < 0.01f) {
-      DEBUG_PRINT("R1\n");
       controllerLeePayloadReset(self);
     }
   

@@ -375,8 +375,9 @@ static void stabilizerTask(void* param)
               vel = vclampnorm(vel, 2.0); // rescale to avoid weird outliers
 
               // apply a simple complementary filter
-              struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
-              vel_filtered = vadd(vscl(1.0f - payload_alpha_v, vel_old), vscl(payload_alpha_v, vel));
+              // struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
+              // vel_filtered = vadd(vscl(1.0f - payload_alpha_v, vel_old), vscl(payload_alpha_v, vel));
+              vel_filtered = mkvec(vel.x, vel.y, vel.z);
 
               // estimate omega numerically
               struct quat q = mkquat(other->orientation.x, other->orientation.y, other->orientation.z, other->orientation.w);
