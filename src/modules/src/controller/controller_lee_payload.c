@@ -1480,7 +1480,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     // if a point mass for the payload is considered then: Pmu_des = F_d
 
     //directional unit vector qi and angular velocity wi pointing from UAV to payload
-    self->qi = vnormalize(vsub(plStPos, statePos)); 
+    self->qi = vnormalize(vsub(plStPos, statePos));
 
     // from the text between (2) and (3) in Lee's paper
     // qi_dot = (x0_dot + R0_dot rho_i - xi_dot)/li
@@ -1550,7 +1550,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
         vneg(veltmul(self->K_q, vclampnorm(eq, self->K_q_limit))),
         vneg(veltmul(self->K_w, vclampnorm(ew, self->K_w_limit))),
         vneg(veltmul(self->K_q_I, self->i_error_q)), // main difference to Lee: Lee multiplies again by skewqui and normalizes by cable length
-        (vscl(vdot(self->qi, wdi), self->qidot))))),
+        vneg(vscl(vdot(self->qi, wdi), self->qidot))))),
       vscl(self->mass, mvmul(skewqi2, acc_)),
       vneg(mvmul(skewqi2, self->delta_bar_xi))
     );
