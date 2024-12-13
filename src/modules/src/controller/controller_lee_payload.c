@@ -41,6 +41,24 @@ TODO
 #include "osqp.h"
 #include "scaling.h"
 #include "auxil.h"
+
+#define USE_NN 1
+#define RESIDUAL_CALC_LOGGING 1
+#define LOG_INFERENCE_TIME 1
+#if USE_NN
+#include "nn.h"
+#endif
+
+#if RESIDUAL_CALC_LOGGING
+  float Fd[3] = {0., 0., 0.};
+#endif
+
+#if LOG_INFERENCE_TIME
+#include "usec_time.h"
+
+float nn_inference_time;
+#endif
+
 extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
 extern OSQPWorkspace workspace_4uav_5hp;
@@ -1232,6 +1250,11 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
   // copy default values (bindings), or NOP (firmware)
   *self = g_self;
   DEBUG_PRINT("R3\n");
+  #if USE_NN
+    DEBUG_PRINT("Using Neural Network\n");
+  #else
+    DEBUG_PRINT("Using standard lee controller\n");
+  #endif
   controllerLeePayloadReset(self);
   time_start = usecTimestamp();
 
@@ -1258,6 +1281,44 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
   // uint64_t startTime = usecTimestamp();
 
   float dt = (float)(1.0f/ATTITUDE_RATE);
+
+  // current rotation [R]
+  self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
+  self->rpy = quat2rpy(self->q);
+  self->R = quat2rotmat(self->q);
+
+  #if USE_NN
+    #if LOG_INFERENCE_TIME
+      float start_time = usecTimestamp();
+    #endif
+
+      // Acceleration ang gyroscope sensor readings
+      self->input_vec[0] = sensors->acc.x;
+      self->input_vec[1] = sensors->acc.y;
+      self->input_vec[2] = sensors->acc.z;
+      self->input_vec[3] = sensors->gyro.x;
+      self->input_vec[4] = sensors->gyro.y;
+      self->input_vec[5] = sensors->gyro.z;
+      // First two columns of the rotation matrix
+      self->input_vec[6] = self->R.m[0][0];
+      self->input_vec[7] = self->R.m[0][1];
+      self->input_vec[8] = self->R.m[1][0];
+      self->input_vec[9] = self->R.m[1][1];
+      self->input_vec[10] = self->R.m[2][0];
+      self->input_vec[11] = self->R.m[2][1];
+
+      #if USE_NN
+        const float *model_output = nn_forward(self->input_vec);
+        self->nn_output[0] = model_output[0];
+        self->nn_output[1] = model_output[1];
+      #endif
+
+    #if LOG_INFERENCE_TIME
+      float end_time = usecTimestamp();
+      float elapsed_time = end_time - start_time;
+      nn_inference_time = elapsed_time; // Microseconds
+    #endif
+  #endif
 
   // Position controller
   if (   setpoint->mode.x == modeAbs
@@ -1556,6 +1617,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     );
 
     self->u_i = vadd(u_parallel, u_perpind);
+    #if USE_NN
+      self->u_i.x += self->nn_output[0];
+      self->u_i.y += self->nn_output[1];
+    #endif
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
@@ -1607,11 +1672,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
   }
 
   // Attitude controller
-
-  // current rotation [R]
-  self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
-  self->rpy = quat2rpy(self->q);
-  self->R = quat2rotmat(self->q);
 
   // desired rotation [Rdes]
   struct quat q_des = mat2quat(self->R_des);
@@ -1686,6 +1746,47 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
   // ticks = usecTimestamp() - startTime;
 }
+
+#if RESIDUAL_CALC_LOGGING || LOG_INFERENCE_TIME
+#include "log.h"
+#endif
+
+#if LOG_INFERENCE_TIME
+LOG_GROUP_START(nn_perf)
+LOG_ADD(LOG_FLOAT, inf_tim, &nn_inference_time)
+LOG_GROUP_STOP(nn_perf)
+#endif
+
+#if RESIDUAL_CALC_LOGGING
+
+LOG_GROUP_START(lee)
+LOG_ADD(LOG_FLOAT, Fd_x, &Fd[0])
+LOG_ADD(LOG_FLOAT, Fd_y, &Fd[1])
+LOG_ADD(LOG_FLOAT, Fd_z, &Fd[2])
+LOG_GROUP_STOP(lee)
+LOG_GROUP_START(nn_output)
+LOG_ADD(LOG_FLOAT, f_x, &g_self.nn_output[0])
+LOG_ADD(LOG_FLOAT, f_y, &g_self.nn_output[1])
+LOG_ADD(LOG_FLOAT, f_z, &g_self.nn_output[2])
+LOG_ADD(LOG_FLOAT, tau_x, &g_self.nn_output[3])
+LOG_ADD(LOG_FLOAT, tau_y, &g_self.nn_output[4])
+LOG_ADD(LOG_FLOAT, tau_z, &g_self.nn_output[5])
+LOG_GROUP_STOP(nn_output)
+LOG_GROUP_START(nn_input)
+LOG_ADD(LOG_FLOAT, se_acc_x, &g_self.input_vec[0])
+LOG_ADD(LOG_FLOAT, se_acc_y, &g_self.input_vec[1])
+LOG_ADD(LOG_FLOAT, se_acc_z, &g_self.input_vec[2])
+LOG_ADD(LOG_FLOAT, gyro_x, &g_self.input_vec[3])
+LOG_ADD(LOG_FLOAT, gyro_y, &g_self.input_vec[4])
+LOG_ADD(LOG_FLOAT, gyro_z, &g_self.input_vec[5])
+LOG_ADD(LOG_FLOAT, se_r_0, &g_self.input_vec[6])
+LOG_ADD(LOG_FLOAT, se_r_1, &g_self.input_vec[7])
+LOG_ADD(LOG_FLOAT, se_r_2, &g_self.input_vec[8])
+LOG_ADD(LOG_FLOAT, se_r_3, &g_self.input_vec[9])
+LOG_ADD(LOG_FLOAT, se_r_4, &g_self.input_vec[10])
+LOG_ADD(LOG_FLOAT, se_r_5, &g_self.input_vec[11])
+LOG_GROUP_STOP(nn_input)
+#endif
 
 #ifdef CRAZYFLIE_FW
 
@@ -2076,9 +2177,3 @@ LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
 LOG_GROUP_STOP(ctrlLeeP)
 
 #endif // CRAZYFLIE_FW defined
-
-
-               
-
-
-          

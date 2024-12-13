@@ -180,7 +180,9 @@ typedef struct controllerLeePayload_s {
     float solve_time_total; //ms
     // #endif
 
-
+    // Neural network
+    float input_vec[12];
+    float nn_output[6];
 } controllerLeePayload_t;
 
 
