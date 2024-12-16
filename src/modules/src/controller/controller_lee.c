@@ -174,6 +174,28 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     desiredYaw = self->rpy_des.z;
   }
 
+  // INDI
+  float t1 = 0.0f, t2 = 0.0f, t3 = 0.0f, t4 = 0.0f;
+  if (self->indi && rpm_deck_available) {
+    // compute expected acceleration based on rpm measurements (world frame)
+    uint16_t rpm1 = logGetUint(logVarRpm1);
+    uint16_t rpm2 = logGetUint(logVarRpm2);
+    uint16_t rpm3 = logGetUint(logVarRpm3);
+    uint16_t rpm4 = logGetUint(logVarRpm4);
+
+    const float kappa_f = 2.6835255e-10f;
+    t1 = kappa_f * powf(rpm1, 2);
+    t2 = kappa_f * powf(rpm2, 2);
+    t3 = kappa_f * powf(rpm3, 2);
+    t4 = kappa_f * powf(rpm4, 2);
+
+    // DEBUG
+    if (tick % 500 == 0) {
+      
+      DEBUG_PRINT("INDI t %f %f %f %f\n", (double)t1, (double)t2, (double)t3, (double)t4);
+    }
+  }
+
   // Position controller
   if (   setpoint->mode.x == modeAbs
       || setpoint->mode.y == modeAbs
@@ -204,33 +226,11 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
 
     // INDI
     struct vec a_indi = vzero();
-    if (self->indi && rpm_deck_available) {
-      // compute expected acceleration based on rpm measurements (world frame)
-      uint16_t rpm1 = logGetUint(logVarRpm1);
-      uint16_t rpm2 = logGetUint(logVarRpm2);
-      uint16_t rpm3 = logGetUint(logVarRpm3);
-      uint16_t rpm4 = logGetUint(logVarRpm4);
-
-      const float kappa_f = 2.6835255e-10f;
-      const float t2t = 0.006f;
-      const float arm = 0.707106781f * 0.046f;
-
-      float t1 = kappa_f * powf(rpm1, 2);
-      float t2 = kappa_f * powf(rpm2, 2);
-      float t3 = kappa_f * powf(rpm3, 2);
-      float t4 = kappa_f * powf(rpm4, 2);
+    if ((self->indi & 1) && rpm_deck_available) {
 
       float f_rpm = t1 + t2 + t3 + t4;
-      struct vec tau_rpm = mkvec(
-        -arm * t1 - arm * t2 + arm * t3 + arm * t4,
-        -arm * t1 + arm * t2 + arm * t3 - arm * t4,
-        -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
-      );
-
-      struct vec a_rpm = vscl(f_rpm / self->mass, mvmul(R, z));
+      struct vec a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f));
       update_butterworth_2_low_pass_vec(filter_acc_rpm, a_rpm);
-
-      update_butterworth_2_low_pass_vec(filter_tau_rpm, tau_rpm);
 
       // compute acceleration based on IMU (world frame, SI unit, no gravity)
       struct vec a_imu = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z));
@@ -242,7 +242,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       a_indi = vsub(a_rpm_filtered, a_imu_filtered);
 
       // DEBUG
-      if (tick % 1000 == 0) {
+      if (tick % 500 == 0) {
         DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)a_rpm_filtered.x, (double)a_rpm_filtered.y, (double)a_rpm_filtered.z, (double)a_imu_filtered.x, (double)a_imu_filtered.y, (double)a_imu_filtered.z);
       }
     }
@@ -352,7 +352,16 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     vcross(self->omega, veltmul(self->J, self->omega)));
 
   struct vec indi_moments;
-  if (self->indi && rpm_deck_available) {
+  if ((self->indi & 2) && rpm_deck_available) {
+    const float t2t = 0.006f;
+    const float arm = 0.707106781f * 0.046f;
+    struct vec tau_rpm = mkvec(
+      -arm * t1 - arm * t2 + arm * t3 + arm * t4,
+      -arm * t1 + arm * t2 + arm * t3 - arm * t4,
+      -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
+    );
+    update_butterworth_2_low_pass_vec(filter_tau_rpm, tau_rpm);
+
     struct vec tau_rpm_filtered = get_butterworth_2_low_pass_vec(filter_tau_rpm);
 
     // angular accelleration
