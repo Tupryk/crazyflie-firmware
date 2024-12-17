@@ -229,8 +229,8 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     if ((self->indi & 1) && rpm_deck_available) {
 
       float f_rpm = t1 + t2 + t3 + t4;
-      struct vec a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f));
-      update_butterworth_2_low_pass_vec(filter_acc_rpm, a_rpm);
+      self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f));
+      update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
       // compute acceleration based on IMU (world frame, SI unit, no gravity)
       self->a_imu = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z));
