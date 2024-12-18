@@ -88,6 +88,11 @@ static Butterworth2LowPass filter_acc_imu[3];
 static Butterworth2LowPass filter_tau_rpm[3];
 static Butterworth2LowPass filter_angular_acc[3];
 
+static float kappa_f1 = 2.139974655714972e-10;
+static float kappa_f2 = 2.3783777845095615e-10;
+static float kappa_f3 = 1.9693330742680727e-10;
+static float kappa_f4 = 2.559402652634741e-10;
+
 static inline struct vec vclampscl(struct vec value, float min, float max) {
   return mkvec(
     clamp(value.x, min, max),
@@ -183,11 +188,10 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     uint16_t rpm3 = logGetUint(logVarRpm3);
     uint16_t rpm4 = logGetUint(logVarRpm4);
 
-    const float kappa_f = 2.6835255e-10f;
-    t1 = kappa_f * powf(rpm1, 2);
-    t2 = kappa_f * powf(rpm2, 2);
-    t3 = kappa_f * powf(rpm3, 2);
-    t4 = kappa_f * powf(rpm4, 2);
+    t1 = kappa_f1 * powf(rpm1, 2);
+    t2 = kappa_f2 * powf(rpm2, 2);
+    t3 = kappa_f3 * powf(rpm3, 2);
+    t4 = kappa_f4 * powf(rpm4, 2);
 
     // DEBUG
     if (tick % 500 == 0) {
@@ -455,6 +459,11 @@ PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &g_self.Kpos_I_limit)
 PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
 
 PARAM_ADD(PARAM_UINT8, indi, &g_self.indi)
+
+PARAM_ADD(PARAM_FLOAT, kf1, &kappa_f1)
+PARAM_ADD(PARAM_FLOAT, kf2, &kappa_f2)
+PARAM_ADD(PARAM_FLOAT, kf3, &kappa_f3)
+PARAM_ADD(PARAM_FLOAT, kf4, &kappa_f4)
 PARAM_GROUP_STOP(ctrlLee)
 
 
