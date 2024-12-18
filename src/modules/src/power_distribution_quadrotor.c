@@ -56,6 +56,11 @@ static float thrustToTorque = 0.005964552f;
 static float pwmToThrustA = 0.091492681f;
 static float pwmToThrustB = 0.067673604f;
 
+static float f2pA[4];
+static float f2pB[4];
+
+
+
 int powerDistributionMotorType(uint32_t id)
 {
   return 1;
@@ -120,7 +125,8 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
       motorForce = 0.0f;
     }
 
-    float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
+    // float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
+    float motor_pwm = f2pA[motorIndex] + f2pB[motorIndex] * motorForce;
     motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
   }
 }
@@ -223,4 +229,15 @@ PARAM_ADD(PARAM_FLOAT, pwmToThrustB, &pwmToThrustB)
  * The distance from the center to a motor
  */
 PARAM_ADD(PARAM_FLOAT, armLength, &armLength)
+
+
+
+PARAM_ADD(PARAM_FLOAT, f2pA1, &f2pA[0])
+PARAM_ADD(PARAM_FLOAT, f2pB1, &f2pB[0])
+PARAM_ADD(PARAM_FLOAT, f2pA2, &f2pA[1])
+PARAM_ADD(PARAM_FLOAT, f2pB2, &f2pB[1])
+PARAM_ADD(PARAM_FLOAT, f2pA3, &f2pA[2])
+PARAM_ADD(PARAM_FLOAT, f2pB3, &f2pB[2])
+PARAM_ADD(PARAM_FLOAT, f2pA4, &f2pA[3])
+PARAM_ADD(PARAM_FLOAT, f2pB4, &f2pB[3])
 PARAM_GROUP_STOP(quadSysId)

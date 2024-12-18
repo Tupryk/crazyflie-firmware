@@ -359,12 +359,12 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
   if ((self->indi & 2) && rpm_deck_available) {
     const float t2t = 0.006f;
     const float arm = 0.707106781f * 0.046f;
-    struct vec tau_rpm = mkvec(
+    self->tau_rpm = mkvec(
       -arm * t1 - arm * t2 + arm * t3 + arm * t4,
       -arm * t1 + arm * t2 + arm * t3 - arm * t4,
       -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
     );
-    update_butterworth_2_low_pass_vec(filter_tau_rpm, tau_rpm);
+    update_butterworth_2_low_pass_vec(filter_tau_rpm, self->tau_rpm);
 
     self->tau_rpm_filtered = get_butterworth_2_low_pass_vec(filter_tau_rpm);
 
