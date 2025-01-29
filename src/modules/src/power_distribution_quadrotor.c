@@ -56,10 +56,10 @@ static float thrustToTorque = 0.005964552f;
 static float pwmToThrustA = 0.091492681f;
 static float pwmToThrustB = 0.067673604f;
 
-static float f2pA[4];
-static float f2pB[4];
-
-
+// pwm_normalized = rpm2pwmA + b * rpm
+static float rpm2pwmA = -0.12128823778162669f;
+static float rpm2pwmB = 4.2310782971594264e-05f;
+static float kappa_f[4]; // force[i] = kappa_f[i] * rpm^2
 
 int powerDistributionMotorType(uint32_t id)
 {
@@ -126,7 +126,9 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
     }
 
     // float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
-    float motor_pwm = f2pA[motorIndex] + f2pB[motorIndex] * motorForce;
+    float motor_rpm = sqrtf(motorForce / kappa_f[motorIndex]);
+    float motor_pwm = rpm2pwmA + rpm2pwmB * motor_rpm;
+
     motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
   }
 }
@@ -232,12 +234,10 @@ PARAM_ADD(PARAM_FLOAT, armLength, &armLength)
 
 
 
-PARAM_ADD(PARAM_FLOAT, f2pA1, &f2pA[0])
-PARAM_ADD(PARAM_FLOAT, f2pB1, &f2pB[0])
-PARAM_ADD(PARAM_FLOAT, f2pA2, &f2pA[1])
-PARAM_ADD(PARAM_FLOAT, f2pB2, &f2pB[1])
-PARAM_ADD(PARAM_FLOAT, f2pA3, &f2pA[2])
-PARAM_ADD(PARAM_FLOAT, f2pB3, &f2pB[2])
-PARAM_ADD(PARAM_FLOAT, f2pA4, &f2pA[3])
-PARAM_ADD(PARAM_FLOAT, f2pB4, &f2pB[3])
+PARAM_ADD(PARAM_FLOAT, rpm2pwmA, &rpm2pwmA)
+PARAM_ADD(PARAM_FLOAT, rpm2pwmB, &rpm2pwmB)
+PARAM_ADD(PARAM_FLOAT, kappa_f1, &kappa_f[0])
+PARAM_ADD(PARAM_FLOAT, kappa_f2, &kappa_f[1])
+PARAM_ADD(PARAM_FLOAT, kappa_f3, &kappa_f[2])
+PARAM_ADD(PARAM_FLOAT, kappa_f4, &kappa_f[3])
 PARAM_GROUP_STOP(quadSysId)

@@ -70,6 +70,7 @@ typedef struct controllerLee_s {
     struct vec omega;
     struct vec omega_r;
     struct vec u;
+    struct vec omega_des_dot;
 } controllerLee_t;
 
 
