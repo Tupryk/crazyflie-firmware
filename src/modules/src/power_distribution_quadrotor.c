@@ -59,7 +59,9 @@ static float pwmToThrustB = 0.067673604f;
 // pwm_normalized = rpm2pwmA + b * rpm
 static float rpm2pwmA = -0.12128823778162669f;
 static float rpm2pwmB = 4.2310782971594264e-05f;
-static float kappa_f[4]; // force[i] = kappa_f[i] * rpm^2
+float kappa_f[4]; // force[i] = kappa_f[i] * rpm^2
+
+static float motorForces[STABILIZER_NR_OF_MOTORS];
 
 int powerDistributionMotorType(uint32_t id)
 {
@@ -106,8 +108,6 @@ static void powerDistributionLegacy(const control_t *control, motors_thrust_unca
 }
 
 static void powerDistributionForceTorque(const control_t *control, motors_thrust_uncapped_t* motorThrustUncapped) {
-  static float motorForces[STABILIZER_NR_OF_MOTORS];
-
   const float arm = 0.707106781f * armLength;
   const float rollPart = 0.25f / arm * control->torqueX;
   const float pitchPart = 0.25f / arm * control->torqueY;
@@ -231,9 +231,6 @@ PARAM_ADD(PARAM_FLOAT, pwmToThrustB, &pwmToThrustB)
  * The distance from the center to a motor
  */
 PARAM_ADD(PARAM_FLOAT, armLength, &armLength)
-
-
-
 PARAM_ADD(PARAM_FLOAT, rpm2pwmA, &rpm2pwmA)
 PARAM_ADD(PARAM_FLOAT, rpm2pwmB, &rpm2pwmB)
 PARAM_ADD(PARAM_FLOAT, kappa_f1, &kappa_f[0])
@@ -241,3 +238,10 @@ PARAM_ADD(PARAM_FLOAT, kappa_f2, &kappa_f[1])
 PARAM_ADD(PARAM_FLOAT, kappa_f3, &kappa_f[2])
 PARAM_ADD(PARAM_FLOAT, kappa_f4, &kappa_f[3])
 PARAM_GROUP_STOP(quadSysId)
+
+LOG_GROUP_START(powerDist)
+LOG_ADD(LOG_FLOAT, m1d, &motorForces[0])
+LOG_ADD(LOG_FLOAT, m2d, &motorForces[1])
+LOG_ADD(LOG_FLOAT, m3d, &motorForces[2])
+LOG_ADD(LOG_FLOAT, m4d, &motorForces[3])
+LOG_GROUP_STOP(powerDist)

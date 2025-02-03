@@ -57,6 +57,7 @@ such as: take-off, landing, polynomial trajectories.
 #include "commander.h"
 #include "stabilizer_types.h"
 #include "stabilizer.h"
+#include "eventtrigger.h"
 
 // Local types
 enum TrajectoryLocation_e {
@@ -258,6 +259,9 @@ struct data_define_trajectory {
   uint8_t trajectoryId;
   struct trajectoryDescription description;
 } __attribute__((packed));
+
+// events
+EVENTTRIGGER(cmdhlStartTraj, uint8, id, float, timescale)
 
 // Private functions
 static void crtpCommanderHighLevelTask(void * prm);
@@ -954,6 +958,10 @@ bool crtpCommanderHighLevelIsTrajectoryDefined(uint8_t trajectoryId)
 
 int crtpCommanderHighLevelStartTrajectory(const uint8_t trajectoryId, const float timeScale, const bool relative, const bool reversed)
 {
+  eventTrigger_cmdhlStartTraj_payload.id = trajectoryId;
+  eventTrigger_cmdhlStartTraj_payload.timescale = timeScale;
+  eventTrigger(&eventTrigger_cmdhlStartTraj);
+
   struct data_start_trajectory data =
   {
     .trajectoryId = trajectoryId,
