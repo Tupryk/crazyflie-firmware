@@ -50,8 +50,8 @@ static float thrustToTorque = 0.005964552f;
 // thrust = a * pwm^2 + b * pwm
 //    where PWM is normalized (range 0...1)
 //          thrust is in Newtons (per rotor)
-static float pwmToThrustA = 0.091492681f;
-static float pwmToThrustB = 0.067673604f;
+// static float pwmToThrustA = 0.091492681f;
+// static float pwmToThrustB = 0.067673604f;
 
 // voltage, thrust -> pwm
 static float d00 = 0.5543364748044269;
@@ -64,6 +64,21 @@ static float d11 = -0.03255320005438393;
 static float e00 = -10.291152501242268;
 static float e10 = 3.926415845326646;
 static float e01 = 26.077196474667165;
+
+
+// thrust = a * pwm^2 + b * pwm
+//    where PWM is normalized (range 0...1)
+//          thrust is in Newtons (per rotor)
+static float pwmToThrustA = 0.091492681f;
+static float pwmToThrustB = 0.067673604f;
+
+// pwm_normalized = rpm2pwmA + b * rpm
+static float rpm2pwmA = -0.12128823778162669f;
+static float rpm2pwmB = 4.2310782971594264e-05f;
+float kappa_f[4]; // force[i] = kappa_f[i] * rpm^2
+
+static float motorForces[STABILIZER_NR_OF_MOTORS];
+
 
 // // computes maximum thrust in grams given the current battery state
 // static float estimateMaxThrust(float batteryVoltage)
@@ -83,19 +98,19 @@ static float e01 = 26.077196474667165;
 // }
 
 // set thrust for motor (in grams)
-static uint16_t thrustToPWM(float batteryVoltage, float thrustGram)
-{
-  if (thrustGram > 0) {
-    // normalized voltage
-    float v = batteryVoltage / 4.2f;
-    // normalized pwm:
-    float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+// static uint16_t thrustToPWM(float batteryVoltage, float thrustGram)
+// {
+//   if (thrustGram > 0) {
+//     // normalized voltage
+//     float v = batteryVoltage / 4.2f;
+//     // normalized pwm:
+//     float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
 
-    return pwm * UINT16_MAX;
-  }
+//     return pwm * UINT16_MAX;
+//   }
 
-  return 0;
-}
+//   return 0;
+// }
 
 int powerDistributionMotorType(uint32_t id)
 {
@@ -137,7 +152,6 @@ static void powerDistributionLegacy(const control_t *control, motors_thrust_unca
 }
 
 static void powerDistributionForceTorque(const control_t *control, motors_thrust_uncapped_t* motorThrustUncapped) {
-  static float motorForces[STABILIZER_NR_OF_MOTORS];
 
   const float arm = 0.707106781f * armLength;
   const float rollPart = 0.25f / arm * control->torqueX;
@@ -150,7 +164,7 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
   motorForces[2] = thrustPart + rollPart + pitchPart - yawPart;
   motorForces[3] = thrustPart + rollPart - pitchPart + yawPart;
 
-  float batteryVoltage = pmGetBatteryVoltage();
+  // float batteryVoltage = pmGetBatteryVoltage();
   for (int motorIndex = 0; motorIndex < STABILIZER_NR_OF_MOTORS; motorIndex++) {
     float motorForce = motorForces[motorIndex];
     if (motorForce < 0.0f) {
@@ -160,8 +174,13 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
     // float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
     // motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
 
-    float motorForceInGrams = motorForce * 1000.0f / 9.81f;
-    motorThrustUncapped->list[motorIndex] = thrustToPWM(batteryVoltage, motorForceInGrams);
+    // float motorForceInGrams = motorForce * 1000.0f / 9.81f;
+    // motorThrustUncapped->list[motorIndex] = thrustToPWM(batteryVoltage, motorForceInGrams);
+  
+    float motor_rpm = sqrtf(motorForce / kappa_f[motorIndex]);
+    float motor_pwm = rpm2pwmA + rpm2pwmB * motor_rpm;
+
+    motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
   }
 }
 
@@ -219,8 +238,14 @@ bool powerDistributionCap(const motors_thrust_uncapped_t* motorThrustBatCompUnca
   return isCapped;
 }
 
-uint32_t powerDistributionGetIdleThrust() {
-  return idleThrust;
+
+uint32_t powerDistributionGetIdleThrust()
+{
+  int32_t thrust = idleThrust;
+  #if (!defined(CONFIG_MOTORS_REQUIRE_ARMING) || (CONFIG_MOTORS_REQUIRE_ARMING == 0))
+    thrust = 0;
+  #endif
+  return thrust;
 }
 
 float powerDistributionGetMaxThrust() {
@@ -258,6 +283,12 @@ PARAM_ADD(PARAM_FLOAT, pwmToThrustB, &pwmToThrustB)
  * The distance from the center to a motor
  */
 PARAM_ADD(PARAM_FLOAT, armLength, &armLength)
+PARAM_ADD(PARAM_FLOAT, rpm2pwmA, &rpm2pwmA)
+PARAM_ADD(PARAM_FLOAT, rpm2pwmB, &rpm2pwmB)
+PARAM_ADD(PARAM_FLOAT, kappa_f1, &kappa_f[0])
+PARAM_ADD(PARAM_FLOAT, kappa_f2, &kappa_f[1])
+PARAM_ADD(PARAM_FLOAT, kappa_f3, &kappa_f[2])
+PARAM_ADD(PARAM_FLOAT, kappa_f4, &kappa_f[3])
 PARAM_GROUP_STOP(quadSysId)
 
 
@@ -277,3 +308,10 @@ PARAM_GROUP_START(pwm)
   PARAM_ADD(PARAM_FLOAT, e01, &e01)
 
 PARAM_GROUP_STOP(pwm)
+
+LOG_GROUP_START(powerDist)
+LOG_ADD(LOG_FLOAT, m1d, &motorForces[0])
+LOG_ADD(LOG_FLOAT, m2d, &motorForces[1])
+LOG_ADD(LOG_FLOAT, m3d, &motorForces[2])
+LOG_ADD(LOG_FLOAT, m4d, &motorForces[3])
+LOG_GROUP_STOP(powerDist)

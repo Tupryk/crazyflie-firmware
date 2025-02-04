@@ -36,6 +36,13 @@ TODO
 #include "debug.h"
 #include "usec_time.h"
 #include "filter.h"
+
+#include "log.h"
+#include "param.h"
+
+#include "physicalConstants.h"
+#include "power_distribution.h"
+#include "platform_defaults.h"
 // QP
 // #include "workspace_2uav_2hp.h"
 #include "osqp.h"
@@ -711,7 +718,44 @@ static controllerLeePayload_t g_self = {
   .Pinvs[0].Pinv.m = {{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0}},
   .Pinvs[1].Pinv.m = {{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0}},
   .Pinvs[2].Pinv.m = {{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0},{0,0,0,0,0,0}},
+
+  // INDI
+  .indi = 0,
 };
+
+
+static bool rpm_deck_available;
+static logVarId_t logVarRpm1;
+static logVarId_t logVarRpm2;
+static logVarId_t logVarRpm3;
+static logVarId_t logVarRpm4;
+
+static Butterworth2LowPass filter_acc_rpm[3];
+static Butterworth2LowPass filter_acc_imu[3];
+static Butterworth2LowPass filter_tau_rpm[3];
+static Butterworth2LowPass filter_angular_acc[3];
+
+extern float kappa_f[4];
+
+static inline struct vec vclampscl(struct vec value, float min, float max) {
+  return mkvec(
+    clamp(value.x, min, max),
+    clamp(value.y, min, max),
+    clamp(value.z, min, max));
+}
+
+// static inline void update_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3], struct vec value) {
+//   update_butterworth_2_low_pass(&filter[0], value.x);
+//   update_butterworth_2_low_pass(&filter[1], value.y);
+//   update_butterworth_2_low_pass(&filter[2], value.z);
+// }
+
+// static inline struct vec get_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3]) {
+//   float x = get_butterworth_2_low_pass(&filter[0]);
+//   float y = get_butterworth_2_low_pass(&filter[1]);
+//   float z = get_butterworth_2_low_pass(&filter[2]);
+//   return mkvec(x, y, z);
+// }
 
 // static inline struct vec vclampscl(struct vec value, float min, float max) {
 //   return mkvec(
@@ -1235,10 +1279,30 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
   controllerLeePayloadReset(self);
   time_start = usecTimestamp();
 
-    for (int8_t i = 0; i < 3; i++) {
-      const float cutoff = 70; // Hz
-      init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
-    }
+  for (int8_t i = 0; i < 3; i++) {
+    const float cutoff = 70; // Hz
+    init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+  }
+
+  paramVarId_t idDeckBcRpm = paramGetVarId("deck", "bcRpm");
+  logVarRpm1 = logGetVarId("rpm", "m1");
+  logVarRpm2 = logGetVarId("rpm", "m2");
+  logVarRpm3 = logGetVarId("rpm", "m3");
+  logVarRpm4 = logGetVarId("rpm", "m4");
+
+  rpm_deck_available = (paramGetUint(idDeckBcRpm) == 1);
+
+	for (int8_t i = 0; i < 3; i++) {
+    const float cutoff = 30; // Hz
+		init_butterworth_2_low_pass(&filter_acc_rpm[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+		init_butterworth_2_low_pass(&filter_acc_imu[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+
+		init_butterworth_2_low_pass(&filter_tau_rpm[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+		init_butterworth_2_low_pass(&filter_angular_acc[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+	}
+
+  self->timestamp_prev = usecTimestamp();
+  self->omega_prev = vzero();
 }
 
 bool controllerLeePayloadTest(controllerLeePayload_t* self)
@@ -1258,6 +1322,28 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
   // uint64_t startTime = usecTimestamp();
 
   float dt = (float)(1.0f/ATTITUDE_RATE);
+
+  // INDI
+  float t1 = 0.0f, t2 = 0.0f, t3 = 0.0f, t4 = 0.0f;
+  if (self->indi && rpm_deck_available) {
+    // compute expected acceleration based on rpm measurements (world frame)
+    uint16_t rpm1 = logGetUint(logVarRpm1);
+    uint16_t rpm2 = logGetUint(logVarRpm2);
+    uint16_t rpm3 = logGetUint(logVarRpm3);
+    uint16_t rpm4 = logGetUint(logVarRpm4);
+
+    t1 = kappa_f[0] * powf(rpm1, 2);
+    t2 = kappa_f[1] * powf(rpm2, 2);
+    t3 = kappa_f[2] * powf(rpm3, 2);
+    t4 = kappa_f[3] * powf(rpm4, 2);
+
+    // DEBUG
+    if (tick % 500 == 0) {
+      
+      DEBUG_PRINT("INDI t %f %f %f %f\n", (double)t1, (double)t2, (double)t3, (double)t4);
+    }
+  }
+
 
   // Position controller
   if (   setpoint->mode.x == modeAbs
@@ -1555,12 +1641,40 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       vneg(mvmul(skewqi2, self->delta_bar_xi))
     );
 
+    // INDI
+    struct vec a_indi = vzero();
+    struct vec e3 = mkvec(0,0,1);
+    if ((self->indi & 1) && rpm_deck_available) {
+
+      // current rotation [R]
+      self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
+      self->rpy = quat2rpy(self->q);
+      self->R = quat2rotmat(self->q);
+      float f_rpm = t1 + t2 + t3 + t4;
+      self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f));
+      update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
+
+      // compute acceleration based on IMU (world frame, SI unit, no gravity)
+      self->a_imu = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z));
+      update_butterworth_2_low_pass_vec(filter_acc_imu, self->a_imu);
+
+      self->a_rpm_filtered = get_butterworth_2_low_pass_vec(filter_acc_rpm);
+      self->a_imu_filtered = get_butterworth_2_low_pass_vec(filter_acc_imu);
+
+      a_indi = vsub(self->a_rpm_filtered, self->a_imu_filtered);
+
+      // DEBUG
+      if (tick % 500 == 0) {
+        DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)self->a_rpm_filtered.x, (double)self->a_rpm_filtered.y, (double)self->a_rpm_filtered.z, (double)self->a_imu_filtered.x, (double)self->a_imu_filtered.y, (double)self->a_imu_filtered.z);
+      }
+    }
+
+
     self->u_i = vadd(u_parallel, u_perpind);
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
-    struct vec e3 = mkvec(0,0,1);
-    control->thrustSi = vdot(self->u_i, mvmul( self->R,e3));
+    control->thrustSi = vdot(vadd(self->u_i, a_indi), mvmul(self->R, e3));
 
     // control->thrustSi = vmag(self->u_i);
     
@@ -1678,6 +1792,44 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
   // if (enableNN > 1) {
   //   u = vsub(u, tau_a);
   // }
+
+
+
+  struct vec indi_moments;
+  if ((self->indi & 2) && rpm_deck_available) {
+    const float t2t = 0.006f;
+    const float arm = 0.707106781f * 0.046f;
+    self->tau_rpm = mkvec(
+      -arm * t1 - arm * t2 + arm * t3 + arm * t4,
+      -arm * t1 + arm * t2 + arm * t3 - arm * t4,
+      -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
+    );
+    update_butterworth_2_low_pass_vec(filter_tau_rpm, self->tau_rpm);
+
+    self->tau_rpm_filtered = get_butterworth_2_low_pass_vec(filter_tau_rpm);
+
+    // angular accelleration
+    uint64_t timestamp = usecTimestamp();
+    float dt = (timestamp - self->timestamp_prev) / 1e6;
+    struct vec angular_acc = vdiv(vsub(self->omega, self->omega_prev), dt);
+    self->tau_gyro = veltmul(self->J, angular_acc);
+
+    update_butterworth_2_low_pass_vec(filter_angular_acc, angular_acc);
+
+    struct vec angular_acc_filtered = get_butterworth_2_low_pass_vec(filter_angular_acc);
+    self->tau_gyro_filtered = veltmul(self->J, angular_acc_filtered);
+
+    self->omega_prev = self->omega;
+    self->timestamp_prev = timestamp;
+
+    indi_moments = vsub(self->tau_rpm_filtered, self->tau_gyro_filtered);
+    self->u = vadd(self->u, indi_moments);
+
+    // DEBUG
+    if (tick % 1000 == 0) {
+      DEBUG_PRINT("INDI a %f %f %f, %f %f %f\n", (double)self->tau_rpm_filtered.x, (double)self->tau_rpm_filtered.y, (double)self->tau_rpm_filtered.z, (double)self->tau_gyro_filtered.x, (double)self->tau_gyro_filtered.y, (double)self->tau_gyro_filtered.z);
+    }
+  }
 
   control->controlMode = controlModeForceTorque;
   control->torque[0] = self->u.x;
@@ -2069,6 +2221,42 @@ LOG_ADD(LOG_FLOAT, mu_refz, &g_self.mu_ref.z)
 // LOG_ADD(LOG_FLOAT, desCableVecx, &g_self.desiredCableUnitVec[0].x)
 // LOG_ADD(LOG_FLOAT, desCableVecy, &g_self.desiredCableUnitVec[0].y)
 // LOG_ADD(LOG_FLOAT, desCableVecz, &g_self.desiredCableUnitVec[0].z)
+
+
+// INDI
+LOG_ADD(LOG_FLOAT, f_rpm, &g_self.f_rpm)         // compare to thrustSi
+LOG_ADD(LOG_FLOAT, tau_rpmx, &g_self.tau_rpm.x)  // compare to torquex
+LOG_ADD(LOG_FLOAT, tau_rpmy, &g_self.tau_rpm.y)  // compare to torquey
+LOG_ADD(LOG_FLOAT, tau_rpmz, &g_self.tau_rpm.z)  // compare to torquez
+
+LOG_ADD(LOG_FLOAT, tau_rpm_fx, &g_self.tau_rpm_filtered.x)  // compare to torquex
+LOG_ADD(LOG_FLOAT, tau_rpm_fy, &g_self.tau_rpm_filtered.y)  // compare to torquey
+LOG_ADD(LOG_FLOAT, tau_rpm_fz, &g_self.tau_rpm_filtered.z)  // compare to torquez
+
+LOG_ADD(LOG_FLOAT, tau_gyro_x, &g_self.tau_gyro.x)  // compare to torquex
+LOG_ADD(LOG_FLOAT, tau_gyro_y, &g_self.tau_gyro.y)  // compare to torquey
+LOG_ADD(LOG_FLOAT, tau_gyro_z, &g_self.tau_gyro.z)  // compare to torquez
+
+LOG_ADD(LOG_FLOAT, tau_gyro_fx, &g_self.tau_gyro_filtered.x)  // compare to torquex
+LOG_ADD(LOG_FLOAT, tau_gyro_fy, &g_self.tau_gyro_filtered.y)  // compare to torquey
+LOG_ADD(LOG_FLOAT, tau_gyro_fz, &g_self.tau_gyro_filtered.z)  // compare to torquez
+
+LOG_ADD(LOG_FLOAT, a_rpmx, &g_self.a_rpm.x)
+LOG_ADD(LOG_FLOAT, a_rpmy, &g_self.a_rpm.y)
+LOG_ADD(LOG_FLOAT, a_rpmz, &g_self.a_rpm.z)
+
+LOG_ADD(LOG_FLOAT, a_rpm_fx, &g_self.a_rpm_filtered.x)
+LOG_ADD(LOG_FLOAT, a_rpm_fy, &g_self.a_rpm_filtered.y)
+LOG_ADD(LOG_FLOAT, a_rpm_fz, &g_self.a_rpm_filtered.z)
+
+LOG_ADD(LOG_FLOAT, a_imux, &g_self.a_imu.x)
+LOG_ADD(LOG_FLOAT, a_imuy, &g_self.a_imu.y)
+LOG_ADD(LOG_FLOAT, a_imuz, &g_self.a_imu.z)
+
+LOG_ADD(LOG_FLOAT, a_imu_fx, &g_self.a_imu_filtered.x)
+LOG_ADD(LOG_FLOAT, a_imu_fy, &g_self.a_imu_filtered.y)
+LOG_ADD(LOG_FLOAT, a_imu_fz, &g_self.a_imu_filtered.z)
+
 
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
