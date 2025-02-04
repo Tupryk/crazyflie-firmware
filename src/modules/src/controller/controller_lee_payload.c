@@ -2121,6 +2121,12 @@ PARAM_ADD(PARAM_FLOAT, c_q, &g_self.c_q)
 // Manual rotation (rad)
 PARAM_ADD(PARAM_FLOAT, roll_des, &g_self.roll_des)
 PARAM_ADD(PARAM_FLOAT, pitch_des, &g_self.pitch_des)
+
+
+// INDI
+PARAM_ADD(PARAM_UINT8, indi, &g_self.indi)
+
+
 PARAM_GROUP_STOP(ctrlLeeP)
 
 

@@ -33,6 +33,7 @@
 #include "deck.h"
 #include "debug.h"
 #include "log.h"
+#include "param.h"
 
 //Hardware configuration
 #define ET_GPIO_PERIF   (RCC_AHB1Periph_GPIOA | RCC_AHB1Periph_GPIOB | RCC_AHB1Periph_GPIOC)
@@ -81,8 +82,7 @@ static uint16_t m2rpm;
 static uint16_t m3rpm;
 static uint16_t m4rpm;
 
-
-static void rpmInit(DeckInfo *info)
+static void rpmTestInit(DeckInfo *info)
 {
   int i;
   isInit = true;
@@ -153,6 +153,7 @@ static void rpmInit(DeckInfo *info)
   TIM_ITConfig(TIM3, TIM_IT_CC1, ENABLE);
   TIM_ITConfig(TIM3, TIM_IT_CC2, ENABLE);
   TIM_ITConfig(TIM3, TIM_IT_Update, ENABLE);
+
 }
 
 static uint16_t calcRPM(uint32_t t1, uint32_t t2)
@@ -313,11 +314,19 @@ static const DeckDriver rpm_deck = {
 
   .usedGpio = DECK_USING_IO_2 | DECK_USING_IO_3 | DECK_USING_PA2 | DECK_USING_PA3,
 
-  .init = rpmInit,
+  .init = rpmTestInit
 };
 
 DECK_DRIVER(rpm_deck);
 
+PARAM_GROUP_START(deck)
+
+/**
+ * @brief Nonzero if [Z-ranger deck v2](%https://store.bitcraze.io/collections/decks/products/z-ranger-deck-v2) is attached
+ */
+PARAM_ADD_CORE(PARAM_UINT8 | PARAM_RONLY, bcRpm, &isInit)
+
+PARAM_GROUP_STOP(deck)
 
 LOG_GROUP_START(rpm)
 LOG_ADD(LOG_UINT16, m1, &m1rpm)
