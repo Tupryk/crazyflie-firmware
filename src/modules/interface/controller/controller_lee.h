@@ -47,6 +47,22 @@ typedef struct controllerLee_s {
     struct vec Komega;
     struct vec KI;
     struct vec i_error_att;
+    // INDI
+    uint8_t indi;
+    struct vec omega_prev;
+    uint64_t timestamp_prev;
+    // INDI - logging
+    float f_rpm;
+    struct vec tau_rpm;
+    struct vec tau_rpm_filtered;
+    struct vec tau_gyro_filtered;
+    struct vec tau_gyro;
+
+    struct vec a_rpm;
+    struct vec a_rpm_filtered;
+    struct vec a_imu;
+    struct vec a_imu_filtered;
+
     // Logging variables
     struct vec rpy;
     struct vec rpy_des;
@@ -54,11 +70,12 @@ typedef struct controllerLee_s {
     struct vec omega;
     struct vec omega_r;
     struct vec u;
-    float prev_omega_roll;
-    float prev_omega_pitch;
-    float prev_setpoint_omega_roll;
-    float prev_setpoint_omega_pitch;
-    float kpw_xy;
+    struct vec omega_des_dot;
+
+    // Neural network
+    float input_vec[12];
+    float nn_output[6];
+    
 } controllerLee_t;
 
 

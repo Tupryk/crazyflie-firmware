@@ -24,9 +24,11 @@
  * power_distribution_quadrotor.c - Crazyflie stock power distribution code
  */
 
+
 #include "power_distribution.h"
 
 #include <string.h>
+#include "debug.h"
 #include "log.h"
 #include "param.h"
 #include "num.h"
@@ -37,6 +39,9 @@
 #include "pm.h"
 #include "motors.h"
 
+#if (!defined(CONFIG_MOTORS_REQUIRE_ARMING) || (CONFIG_MOTORS_REQUIRE_ARMING == 0)) && defined(CONFIG_MOTORS_DEFAULT_IDLE_THRUST) && (CONFIG_MOTORS_DEFAULT_IDLE_THRUST > 0)
+    #error "CONFIG_MOTORS_REQUIRE_ARMING must be defined and not set to 0 if CONFIG_MOTORS_DEFAULT_IDLE_THRUST is greater than 0"
+#endif
 #ifndef CONFIG_MOTORS_DEFAULT_IDLE_THRUST
 #  define DEFAULT_IDLE_THRUST 0
 #else
@@ -54,16 +59,16 @@ static float thrustToTorque = 0.005964552f;
 // static float pwmToThrustB = 0.067673604f;
 
 // voltage, thrust -> pwm
-static float d00 = 0.5543364748044269;
-static float d10 = 0.11442589787133063;
-static float d01 = -0.5067031467944692;
-static float d20 = -0.002283966554392003;
-static float d11 = -0.03255320005438393;
+// static float d00 = 0.5543364748044269;
+// static float d10 = 0.11442589787133063;
+// static float d01 = -0.5067031467944692;
+// static float d20 = -0.002283966554392003;
+// static float d11 = -0.03255320005438393;
 
-// voltage, pwm -> max_thrust
-static float e00 = -10.291152501242268;
-static float e10 = 3.926415845326646;
-static float e01 = 26.077196474667165;
+// // voltage, pwm -> max_thrust
+// static float e00 = -10.291152501242268;
+// static float e10 = 3.926415845326646;
+// static float e01 = 26.077196474667165;
 
 
 // thrust = a * pwm^2 + b * pwm
@@ -79,39 +84,6 @@ float kappa_f[4]; // force[i] = kappa_f[i] * rpm^2
 
 static float motorForces[STABILIZER_NR_OF_MOTORS];
 
-
-// // computes maximum thrust in grams given the current battery state
-// static float estimateMaxThrust(float batteryVoltage)
-// {
-//   // normalized voltage
-//   float v = pmGetBatteryVoltage() / 4.2f;
-//   // normalized (average) pwm
-//   uint32_t pwm_sum = 0;
-//   for (int i = 0; i < STABILIZER_NR_OF_MOTORS; ++i) {
-//     pwm_sum += motorsGetRatio(i);
-//   }
-//   float pwm = pwm_sum / 4.0f / UINT16_MAX;
-
-//   float maxThrust = clamp(e00 + e10 * pwm + e01 * v, 8, 50);
-
-//   return maxThrust;
-// }
-
-// set thrust for motor (in grams)
-// static uint16_t thrustToPWM(float batteryVoltage, float thrustGram)
-// {
-//   if (thrustGram > 0) {
-//     // normalized voltage
-//     float v = batteryVoltage / 4.2f;
-//     // normalized pwm:
-//     float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
-
-//     return pwm * UINT16_MAX;
-//   }
-
-//   return 0;
-// }
-
 int powerDistributionMotorType(uint32_t id)
 {
   return 1;
@@ -124,6 +96,11 @@ uint16_t powerDistributionStopRatio(uint32_t id)
 
 void powerDistributionInit(void)
 {
+  #if (!defined(CONFIG_MOTORS_REQUIRE_ARMING) || (CONFIG_MOTORS_REQUIRE_ARMING == 0))
+  if(idleThrust > 0) {
+    DEBUG_PRINT("WARNING: idle thrust will be overridden with value 0. Autoarming can not be on while idle thrust is higher than 0. If you want to use idle thust please use use arming\n");
+  }
+  #endif
 }
 
 bool powerDistributionTest(void)
@@ -152,7 +129,6 @@ static void powerDistributionLegacy(const control_t *control, motors_thrust_unca
 }
 
 static void powerDistributionForceTorque(const control_t *control, motors_thrust_uncapped_t* motorThrustUncapped) {
-
   const float arm = 0.707106781f * armLength;
   const float rollPart = 0.25f / arm * control->torqueX;
   const float pitchPart = 0.25f / arm * control->torqueY;
@@ -172,11 +148,6 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
     }
 
     // float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
-    // motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
-
-    // float motorForceInGrams = motorForce * 1000.0f / 9.81f;
-    // motorThrustUncapped->list[motorIndex] = thrustToPWM(batteryVoltage, motorForceInGrams);
-  
     float motor_rpm = sqrtf(motorForce / kappa_f[motorIndex]);
     float motor_pwm = rpm2pwmA + rpm2pwmB * motor_rpm;
 
@@ -232,12 +203,11 @@ bool powerDistributionCap(const motors_thrust_uncapped_t* motorThrustBatCompUnca
   for (int motorIndex = 0; motorIndex < STABILIZER_NR_OF_MOTORS; motorIndex++)
   {
     int32_t thrustCappedUpper = motorThrustBatCompUncapped->list[motorIndex] - reduction;
-    motorPwm->list[motorIndex] = capMinThrust(thrustCappedUpper, idleThrust);
+    motorPwm->list[motorIndex] = capMinThrust(thrustCappedUpper, powerDistributionGetIdleThrust());
   }
 
   return isCapped;
 }
-
 
 uint32_t powerDistributionGetIdleThrust()
 {
@@ -290,24 +260,6 @@ PARAM_ADD(PARAM_FLOAT, kappa_f2, &kappa_f[1])
 PARAM_ADD(PARAM_FLOAT, kappa_f3, &kappa_f[2])
 PARAM_ADD(PARAM_FLOAT, kappa_f4, &kappa_f[3])
 PARAM_GROUP_STOP(quadSysId)
-
-
-/**
- * ToDo: This should move into quadSysId and replace pwmToThrust etc.
- */
-PARAM_GROUP_START(pwm)
-
-  PARAM_ADD(PARAM_FLOAT, d00, &d00)
-  PARAM_ADD(PARAM_FLOAT, d10, &d10)
-  PARAM_ADD(PARAM_FLOAT, d01, &d01)
-  PARAM_ADD(PARAM_FLOAT, d20, &d20)
-  PARAM_ADD(PARAM_FLOAT, d11, &d11)
-
-  PARAM_ADD(PARAM_FLOAT, e00, &e00)
-  PARAM_ADD(PARAM_FLOAT, e10, &e10)
-  PARAM_ADD(PARAM_FLOAT, e01, &e01)
-
-PARAM_GROUP_STOP(pwm)
 
 LOG_GROUP_START(powerDist)
 LOG_ADD(LOG_FLOAT, m1d, &motorForces[0])

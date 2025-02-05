@@ -10,3 +10,5 @@ obj-y += controller_lee.o
 obj-y += controller_lee_payload.o
 obj-y += controller_sjc.o
 obj-y += controller_mellingerSI.o
+obj-y += nn.o
+obj-y += nn_utils.o

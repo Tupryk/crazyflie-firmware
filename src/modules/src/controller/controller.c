@@ -61,6 +61,10 @@ void controllerInit(ControllerType controller) {
     #define CONTROLLER ControllerTypeMellinger
   #elif defined(CONFIG_CONTROLLER_BRESCIANINI)
     #define CONTROLLER ControllerTypeBrescianini
+  #elif defined(CONFIG_CONTROLLER_LEE)
+    #define CONTROLLER ControllerTypeLee
+  #elif defined(CONFIG_CONTROLLER_OOT)
+    #define CONTROLLER ControllerTypeOot
   #else
     #define CONTROLLER ControllerTypeAutoSelect
   #endif
