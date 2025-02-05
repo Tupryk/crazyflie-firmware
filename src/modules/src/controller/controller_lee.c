@@ -134,7 +134,7 @@ void controllerLeeInit(controllerLee_t* self)
   if (self->use_nn) {
     DEBUG_PRINT("Using Neural Network\n");
   } else {
-    DEBUG_PRINT("Using standard lee controller\n");
+    DEBUG_PRINT("No NN\n");
   }
 
   paramVarId_t idDeckBcRpm = paramGetVarId("deck", "bcRpm");
@@ -153,6 +153,16 @@ void controllerLeeInit(controllerLee_t* self)
 		init_butterworth_2_low_pass(&filter_tau_rpm[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
 		init_butterworth_2_low_pass(&filter_angular_acc[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
 	}
+
+  if (rpm_deck_available && (self->indi == 3)) {
+    DEBUG_PRINT("Using INDI (both)\n");
+  } else if (rpm_deck_available && (self->indi == 1)){
+    DEBUG_PRINT("Using INDI (acc)\n");
+  } else if (rpm_deck_available && (self->indi == 2)){
+    DEBUG_PRINT("Using INDI (gyro)\n");
+  } else {
+    DEBUG_PRINT("No INDI\n");
+  }
 
   self->timestamp_prev = usecTimestamp();
   self->omega_prev = vzero();
@@ -206,11 +216,11 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     t3 = kappa_f[2] * powf(rpm3, 2);
     t4 = kappa_f[3] * powf(rpm4, 2);
 
-    // DEBUG
-    if (tick % 500 == 0) {
+    // // DEBUG
+    // if (tick % 500 == 0) {
       
-      DEBUG_PRINT("INDI t %f %f %f %f\n", (double)t1, (double)t2, (double)t3, (double)t4);
-    }
+    //   DEBUG_PRINT("INDI t %f %f %f %f\n", (double)t1, (double)t2, (double)t3, (double)t4);
+    // }
   }
   struct vec xc = mkvec(cosf(desiredYaw), sinf(desiredYaw), 0);
   struct vec yc = mkvec(-sinf(desiredYaw), cosf(desiredYaw), 0);
@@ -273,9 +283,8 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       a_nn.x = self->nn_output[0] / self->mass;
       a_nn.y = self->nn_output[1] / self->mass;
     }
-      // add NN to position controller
-      a_d.x += a_nn.x;
-      a_d.y += a_nn.y;  
+    // add NN to position controller
+    a_d = vadd(a_d, a_nn);
     // INDI
     struct vec a_indi = vzero();
     if ((self->indi & 1) && rpm_deck_available) {
@@ -294,12 +303,12 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
 
       a_indi = vsub(self->a_rpm_filtered, self->a_imu_filtered);
 
-      // DEBUG
-      if (tick % 500 == 0) {
-        DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)self->a_rpm_filtered.x, (double)self->a_rpm_filtered.y, (double)self->a_rpm_filtered.z, (double)self->a_imu_filtered.x, (double)self->a_imu_filtered.y, (double)self->a_imu_filtered.z);
-      }
+      // // DEBUG
+      // if (tick % 500 == 0) {
+      //   DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)self->a_rpm_filtered.x, (double)self->a_rpm_filtered.y, (double)self->a_rpm_filtered.z, (double)self->a_imu_filtered.x, (double)self->a_imu_filtered.y, (double)self->a_imu_filtered.z);
+      // }
     }
-    control->thrustSi = self->mass*vdot(vadd(a_d, a_nn), mvmul(R, z));
+    control->thrustSi = self->mass*vdot(vadd(a_d, a_indi), mvmul(R, z));
     self->thrustSi = control->thrustSi;
     // Reset the accumulated error while on the ground
     if (control->thrustSi < 0.01f) {
@@ -440,10 +449,10 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     indi_moments = vsub(self->tau_rpm_filtered, self->tau_gyro_filtered);
     self->u = vadd(self->u, indi_moments);
 
-    // DEBUG
-    if (tick % 1000 == 0) {
-      DEBUG_PRINT("INDI a %f %f %f, %f %f %f\n", (double)self->tau_rpm_filtered.x, (double)self->tau_rpm_filtered.y, (double)self->tau_rpm_filtered.z, (double)self->tau_gyro_filtered.x, (double)self->tau_gyro_filtered.y, (double)self->tau_gyro_filtered.z);
-    }
+    // // DEBUG
+    // if (tick % 1000 == 0) {
+    //   DEBUG_PRINT("INDI a %f %f %f, %f %f %f\n", (double)self->tau_rpm_filtered.x, (double)self->tau_rpm_filtered.y, (double)self->tau_rpm_filtered.z, (double)self->tau_gyro_filtered.x, (double)self->tau_gyro_filtered.y, (double)self->tau_gyro_filtered.z);
+    // }
   }
 
   control->controlMode = controlModeForceTorque;
