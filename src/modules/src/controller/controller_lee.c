@@ -273,12 +273,15 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       a_nn.x = self->nn_output[0] / self->mass;
       a_nn.y = self->nn_output[1] / self->mass;
     }
-
+      // add NN to position controller
+      a_d.x += a_nn.x;
+      a_d.y += a_nn.y;  
     // INDI
     struct vec a_indi = vzero();
     if ((self->indi & 1) && rpm_deck_available) {
 
       float f_rpm = t1 + t2 + t3 + t4;
+      // add nn to a_rpm
       self->a_rpm = vadd(vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f)), a_nn);
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
@@ -296,12 +299,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
         DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)self->a_rpm_filtered.x, (double)self->a_rpm_filtered.y, (double)self->a_rpm_filtered.z, (double)self->a_imu_filtered.x, (double)self->a_imu_filtered.y, (double)self->a_imu_filtered.z);
       }
     }
-    if ((self->indi & 1) && rpm_deck_available) {
-      control->thrustSi = self->mass*vdot(vadd(a_d, a_indi), mvmul(R, z));
-    } else {
-      control->thrustSi = self->mass*vdot(vadd(a_d, a_nn), mvmul(R, z));
-
-    }
+    control->thrustSi = self->mass*vdot(vadd(a_d, a_nn), mvmul(R, z));
     self->thrustSi = control->thrustSi;
     // Reset the accumulated error while on the ground
     if (control->thrustSi < 0.01f) {
