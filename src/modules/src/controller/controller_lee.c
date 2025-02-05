@@ -296,9 +296,12 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
         DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)self->a_rpm_filtered.x, (double)self->a_rpm_filtered.y, (double)self->a_rpm_filtered.z, (double)self->a_imu_filtered.x, (double)self->a_imu_filtered.y, (double)self->a_imu_filtered.z);
       }
     }
+    if ((self->indi & 1) && rpm_deck_available) {
+      control->thrustSi = self->mass*vdot(vadd(a_d, a_indi), mvmul(R, z));
+    } else {
+      control->thrustSi = self->mass*vdot(vadd(a_d, a_nn), mvmul(R, z));
 
-    control->thrustSi = self->mass*vdot(vadd(a_d, a_indi), mvmul(R, z));
-
+    }
     self->thrustSi = control->thrustSi;
     // Reset the accumulated error while on the ground
     if (control->thrustSi < 0.01f) {
