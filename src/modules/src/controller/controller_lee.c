@@ -50,16 +50,9 @@ CDC 2010
 #include "usec_time.h"
 #include "debug.h"
 
-#define USE_NN 1
-#define RESIDUAL_CALC_LOGGING 1
-#define LOG_INFERENCE_TIME 1
-#if USE_NN
-  #include "nn.h"
-#endif
-#if LOG_INFERENCE_TIME
-  #include "usec_time.h"
-  float nn_inference_time;
-#endif
+#include "nn.h"
+#include "usec_time.h"
+float nn_inference_time;
 
 static controllerLee_t g_self = {
   .mass = CF_MASS,
@@ -85,6 +78,7 @@ static controllerLee_t g_self = {
 
   // INDI
   .indi = 0,
+  .use_nn = 0,
 };
 
 
@@ -132,11 +126,16 @@ void controllerLeeInit(controllerLee_t* self)
   // copy default values (bindings), or NOP (firmware)
   *self = g_self;
 
-  #if USE_NN
+  // #if USE_NN
+  //   DEBUG_PRINT("Using Neural Network\n");
+  // #else
+  //   DEBUG_PRINT("Using standard lee controller\n");
+  // #endif
+  if (self->use_nn) {
     DEBUG_PRINT("Using Neural Network\n");
-  #else
+  } else {
     DEBUG_PRINT("Using standard lee controller\n");
-  #endif
+  }
 
   paramVarId_t idDeckBcRpm = paramGetVarId("deck", "bcRpm");
   logVarRpm1 = logGetVarId("rpm", "m1");
@@ -237,36 +236,31 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     struct mat33 R = quat2rotmat(q);
     struct vec z  = vbasis(2);
 
-    #if USE_NN
-      #if LOG_INFERENCE_TIME
-        float start_time = usecTimestamp();
-      #endif
-        // Acceleration ang gyroscope sensor readings
-        self->input_vec[0] = sensors->acc.x;
-        self->input_vec[1] = sensors->acc.y;
-        self->input_vec[2] = sensors->acc.z;
-        self->input_vec[3] = sensors->gyro.x;
-        self->input_vec[4] = sensors->gyro.y;
-        self->input_vec[5] = sensors->gyro.z;
-        // First two columns of the rotation matrix
-        self->input_vec[6] = R.m[0][0];
-        self->input_vec[7] = R.m[0][1];
-        self->input_vec[8] = R.m[1][0];
-        self->input_vec[9] = R.m[1][1];
-        self->input_vec[10] = R.m[2][0];
-        self->input_vec[11] = R.m[2][1];
-        #if USE_NN
-          const float *model_output = nn_forward(self->input_vec);
-          self->nn_output[0] = model_output[0];
-          self->nn_output[1] = model_output[1];
-        #endif
-      #if LOG_INFERENCE_TIME
-        float end_time = usecTimestamp();
-        float elapsed_time = end_time - start_time;
-        nn_inference_time = elapsed_time; // Microseconds
-      #endif
-    #endif
+    if (self->use_nn) { 
+      float start_time = usecTimestamp();
+      // Acceleration ang gyroscope sensor readings
+      self->input_vec[0] = sensors->acc.x;
+      self->input_vec[1] = sensors->acc.y;
+      self->input_vec[2] = sensors->acc.z;
+      self->input_vec[3] = sensors->gyro.x;
+      self->input_vec[4] = sensors->gyro.y;
+      self->input_vec[5] = sensors->gyro.z;
+      // First two columns of the rotation matrix
+      self->input_vec[6] = R.m[0][0];
+      self->input_vec[7] = R.m[0][1];
+      self->input_vec[8] = R.m[1][0];
+      self->input_vec[9] = R.m[1][1];
+      self->input_vec[10] = R.m[2][0];
+      self->input_vec[11] = R.m[2][1];
+      const float *model_output = nn_forward(self->input_vec);
+      self->nn_output[0] = model_output[0];
+      self->nn_output[1] = model_output[1];
+    
+      float end_time = usecTimestamp();
+      float elapsed_time = end_time - start_time;
+      nn_inference_time = elapsed_time; // Microseconds
 
+    }
     // desired acceleration
     struct vec a_d = vadd4(
       acc_d,
@@ -274,17 +268,18 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       veltmul(self->Kpos_P, pos_e),
       veltmul(self->Kpos_I, self->i_error_pos));
 
-    #if USE_NN
-      a_d.x += self->nn_output[0] / self->mass;
-      a_d.y += self->nn_output[1] / self->mass;
-    #endif
+    struct vec a_nn = vzero();
+    if (self->use_nn) {
+      a_nn.x = self->nn_output[0] / self->mass;
+      a_nn.y = self->nn_output[1] / self->mass;
+    }
 
     // INDI
     struct vec a_indi = vzero();
     if ((self->indi & 1) && rpm_deck_available) {
 
       float f_rpm = t1 + t2 + t3 + t4;
-      self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f));
+      self->a_rpm = vadd(vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f)), a_nn);
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
       // compute acceleration based on IMU (world frame, SI unit, no gravity)
@@ -458,15 +453,9 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
   // ticks = usecTimestamp() - startTime;
 }
 
-#if RESIDUAL_CALC_LOGGING || LOG_INFERENCE_TIME
-#include "log.h"
-#endif
-#if LOG_INFERENCE_TIME
 LOG_GROUP_START(nn_perf)
 LOG_ADD(LOG_FLOAT, inf_tim, &nn_inference_time)
 LOG_GROUP_STOP(nn_perf)
-#endif
-#if RESIDUAL_CALC_LOGGING
 LOG_GROUP_START(nn_output)
 LOG_ADD(LOG_FLOAT, f_x, &g_self.nn_output[0])
 LOG_ADD(LOG_FLOAT, f_y, &g_self.nn_output[1])
@@ -489,7 +478,6 @@ LOG_ADD(LOG_FLOAT, se_r_3, &g_self.input_vec[9])
 LOG_ADD(LOG_FLOAT, se_r_4, &g_self.input_vec[10])
 LOG_ADD(LOG_FLOAT, se_r_5, &g_self.input_vec[11])
 LOG_GROUP_STOP(nn_input)
-#endif
 
 #ifdef CRAZYFLIE_FW
 
@@ -551,6 +539,7 @@ PARAM_ADD(PARAM_FLOAT, Kpos_I_limit, &g_self.Kpos_I_limit)
 PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
 
 PARAM_ADD(PARAM_UINT8, indi, &g_self.indi)
+PARAM_ADD(PARAM_UINT8, use_nn, &g_self.use_nn)
 
 PARAM_GROUP_STOP(ctrlLee)
 
