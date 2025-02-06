@@ -721,6 +721,8 @@ static controllerLeePayload_t g_self = {
 
   // INDI
   .indi = 0,
+  .est_acc = 0,
+  .use_nn = 0,
 };
 
 
@@ -1245,6 +1247,7 @@ static inline struct vec get_butterworth_2_low_pass_vec(Butterworth2LowPass filt
 }
 
 static Butterworth2LowPass filter_payload_vel[3];
+static Butterworth2LowPass filter_payload_acc[3];
 
 void controllerLeePayloadReset(controllerLeePayload_t* self)
 {
@@ -1282,6 +1285,7 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
   for (int8_t i = 0; i < 3; i++) {
     const float cutoff = 70; // Hz
     init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+    init_butterworth_2_low_pass(&filter_payload_acc[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
   }
 
   paramVarId_t idDeckBcRpm = paramGetVarId("deck", "bcRpm");
@@ -1303,6 +1307,10 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
 
   self->timestamp_prev = usecTimestamp();
   self->omega_prev = vzero();
+  
+  // Acceleration estimation
+  self->payload_vel_prev = vzero();
+  self->timestamp_payload_prev = usecTimestamp();
 }
 
 bool controllerLeePayloadTest(controllerLeePayload_t* self)
@@ -1584,6 +1592,23 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     
     // Compute parallel component
     struct vec acc_ = plAcc_d;
+    if (self->est_acc) {
+      struct vec plAcc_unfiltered = vzero();
+
+      uint64_t timestamp_payload = usecTimestamp();
+      float dt = (timestamp_payload - self->timestamp_payload_prev) / 1e6;
+
+      plAcc_unfiltered = vdiv(vsub(plStVel, self->payload_vel_prev), dt);
+      update_butterworth_2_low_pass_vec(filter_payload_acc, plAcc_unfiltered);
+      self->plAcc_filtered = get_butterworth_2_low_pass_vec(filter_payload_acc);
+
+      acc_ = self->plAcc_filtered; 
+
+      self->payload_vel_prev = plStVel;
+      self->timestamp_payload_prev = timestamp_payload;
+    }
+
+
     // struct vec acc_ = vscl(1/self->mp, self->F_d);
     if (!isnanf(plquat.w)) {
       if (self->en_accrb) {
@@ -1641,6 +1666,19 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       vneg(mvmul(skewqi2, self->delta_bar_xi))
     );
 
+    // add neural network:
+    // if (self->use_nn) { 
+
+
+    // }
+
+    struct vec a_nn = vzero();
+    // add neural network:
+    // if (self->use_nn) {
+    //   a_nn.x = self->nn_output[0] / self->mass;
+    //   a_nn.y = self->nn_output[1] / self->mass;
+    // }
+
     // INDI
     struct vec a_indi = vzero();
     struct vec e3 = mkvec(0,0,1);
@@ -1651,7 +1689,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       self->rpy = quat2rpy(self->q);
       self->R = quat2rotmat(self->q);
       float f_rpm = t1 + t2 + t3 + t4;
-      self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f));
+      // xdd_uav  = (f/m)Re3 - ge3 - (mp/m)*(xdd_payload + ge3)
+      // add neural network:
+      self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp/self->mass, vadd(acc_, mkvec(0, 0, 9.81)))), a_nn);
+
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
       // compute acceleration based on IMU (world frame, SI unit, no gravity)
@@ -1674,7 +1715,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
-    control->thrustSi = vdot(vadd(self->u_i, a_indi), mvmul(self->R, e3));
+    // add neural network:
+    control->thrustSi = vdot(vsub(vadd(self->u_i, a_indi), a_nn), mvmul(self->R, e3));
 
     // control->thrustSi = vmag(self->u_i);
     
@@ -2125,6 +2167,8 @@ PARAM_ADD(PARAM_FLOAT, pitch_des, &g_self.pitch_des)
 
 // INDI
 PARAM_ADD(PARAM_UINT8, indi, &g_self.indi)
+PARAM_ADD(PARAM_UINT8, est_acc, &g_self.est_acc)
+PARAM_ADD(PARAM_UINT8, use_nn, &g_self.use_nn)
 
 
 PARAM_GROUP_STOP(ctrlLeeP)
@@ -2262,6 +2306,13 @@ LOG_ADD(LOG_FLOAT, a_imuz, &g_self.a_imu.z)
 LOG_ADD(LOG_FLOAT, a_imu_fx, &g_self.a_imu_filtered.x)
 LOG_ADD(LOG_FLOAT, a_imu_fy, &g_self.a_imu_filtered.y)
 LOG_ADD(LOG_FLOAT, a_imu_fz, &g_self.a_imu_filtered.z)
+
+// Acceleration Estimation
+
+LOG_ADD(LOG_FLOAT, plAccx, &g_self.plAcc_filtered.x)
+LOG_ADD(LOG_FLOAT, plAccy, &g_self.plAcc_filtered.y)
+LOG_ADD(LOG_FLOAT, plAccz, &g_self.plAcc_filtered.z)
+
 
 
 

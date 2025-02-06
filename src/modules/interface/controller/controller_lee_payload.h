@@ -90,7 +90,6 @@ typedef struct controllerLeePayload_s {
     struct vec qi_prev;
     struct vec qdi_prev;
     uint32_t qdi_prev_tick;
-    struct vec payload_vel_prev;
     struct vec rpy;
     struct vec rpy_des;
     struct mat33 R_des;
@@ -198,6 +197,16 @@ typedef struct controllerLeePayload_s {
 
     // Logging variables
     struct vec omega_des_dot;
+    
+    // add neural network:
+    uint8_t use_nn;
+
+    // Acceleration estimation
+    struct vec payload_vel_prev;
+    uint8_t est_acc;
+    struct vec plAcc_filtered;
+    uint64_t timestamp_payload_prev;
+
 
 } controllerLeePayload_t;
 
