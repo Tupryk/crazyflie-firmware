@@ -198,8 +198,10 @@ typedef struct controllerLeePayload_s {
     // Logging variables
     struct vec omega_des_dot;
     
-    // add neural network:
+    // Neural network
     uint8_t use_nn;
+    float input_vec[12];
+    float nn_output[6];
 
     // Acceleration estimation
     struct vec payload_vel_prev;
