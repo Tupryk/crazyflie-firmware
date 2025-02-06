@@ -1251,7 +1251,7 @@ static Butterworth2LowPass filter_payload_acc[3];
 
 void controllerLeePayloadReset(controllerLeePayload_t* self)
 {
-  DEBUG_PRINT("RST\n");
+  // DEBUG_PRINT("RST\n");
   self->i_error_pos = vzero();
   self->i_error_att = vzero();
   self->i_error_q = vzero();
@@ -1284,8 +1284,9 @@ void controllerLeePayloadInit(controllerLeePayload_t* self)
 
   for (int8_t i = 0; i < 3; i++) {
     const float cutoff = 70; // Hz
+    const float cutoff_acc = 30; // Hz
     init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
-    init_butterworth_2_low_pass(&filter_payload_acc[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+    init_butterworth_2_low_pass(&filter_payload_acc[i], 1 / (2 * M_PI_F * cutoff_acc), 1.0 / ATTITUDE_RATE, 0.0f);
   }
 
   paramVarId_t idDeckBcRpm = paramGetVarId("deck", "bcRpm");
@@ -1370,6 +1371,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     update_butterworth_2_low_pass_vec(filter_payload_vel, plStVel_unfiltered);
 
     struct vec plStVel = get_butterworth_2_low_pass_vec(filter_payload_vel);
+    self->plVel_filtered = plStVel;
     // rotational states of the payload
     struct quat plquat = mkquat(state->payload_quat.x, state->payload_quat.y, state->payload_quat.z, state->payload_quat.w);
     struct vec plomega = mkvec(state->payload_omega.x, state->payload_omega.y, state->payload_omega.z);
@@ -1592,6 +1594,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     
     // Compute parallel component
     struct vec acc_ = plAcc_d;
+    self->plAcc_des = plAcc_d;
     if (self->est_acc) {
       struct vec plAcc_unfiltered = vzero();
 
@@ -1601,8 +1604,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       plAcc_unfiltered = vdiv(vsub(plStVel, self->payload_vel_prev), dt);
       update_butterworth_2_low_pass_vec(filter_payload_acc, plAcc_unfiltered);
       self->plAcc_filtered = get_butterworth_2_low_pass_vec(filter_payload_acc);
-
-      acc_ = self->plAcc_filtered; 
+      self->plAcc_filtered.z += GRAVITY_MAGNITUDE;
+      // acc_ = self->plAcc_filtered; 
 
       self->payload_vel_prev = plStVel;
       self->timestamp_payload_prev = timestamp_payload;
@@ -1690,8 +1693,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       self->R = quat2rotmat(self->q);
       float f_rpm = t1 + t2 + t3 + t4;
       // xdd_uav  = (f/m)Re3 - ge3 - (mp/m)*(xdd_payload + ge3)
+      // note that acc_ = xdd_payload + ge3
       // add neural network:
-      self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp/self->mass, vadd(acc_, mkvec(0, 0, 9.81)))), a_nn);
+      self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp/self->mass, acc_)), a_nn);
+      // self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f));
 
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
@@ -1712,11 +1717,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
 
     self->u_i = vadd(u_parallel, u_perpind);
+    self->u_i = vsub(vadd(self->u_i, a_indi), a_nn);
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
     // add neural network:
-    control->thrustSi = vdot(vsub(vadd(self->u_i, a_indi), a_nn), mvmul(self->R, e3));
+    control->thrustSi = vdot(self->u_i, mvmul(self->R, e3));
 
     // control->thrustSi = vmag(self->u_i);
     
@@ -1751,7 +1757,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     
     self->R_des = mcolumns(xdes, ydes, zdes);
   } else {
-    DEBUG_PRINT("R2\n");
+    // DEBUG_PRINT("R2\n");
     // we only support position control
     control->controlMode = controlModeForceTorque;
     control->thrustSi  = 0;
@@ -2313,7 +2319,14 @@ LOG_ADD(LOG_FLOAT, plAccx, &g_self.plAcc_filtered.x)
 LOG_ADD(LOG_FLOAT, plAccy, &g_self.plAcc_filtered.y)
 LOG_ADD(LOG_FLOAT, plAccz, &g_self.plAcc_filtered.z)
 
+LOG_ADD(LOG_FLOAT, plAccx_des, &g_self.plAcc_des.x)
+LOG_ADD(LOG_FLOAT, plAccy_des, &g_self.plAcc_des.y)
+LOG_ADD(LOG_FLOAT, plAccz_des, &g_self.plAcc_des.z)
 
+
+LOG_ADD(LOG_FLOAT, plVelx, &g_self.plVel_filtered.x)
+LOG_ADD(LOG_FLOAT, plVely, &g_self.plVel_filtered.y)
+LOG_ADD(LOG_FLOAT, plVelz, &g_self.plVel_filtered.z)
 
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
