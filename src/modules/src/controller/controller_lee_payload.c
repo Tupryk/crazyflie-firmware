@@ -1595,7 +1595,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     // Compute parallel component
     struct vec acc_ = plAcc_d;
     self->plAcc_des = plAcc_d;
-    if (self->est_acc) {
+    float tension = 0;
+    if (self->est_acc & 1) {
       struct vec plAcc_unfiltered = vzero();
 
       uint64_t timestamp_payload = usecTimestamp();
@@ -1609,7 +1610,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
       self->payload_vel_prev = plStVel;
       self->timestamp_payload_prev = timestamp_payload;
-    }
+    } else if (self->est_acc & 2) {
+      // we want to compute Tq from  desired payload accelerations: self->plAcc_des, where self->plAcc_des has the gravity term
+      tension = -vdot(vscl(self->mp, self->plAcc_des), self->qi);
+      self->Tq = vscl(tension, self->qi);
+    } 
 
 
     // struct vec acc_ = vscl(1/self->mp, self->F_d);
@@ -1696,6 +1701,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       // note that acc_ = xdd_payload + ge3
       // add neural network:
       self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp/self->mass, acc_)), a_nn);
+      if (self->est_acc & 2) {
+        // (self->plAcc_des = xl_des + ge3) -->  Tq = -mp*self->plAcc_des --> tension = vdot(Tq, q) --> uav acc: xddot = (f/mass)Re3 - ge3 - Tq/mass, where Tq/mass = (tension/mass)q 
+        self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(tension/self->mass, self->qi)), a_nn);
+      }
       // self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f));
 
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
@@ -2323,11 +2332,14 @@ LOG_ADD(LOG_FLOAT, plAccx_des, &g_self.plAcc_des.x)
 LOG_ADD(LOG_FLOAT, plAccy_des, &g_self.plAcc_des.y)
 LOG_ADD(LOG_FLOAT, plAccz_des, &g_self.plAcc_des.z)
 
+LOG_ADD(LOG_FLOAT, plAccx_tq, &g_self.Tq.x)
+LOG_ADD(LOG_FLOAT, plAccy_tq, &g_self.Tq.y)
+LOG_ADD(LOG_FLOAT, plAccz_tq, &g_self.Tq.z)
+
 
 LOG_ADD(LOG_FLOAT, plVelx, &g_self.plVel_filtered.x)
 LOG_ADD(LOG_FLOAT, plVely, &g_self.plVel_filtered.y)
 LOG_ADD(LOG_FLOAT, plVelz, &g_self.plVel_filtered.z)
-
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
 

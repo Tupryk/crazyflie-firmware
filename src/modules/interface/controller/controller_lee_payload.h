@@ -207,6 +207,7 @@ typedef struct controllerLeePayload_s {
     struct vec plAcc_filtered;
     struct vec plVel_filtered;
     struct vec plAcc_des;
+    struct vec Tq;
     uint64_t timestamp_payload_prev;
 
 
