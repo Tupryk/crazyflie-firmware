@@ -1596,7 +1596,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct vec acc_ = plAcc_d;
     self->plAcc_des = plAcc_d;
     float tension = 0;
-    if (self->est_acc & 1) {
+    if (self->est_acc == 1) {
       struct vec plAcc_unfiltered = vzero();
 
       uint64_t timestamp_payload = usecTimestamp();
@@ -1610,10 +1610,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
       self->payload_vel_prev = plStVel;
       self->timestamp_payload_prev = timestamp_payload;
-    } else if (self->est_acc & 2) {
+    } else if (self->est_acc == 2) {
       // we want to compute Tq from  desired payload accelerations: self->plAcc_des, where self->plAcc_des has the gravity term
-      tension = -vdot(vscl(self->mp, self->plAcc_des), self->qi);
-      self->Tq = vscl(tension, self->qi);
+      tension = vdot(vscl(self->mp, self->plAcc_des), self->qi);
+      self->Tq = vscl(tension/self->mp, self->qi); // THIS IS THE ACCELERATION
+      // acc_ = self->Tq;
     } 
 
 
@@ -1700,10 +1701,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       // xdd_uav  = (f/m)Re3 - ge3 - (mp/m)*(xdd_payload + ge3)
       // note that acc_ = xdd_payload + ge3
       // add neural network:
-      self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp/self->mass, acc_)), a_nn);
-      if (self->est_acc & 2) {
-        // (self->plAcc_des = xl_des + ge3) -->  Tq = -mp*self->plAcc_des --> tension = vdot(Tq, q) --> uav acc: xddot = (f/mass)Re3 - ge3 - Tq/mass, where Tq/mass = (tension/mass)q 
-        self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(tension/self->mass, self->qi)), a_nn);
+      // self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp/self->mass, acc_)), a_nn);
+      if (self->est_acc == 2) { 
+      //   // (self->plAcc_des = xl_des + ge3) -->  Tq = -mp*self->plAcc_des --> tension = vdot(Tq, q) --> uav acc: xddot = (f/mass)Re3 - ge3 - Tq/mass, where Tq/mass = (tension/mass)q 
+        self->a_rpm = vadd(vsub(vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp / self->mass, self->Tq)), a_nn);
       }
       // self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(self->R, e3)), mkvec(0.0, 0.0, 9.81f));
 
@@ -1726,7 +1727,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
 
     self->u_i = vadd(u_parallel, u_perpind);
-    self->u_i = vsub(vadd(self->u_i, a_indi), a_nn);
+    self->u_i = vsub(vadd(self->u_i, mvmul(qiqiT, vscl(self->mass+self->mp, a_indi))), a_nn);
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
