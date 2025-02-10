@@ -1727,7 +1727,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
 
     self->u_i = vadd(u_parallel, u_perpind);
-    self->u_i = vsub(vadd(self->u_i, mvmul(qiqiT, vscl(self->mass+self->mp, a_indi))), a_nn);
+    self->u_i = vsub(vsub(self->u_i, vscl(self->mass*l, a_indi)), a_nn);
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
