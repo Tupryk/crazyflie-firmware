@@ -51,7 +51,7 @@ TODO
 
 #include "nn.h"
 #include "usec_time.h"
-float nn_inference_time;
+float nn_inference_time_payload;
 
 extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
@@ -1707,7 +1707,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     
       float end_time = usecTimestamp();
       float elapsed_time = end_time - start_time;
-      nn_inference_time = elapsed_time; // Microseconds
+      nn_inference_time_payload = elapsed_time; // Microseconds
     }
 
     struct vec a_nn = vzero();
@@ -1751,7 +1751,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
 
     self->u_i = vadd(u_parallel, u_perpind);
-    self->u_i = vsub(vsub(self->u_i, vscl(self->mass, a_indi)), a_nn);
+    // self->u_i = vsub(vsub(self->u_i, vscl(self->mass, a_indi)), a_nn);
+    // u_i = u_parallel + u_perpind - (+?) mass*a_indi + mass*a_nn
+    self->u_i = vadd(vsub(self->u_i, vscl(self->mass, a_indi)), vscl(self->mass, a_nn));
+
     // self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     // self->rpy = quat2rpy(self->q);
     // self->R = quat2rotmat(self->q);
