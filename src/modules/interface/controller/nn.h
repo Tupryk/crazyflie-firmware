@@ -7,5 +7,6 @@
 #define OUTPUT_SIZE 2
 
 const float* nn_forward(float input[INPUT_SIZE]);
+const float* nn_forward_payload(float input[INPUT_SIZE]);
 
 #endif

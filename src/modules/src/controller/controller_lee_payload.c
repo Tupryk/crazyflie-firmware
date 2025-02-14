@@ -48,6 +48,11 @@ TODO
 #include "osqp.h"
 #include "scaling.h"
 #include "auxil.h"
+
+#include "nn.h"
+#include "usec_time.h"
+float nn_inference_time;
+
 extern OSQPWorkspace workspace_2uav_2hp;
 extern OSQPWorkspace workspace_3uav_2hp;
 extern OSQPWorkspace workspace_4uav_5hp;
@@ -1675,28 +1680,47 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       vneg(mvmul(skewqi2, self->delta_bar_xi))
     );
 
-    // add neural network:
-    // if (self->use_nn) { 
+    // current rotation [R]
+    self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
+    self->rpy = quat2rpy(self->q);
+    self->R = quat2rotmat(self->q);
 
-
-    // }
+    if (self->use_nn) { 
+      float start_time = usecTimestamp();
+      // Acceleration ang gyroscope sensor readings
+      self->input_vec[0] = sensors->acc.x;
+      self->input_vec[1] = sensors->acc.y;
+      self->input_vec[2] = sensors->acc.z;
+      self->input_vec[3] = sensors->gyro.x;
+      self->input_vec[4] = sensors->gyro.y;
+      self->input_vec[5] = sensors->gyro.z;
+      // First two columns of the rotation matrix
+      self->input_vec[6] = self->R.m[0][0];
+      self->input_vec[7] = self->R.m[0][1];
+      self->input_vec[8] = self->R.m[1][0];
+      self->input_vec[9] = self->R.m[1][1];
+      self->input_vec[10] = self->R.m[2][0];
+      self->input_vec[11] = self->R.m[2][1];
+      const float *model_output = nn_forward_payload(self->input_vec);
+      self->nn_output[0] = model_output[0];
+      self->nn_output[1] = model_output[1];
+    
+      float end_time = usecTimestamp();
+      float elapsed_time = end_time - start_time;
+      nn_inference_time = elapsed_time; // Microseconds
+    }
 
     struct vec a_nn = vzero();
-    // add neural network:
-    // if (self->use_nn) {
-    //   a_nn.x = self->nn_output[0] / self->mass;
-    //   a_nn.y = self->nn_output[1] / self->mass;
-    // }
+    if (self->use_nn) {
+      a_nn.x = self->nn_output[0] / self->mass;
+      a_nn.y = self->nn_output[1] / self->mass;
+    }
 
     // INDI
     struct vec a_indi = vzero();
     struct vec e3 = mkvec(0,0,1);
     if ((self->indi & 1) && rpm_deck_available) {
 
-      // current rotation [R]
-      self->q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
-      self->rpy = quat2rpy(self->q);
-      self->R = quat2rotmat(self->q);
       float f_rpm = t1 + t2 + t3 + t4;
       // xdd_uav  = (f/m)Re3 - ge3 - (mp/m)*(xdd_payload + ge3)
       // note that acc_ = xdd_payload + ge3
