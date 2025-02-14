@@ -1908,7 +1908,8 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     self->timestamp_prev = timestamp;
 
     indi_moments = vsub(self->tau_rpm_filtered, self->tau_gyro_filtered);
-    self->u = vadd(self->u, indi_moments);
+    indi_moments.z = 0.0f; // TODO: DEBUGGING ONLY DELETE ME
+    self->u = vsub(self->u, indi_moments);
 
     // DEBUG
     if (tick % 1000 == 0) {
@@ -2370,6 +2371,11 @@ LOG_ADD(LOG_FLOAT, plVely, &g_self.plVel_filtered.y)
 LOG_ADD(LOG_FLOAT, plVelz, &g_self.plVel_filtered.z)
 
 LOG_ADD(LOG_UINT32, profQP, &qp_runtime_us)
+
+// NN
+
+LOG_ADD(LOG_FLOAT, nnfx, &g_self.nn_output[0])
+LOG_ADD(LOG_FLOAT, nnfy, &g_self.nn_output[1])
 
 LOG_GROUP_STOP(ctrlLeeP)
 
