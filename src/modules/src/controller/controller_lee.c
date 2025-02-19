@@ -251,9 +251,12 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       float start_time = usecTimestamp();
 
       // Acceleration ang gyroscope sensor readings
-      self->input_vec[0] = sensors->acc.x;
-      self->input_vec[1] = sensors->acc.y;
-      self->input_vec[2] = sensors->acc.z;
+      self->input_vec[0] = state->acc.x;
+      self->input_vec[1] = state->acc.y;
+      self->input_vec[2] = state->acc.z;
+      // self->input_vec[0] = sensors->acc.x;
+      // self->input_vec[1] = sensors->acc.y;
+      // self->input_vec[2] = sensors->acc.z;
       self->input_vec[3] = sensors->gyro.x;
       self->input_vec[4] = sensors->gyro.y;
       self->input_vec[5] = sensors->gyro.z;
