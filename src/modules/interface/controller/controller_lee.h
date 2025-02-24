@@ -31,7 +31,7 @@ typedef struct controllerLee_s {
     float mass;
     float thrustSi;
     struct vec J; // Inertia matrix (diagonal matrix); kg m^2
-
+    struct vec desJerk;
     // Position PID
     struct vec Kpos_P; // Kp in paper
     float Kpos_P_limit;
@@ -47,6 +47,22 @@ typedef struct controllerLee_s {
     struct vec Komega;
     struct vec KI;
     struct vec i_error_att;
+    // INDI
+    uint8_t indi;
+    struct vec omega_prev;
+    uint64_t timestamp_prev;
+    // INDI - logging
+    float f_rpm;
+    struct vec tau_rpm;
+    struct vec tau_rpm_filtered;
+    struct vec tau_gyro_filtered;
+    struct vec tau_gyro;
+
+    struct vec a_rpm;
+    struct vec a_rpm_filtered;
+    struct vec a_imu;
+    struct vec a_imu_filtered;
+
     // Logging variables
     struct vec rpy;
     struct vec rpy_des;
@@ -54,6 +70,13 @@ typedef struct controllerLee_s {
     struct vec omega;
     struct vec omega_r;
     struct vec u;
+    struct vec omega_des_dot;
+
+    // Neural network
+    uint8_t use_nn;
+    float input_vec[19];
+    float nn_output[6];
+    
 } controllerLee_t;
 
 
