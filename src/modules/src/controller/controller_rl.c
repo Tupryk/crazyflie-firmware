@@ -42,6 +42,7 @@ static ai_handle network;
 static ai_u8 activations[AI_NETWORK_DATA_ACTIVATIONS_SIZE];
 static float aiInData[AI_NETWORK_IN_1_SIZE];
 static float aiOutData[AI_NETWORK_OUT_1_SIZE];
+static float lastAction[4] = {0};
 
 static ai_buffer * ai_input;
 static ai_buffer * ai_output;
@@ -83,39 +84,52 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   struct quat q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
   struct mat33 R = quat2rotmat(q);
 
-  // flat rotation matrix
-  aiInData[0] = R.m[0][0];
-  aiInData[1] = R.m[0][1];
-  aiInData[2] = R.m[0][2];
-  aiInData[3] = R.m[1][0];
-  aiInData[4] = R.m[1][1];
-  aiInData[5] = R.m[1][2];
-  aiInData[6] = R.m[2][0];
-  aiInData[7] = R.m[2][1];
-  aiInData[8] = R.m[2][2];
-
   // velocity in body frame
   struct vec vel_world = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
   struct vec vel_body = qvrot(qinv(q), vel_world);
-  aiInData[9]  = vel_body.x;
-  aiInData[10] = vel_body.y;
-  aiInData[11] = vel_body.z;
 
   // angular_velocity in body frame
-  aiInData[12] = radians(sensors->gyro.x);
-  aiInData[13] = radians(sensors->gyro.y);
-  aiInData[14] = radians(sensors->gyro.z);
-
-  // position error in body frame
   struct vec pos_desired = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
   struct vec pos = mkvec(state->position.x, state->position.y, state->position.z);
   struct vec pos_error_world = vsub(pos_desired, pos);
+  struct vec pos_error_body  = qvrot(qinv(q), pos_error_world);
 
-  struct vec pos_error_body = qvrot(qinv(q), pos_error_world);
+// pos_error, # (3,) 0:3
+// quad1_rot, # (9,) 3:12
+// quad1_linvel, # (3,) 12:15
+// quad1_angvel, # (3,) 15:18
+// quad1_linear_acc, # (3,) 18:21
+// quad1_angular_acc, # (3,) 21:24
+// last_action, # (4,) 24:28
 
-  aiInData[15] = pos_error_body.x;
-  aiInData[16] = pos_error_body.y;
-  aiInData[17] = pos_error_body.z;
+  aiInData[0]  = pos_error_body.x;
+  aiInData[1]  = pos_error_body.y;
+  aiInData[2]  = pos_error_body.z;
+  aiInData[3]  = R.m[0][0];
+  aiInData[4]  = R.m[0][1];
+  aiInData[5]  = R.m[0][2];
+  aiInData[6]  = R.m[1][0];
+  aiInData[7]  = R.m[1][1];
+  aiInData[8]  = R.m[1][2];
+  aiInData[9]  = R.m[2][0];
+  aiInData[10] = R.m[2][1];
+  aiInData[11] = R.m[2][2];
+  aiInData[12] = vel_body.x;
+  aiInData[13] = vel_body.y;
+  aiInData[14] = vel_body.z;
+  aiInData[15] = radians(sensors->gyro.x);
+  aiInData[16] = radians(sensors->gyro.y);
+  aiInData[17] = radians(sensors->gyro.z);
+  aiInData[18] = sensors->acc.x;
+  aiInData[19] = sensors->acc.y;
+  aiInData[20] = sensors->acc.z;
+  aiInData[21] = 0.0f;
+  aiInData[22] = 0.0f;
+  aiInData[23] = 0.0f;
+  aiInData[24] = lastAction[0];
+  aiInData[25] = lastAction[1];
+  aiInData[26] = lastAction[2];
+  aiInData[27] = lastAction[3];
 
   // Bind input and output buffers
   ai_input[0].data = AI_HANDLE_PTR(aiInData);
@@ -133,75 +147,17 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
     return;
   }
 
-  // DEBUG_PRINT("%llu, %f, %f, %f, %f\n", end-start, (float)aiOutData[0], (float)aiOutData[1], (float)aiOutData[2], (float)aiOutData[3]);
-
-  // Map nn output to control commands
   for (int i = 0; i < 4; i++)
   {
-    // clip thrust commands to [-1 1]
-    if (aiOutData[i] > 1.0f)
-    {
-      aiOutData[i] = 1.0f;
-    }
-    else if (aiOutData[i] < -1.0f)
-    {
-      aiOutData[i] = -1.0f;
-    }
-
+    // clip to [-1,1]
+    if (aiOutData[i] > 1.0f)      aiOutData[i] = 1.0f;
+    else if (aiOutData[i] < -1.0f) aiOutData[i] = -1.0f;
     // Thrust commands for four motors mapped to [0, 0.118] (N)
-    // control->thrust[4-i] = THRUST_MIN + (0.5f * (aiOutData[i] + 1.0f)) * (THRUST_MAX - THRUST_MIN);
-    control->normalizedForces[3-i] =0.5f * (aiOutData[i] + 1.0f);
+    // control->thrust[4-i] = THRUST_MIN + (0.5f * (aiOutData[i]
+    control->normalizedForces[i] = 0.5f * (aiOutData[i] + 1.0f);
+    lastAction[i] = control->normalizedForces[i];
     control->controlMode = controlModeForce;
   }
-
-  // mojoco output order: m4, m3, m2, m1
-  // 
-
-  // // Run inference
-  // if (runInference())
-  // {
-  //   // Map nn output to control commands
-  //   for (int i = 0; i < 4; i++)
-  //   {
-  //     // clip thrust commands to [-1 1]
-  //     if (action_output[i] > 1.0f)
-  //     {
-  //       action_output[i] = 1.0f;
-  //     }
-  //     else if (action_output[i] < -1.0f)
-  //     {
-  //       action_output[i] = -1.0f;
-  //     }
-
-  //     // Thrust commands for four motors mapped to [0, 0.118] (N)
-  //     // control->thrust[i] = THRUST_MIN + (0.5f * (action_output[i] + 1.0f)) * (THRUST_MAX - THRUST_MIN);
-
-
-      
-      
-  //     // TODO: apply actions properly. I think we need to scale and clip the action.
-  //     // python:
-  //     // # Post - process action
-  //     // # Rescale the action from[-1, 1] to[low, high]
-  //     // low, high = env.action_space.low, env.action_space.high action = low + (0.5 * (scaled_action + 1.0) * (high - low)) 
-  //     // action = np.clip(action, low, high)
-
-  //     // Thrust commands for four motors clipped to [0, 0.118] (N)
-  //     // 
-  //     // mapping: 
-  //     // 4 - 1
-  //     // |   |
-  //     // 3 - 2
-  //     //<site name="thrust1" pos="0.032527 0.032527 0"/>  => M4
-  //     // <site name="thrust2" pos="-0.032527 0.032527 0"/> => M3
-  //     // <site name="thrust3" pos="-0.032527 -0.032527 0"/> => M2
-  //     // <site name="thrust4" pos="0.032527 -0.032527 0"/> => M1
-  //   }
-  // }
-  // else
-  // {
-  //   DEBUG_PRINT("Inference Error. Not updating controller commands.");
-  // }
-
+  
 }
 
