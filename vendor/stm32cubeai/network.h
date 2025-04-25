@@ -2,12 +2,12 @@
   ******************************************************************************
   * @file    network.h
   * @author  AST Embedded Analytics Research Platform
-  * @date    2024-11-26T17:30:23+0000
+  * @date    2025-04-25T14:27:11+0000
   * @brief   AI Tool Automatic Code Generator for Embedded NN computing
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2024 STMicroelectronics.
+  * Copyright (c) 2025 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -23,7 +23,7 @@
 
 /******************************************************************************/
 #define AI_NETWORK_MODEL_NAME          "network"
-#define AI_NETWORK_ORIGIN_MODEL_NAME   "my_ppo_actor"
+#define AI_NETWORK_ORIGIN_MODEL_NAME   "actor_model2"
 
 /******************************************************************************/
 #define AI_NETWORK_ACTIVATIONS_ALIGNMENT   (4)
@@ -44,10 +44,9 @@ AI_DEPRECATED
   AI_NETWORK_IN_1_SIZE_BYTES, \
 }
 #define AI_NETWORK_IN_1_FORMAT      (AI_BUFFER_FORMAT_FLOAT)
-#define AI_NETWORK_IN_1_HEIGHT      (1)
-#define AI_NETWORK_IN_1_CHANNEL     (18)
-#define AI_NETWORK_IN_1_SIZE        (18)
-#define AI_NETWORK_IN_1_SIZE_BYTES  (72)
+#define AI_NETWORK_IN_1_CHANNEL     (29)
+#define AI_NETWORK_IN_1_SIZE        (29)
+#define AI_NETWORK_IN_1_SIZE_BYTES  (116)
 
 /******************************************************************************/
 #define AI_NETWORK_OUT_NUM       (1)
@@ -63,7 +62,6 @@ AI_DEPRECATED
   AI_NETWORK_OUT_1_SIZE_BYTES, \
 }
 #define AI_NETWORK_OUT_1_FORMAT      (AI_BUFFER_FORMAT_FLOAT)
-#define AI_NETWORK_OUT_1_HEIGHT      (1)
 #define AI_NETWORK_OUT_1_CHANNEL     (4)
 #define AI_NETWORK_OUT_1_SIZE        (4)
 #define AI_NETWORK_OUT_1_SIZE_BYTES  (16)
