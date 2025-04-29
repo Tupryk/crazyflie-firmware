@@ -123,13 +123,10 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   aiInData[18] = sensors->acc.x;
   aiInData[19] = sensors->acc.y;
   aiInData[20] = sensors->acc.z;
-  aiInData[21] = 0.0f;
-  aiInData[22] = 0.0f;
-  aiInData[23] = 0.0f;
-  aiInData[24] = lastAction[0];
-  aiInData[25] = lastAction[1];
-  aiInData[26] = lastAction[2];
-  aiInData[27] = lastAction[3];
+  aiInData[21] = lastAction[0];
+  aiInData[22] = lastAction[1];
+  aiInData[23] = lastAction[2];
+  aiInData[24] = lastAction[3];
 
   // Bind input and output buffers
   ai_input[0].data = AI_HANDLE_PTR(aiInData);
@@ -155,7 +152,7 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
     // Thrust commands for four motors mapped to [0, 0.118] (N)
     // control->thrust[4-i] = THRUST_MIN + (0.5f * (aiOutData[i]
     control->normalizedForces[i] = 0.5f * (aiOutData[i] + 1.0f);
-    lastAction[i] = control->normalizedForces[i];
+    lastAction[i] = aiOutData[i];
     control->controlMode = controlModeForce;
   }
   
