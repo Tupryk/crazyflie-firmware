@@ -13,6 +13,7 @@ version.c
 tags
 *cffirmware*.so
 cffirmware.py
+.DS_Store
 
 /cf2.*
 /tag.*
