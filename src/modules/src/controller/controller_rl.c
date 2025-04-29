@@ -77,7 +77,7 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
                           const uint32_t tick)
 {
   // TODO: limit to only 1 Hz for debugging
-  if (!RATE_DO_EXECUTE(200, tick)) {
+  if (!RATE_DO_EXECUTE(250, tick)) {
     return;
   }
 
