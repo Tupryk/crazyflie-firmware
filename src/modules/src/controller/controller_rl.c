@@ -40,21 +40,11 @@ SOFTWARE.
 #include "network.h"
 #include "network_data_params.h"
 
-
-STAI_ALIGNED(STAI_NETWORK_CONTEXT_ALIGNMENT)
-static stai_network network_context[STAI_NETWORK_CONTEXT_SIZE] = {0};
-
-STAI_ALIGNED(STAI_NETWORK_ACTIVATION_1_ALIGNMENT)
-static uint8_t activations[STAI_NETWORK_ACTIVATION_1_SIZE_BYTES];
-
-STAI_ALIGNED(STAI_NETWORK_IN_1_ALIGNMENT)
-static float in_data[STAI_NETWORK_IN_1_SIZE];
-
-STAI_ALIGNED(STAI_NETWORK_OUT_1_ALIGNMENT)
-static float out_data[STAI_NETWORK_OUT_1_SIZE];
-
-static stai_ptr stai_input[STAI_NETWORK_IN_NUM];
-static stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
+static ai_handle rl_network = AI_HANDLE_NULL;
+static const ai_handle rl_activations[] = { AI_NETWORK_DATA_ACTIVATIONS };
+static const ai_handle rl_weights[]     = { AI_NETWORK_DATA_WEIGHTS };
+static ai_buffer *input_bufs  = NULL;
+static ai_buffer *output_bufs = NULL;
 
 static float lastAction[4] = {0};
 static uint32_t rl_print_counter = 0;
@@ -64,32 +54,18 @@ static uint32_t rl_print_counter = 0;
 
 void controllerRLFirmwareInit(void)
 {
-  stai_return_code ret;
-
-  ret = stai_runtime_init();
-  if (ret != STAI_SUCCESS) {
-    DEBUG_PRINT("STAI runtime init failed: %d\n", ret);
+  ai_error err = ai_network_create_and_init(
+    &rl_network,
+    rl_activations,
+    rl_weights
+  );
+  if (err.type != AI_ERROR_NONE) {
+    DEBUG_PRINT("AI network init failed: %d\n", err.type);
     return;
   }
-
-  ret = stai_network_init(network_context);
-  if (ret != STAI_SUCCESS) {
-    DEBUG_PRINT("STAI network init failed: %d\n", ret);
-    return;
-  }
-
-  const stai_ptr acts[] = { activations };
-  ret = stai_network_set_activations(network_context, acts, STAI_NETWORK_ACTIVATIONS_NUM);
-  if (ret != STAI_SUCCESS) {
-    DEBUG_PRINT("Set activations failed: %d\n", ret);
-    return;
-  }
-
-  // prepare I/O pointers
-  stai_input[0]  = in_data;
-  stai_output[0] = out_data;
-
-  DEBUG_PRINT("STAI network initialized successfully.\n");
+  input_bufs  = ai_network_inputs_get(rl_network,  NULL);
+  output_bufs = ai_network_outputs_get(rl_network, NULL);
+  DEBUG_PRINT("AI network initialized successfully.\n");
 }
 
 bool controllerRLFirmwareTest(void)
@@ -146,21 +122,20 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   in_buf[23] = lastAction[2];
   in_buf[24] = lastAction[3];
 
-  // copy into STAI input buffer
-  memcpy(in_data, in_buf, sizeof(in_data));
+  // copy into AI input buffer
+  memcpy(input_bufs[0].data, in_buf, sizeof(in_buf));
 
-  // run minimal STAI inference
-  if (stai_network_set_inputs(network_context, stai_input, STAI_NETWORK_IN_NUM) != STAI_SUCCESS ||
-      stai_network_set_outputs(network_context, stai_output, STAI_NETWORK_OUT_NUM) != STAI_SUCCESS ||
-      stai_network_run(network_context, STAI_MODE_SYNC) != STAI_SUCCESS) {
-    DEBUG_PRINT("STAI inference failed\n");
+  // run AI inference
+  ai_i32 nb = ai_network_run(rl_network, input_bufs, output_bufs);
+  if (nb <= 0) {
+    DEBUG_PRINT("AI inference failed\n");
     return;
   }
 
   rl_print_counter++;
 
   for (int i = 0; i < 4; i++) {
-    float t = out_data[i];
+    float t = ((float*)output_bufs[0].data)[i];
     if (t >  1.0f) t =  1.0f;
     if (t < -1.0f) t = -1.0f;
     control->normalizedForces[i] = 0.5f * (t + 1.0f);
