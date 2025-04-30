@@ -41,7 +41,6 @@ SOFTWARE.
 #include "network_data_params.h"
 
 static ai_handle network;
-static ai_u8 activations[AI_NETWORK_DATA_ACTIVATIONS_SIZE];
 static float aiInData[AI_NETWORK_IN_1_SIZE];
 static float aiOutData[AI_NETWORK_OUT_1_SIZE];
 
@@ -55,9 +54,12 @@ static uint32_t rl_print_counter = 0;
 
 void controllerRLFirmwareInit(void)
 {
-  const ai_handle act_addr[] = { activations };
+  ai_error e = ai_network_create_and_init(
+    &network,
+    AI_NETWORK_DATA_ACTIVATIONS_TABLE_GET(),
+    AI_NETWORK_DATA_WEIGHTS_TABLE_GET()
+  );
 
-  ai_error e = ai_network_create_and_init(&network, act_addr, NULL);
   if (e.type != AI_ERROR_NONE)
   {
     DEBUG_PRINT("Failed to initialize network. Error code: %d.%d\n", e.type, e.code);
@@ -97,32 +99,32 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   struct vec pos_error_world = vsub(pos_desired, pos);
   struct vec pos_error_body  = qvrot(qinv(q), pos_error_world);
 
-  float in_buf[25];
-  in_buf[0]  = pos_error_body.x;
-  in_buf[1]  = pos_error_body.y;
-  in_buf[2]  = pos_error_body.z;
-  in_buf[3]  = R.m[0][0];
-  in_buf[4]  = R.m[0][1];
-  in_buf[5]  = R.m[0][2];
-  in_buf[6]  = R.m[1][0];
-  in_buf[7]  = R.m[1][1];
-  in_buf[8]  = R.m[1][2];
-  in_buf[9]  = R.m[2][0];
-  in_buf[10] = R.m[2][1];
-  in_buf[11] = R.m[2][2];
-  in_buf[12] = vel_body.x;
-  in_buf[13] = vel_body.y;
-  in_buf[14] = vel_body.z;
-  in_buf[15] = radians(sensors->gyro.x);
-  in_buf[16] = radians(sensors->gyro.y);
-  in_buf[17] = radians(sensors->gyro.z);
-  in_buf[18] = sensors->acc.x;
-  in_buf[19] = sensors->acc.y;
-  in_buf[20] = sensors->acc.z;
-  in_buf[21] = lastAction[0];
-  in_buf[22] = lastAction[1];
-  in_buf[23] = lastAction[2];
-  in_buf[24] = lastAction[3];
+
+  aiInData[0]  = pos_error_body.x;
+  aiInData[1]  = pos_error_body.y;
+  aiInData[2]  = pos_error_body.z;
+  aiInData[3]  = R.m[0][0];
+  aiInData[4]  = R.m[0][1];
+  aiInData[5]  = R.m[0][2];
+  aiInData[6]  = R.m[1][0];
+  aiInData[7]  = R.m[1][1];
+  aiInData[8]  = R.m[1][2];
+  aiInData[9]  = R.m[2][0];
+  aiInData[10] = R.m[2][1];
+  aiInData[11] = R.m[2][2];
+  aiInData[12] = vel_body.x;
+  aiInData[13] = vel_body.y;
+  aiInData[14] = vel_body.z;
+  aiInData[15] = radians(sensors->gyro.x);
+  aiInData[16] = radians(sensors->gyro.y);
+  aiInData[17] = radians(sensors->gyro.z);
+  aiInData[18] = sensors->acc.x;
+  aiInData[19] = sensors->acc.y;
+  aiInData[20] = sensors->acc.z;
+  aiInData[21] = lastAction[0];
+  aiInData[22] = lastAction[1];
+  aiInData[23] = lastAction[2];
+  aiInData[24] = lastAction[3];
 
   // Bind input and output buffers
   ai_input[0].data = AI_HANDLE_PTR(aiInData);
@@ -148,14 +150,13 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
     if (t < -1.0f) t = -1.0f;
     control->normalizedForces[i] = 0.5f * (t + 1.0f);
     lastAction[i] = t;
-
-    if (rl_print_counter % 100 == 0) {
-      DEBUG_PRINT("action[%d] = %f\n", i, t);
-    }
   }
 
-  if (rl_print_counter >= 100) {
-    rl_print_counter = 0;
+  if (rl_print_counter % 100 == 0) {
+    DEBUG_PRINT("action = [%f, %f, %f, %f]\n",
+      lastAction[0], lastAction[1],
+      lastAction[2], lastAction[3]);
+      rl_print_counter = 0;
   }
 
   control->controlMode = controlModeForce;
