@@ -38,10 +38,11 @@ SOFTWARE.
 #include "usec_time.h"
 
 #include "network.h"
+#include "network_data.h"
 
 static ai_handle rl_network = AI_HANDLE_NULL;
-static ai_buffer *rl_input;
-static ai_buffer *rl_output;
+static ai_buffer *rl_ai_input = NULL;
+static ai_buffer *rl_ai_output = NULL;
 
 static float lastAction[4] = {0};
 static uint32_t rl_print_counter = 0;
@@ -51,18 +52,16 @@ static uint32_t rl_print_counter = 0;
 
 void controllerRLFirmwareInit(void)
 {
-  // Initialize RL network
-  ai_error err = ai_network_create_and_init(
-    &rl_network,
-    AI_NETWORK_DATA_ACTIVATIONS_TABLE_GET(),
-    AI_NETWORK_DATA_WEIGHTS_TABLE_GET());
-  if (err.type != AI_ERROR_NONE) {
-    DEBUG_PRINT("RL network init error type %d code %d\n", err.type, err.code);
-  } else {
-    uint16_t n;
-    rl_input = ai_network_inputs_get(rl_network, &n);
-    rl_output = ai_network_outputs_get(rl_network, &n);
-  }
+    ai_error err;
+    ai_handle activations[] = { AI_NETWORK_DATA_ACTIVATIONS_TABLE_GET() };
+    ai_handle weights[]     = { AI_NETWORK_DATA_WEIGHTS_TABLE_GET() };
+
+    err = ai_network_create_and_init(&rl_network, activations, weights);
+    if (err.type != AI_ERROR_NONE) {
+        DEBUG_PRINT("RL network init error: %d\n", err.type);
+    }
+    rl_ai_input  = ai_network_inputs_get(rl_network,  NULL);
+    rl_ai_output = ai_network_outputs_get(rl_network, NULL);
 }
 
 bool controllerRLFirmwareTest(void)
@@ -119,17 +118,22 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   in_buf[23] = lastAction[2];
   in_buf[24] = lastAction[3];
 
-  // Copy inputs and run network
-  rl_input[0].data = (ai_ptr)in_buf;
-  if (ai_network_run(rl_network, rl_input, rl_output) != 1) {
-    DEBUG_PRINT("RL inference failed\n");
+  // copy to NN input
+  rl_ai_input[0].data = AI_PTR(in_buf);
+
+  // run inference
+  ai_i32 nbatch = ai_network_run(rl_network, rl_ai_input, rl_ai_output);
+  if (nbatch != 1) {
+      DEBUG_PRINT("RL inference failed: %d\n", nbatch);
   }
-  float *output = (float *)rl_output[0].data;
+
+  // get pointer to NN output
+  float *out_buf = (float *)rl_ai_output[0].data;
 
   rl_print_counter++;
 
   for (int i = 0; i < 4; i++) {
-    float t = output[i];
+    float t = out_buf[i];
     if (t >  1.0f) t =  1.0f;
     if (t < -1.0f) t = -1.0f;
     control->normalizedForces[i] = 0.5f * (t + 1.0f);
