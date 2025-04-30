@@ -22,6 +22,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+// For STAI docs see: https://stedgeai-dc.st.com/documentation
+
 #include <math.h>
 #include <string.h>
 
@@ -37,36 +39,29 @@ SOFTWARE.
 
 #include "network.h"
 #include "network_data_params.h"
+#include "stai.h"
 
-static ai_handle network;
-static ai_u8 activations[AI_NETWORK_DATA_ACTIVATIONS_SIZE];
-static float aiInData[AI_NETWORK_IN_1_SIZE];
-static float aiOutData[AI_NETWORK_OUT_1_SIZE];
+static stai_handle_t stai_net;
+static float stai_in_buf[AI_NETWORK_IN_1_SIZE];
+static float stai_out_buf[AI_NETWORK_OUT_1_SIZE];
 static float lastAction[4] = {0};
-
-
-static ai_buffer *ai_input;
-static ai_buffer *ai_output;
+static uint32_t rl_print_counter = 0;    // <-- new counter
 
 #define THRUST_MIN 0.0f     // Minimum thrust (N)
 #define THRUST_MAX 0.118f   // Maximum thrust (N)
 
 void controllerRLFirmwareInit(void)
 {
-  /* Create a local array with the addresses of the activations buffers */
-  const ai_handle act_addr[] = { activations };
-  ai_error e = ai_network_create_and_init(&network, act_addr, NULL);
-  if (e.type != AI_ERROR_NONE)
-  {
-    DEBUG_PRINT("Failed to initialize network. Error code: %d.%d\n", e.type, e.code);
+  // Initialize new STAI network 
+  stai_status_t status = stai_init(&stai_net,
+                                   network_data_weights,
+                                   network_data_activations,
+                                   AI_NETWORK_DATA_ACTIVATIONS_SIZE);
+  if (status != STAI_OK) {
+    DEBUG_PRINT("Failed to init STAI network: %d\n", status);
+  } else {
+    DEBUG_PRINT("STAI network initialized successfully.\n");
   }
-  else
-  {
-    DEBUG_PRINT("Neural network initialized successfully.\n");
-  }
-
-  ai_input  = ai_network_inputs_get(network, NULL);
-  ai_output = ai_network_outputs_get(network, NULL);
 }
 
 bool controllerRLFirmwareTest(void)
@@ -96,8 +91,7 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   struct vec pos_error_world = vsub(pos_desired, pos);
   struct vec pos_error_body  = qvrot(qinv(q), pos_error_world);
 
-
-  float *in_buf = (float*)ai_input[0].data;
+  float in_buf[25];
   in_buf[0]  = pos_error_body.x;
   in_buf[1]  = pos_error_body.y;
   in_buf[2]  = pos_error_body.z;
@@ -123,26 +117,35 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   in_buf[22] = lastAction[1];
   in_buf[23] = lastAction[2];
   in_buf[24] = lastAction[3];
-  ai_input[0].n_batches = 1;
 
-  //run inference
-  ai_i32 batch = ai_network_run(network, ai_input, ai_output);
-  if (batch != 1) {
-    ai_error err = ai_network_get_error(network);
-    DEBUG_PRINT("Inference failed: %d.%d\n", err.type, err.code);
+  // copy into STAI input
+  memcpy(stai_in_buf, in_buf, sizeof(stai_in_buf));
+
+  // run inference via STAI API
+  stai_status_t ret = stai_run(stai_net, stai_in_buf, stai_out_buf);
+  if (ret != STAI_OK) {
+    DEBUG_PRINT("STAI inference failed: %d\n", ret);
     return;
   }
 
-  // cast output buffer 
-  float *out_buf = (float*)ai_output[0].data;
+  rl_print_counter++;
+
   for (int i = 0; i < 4; i++) {
-    float t = out_buf[i];
-    // clip to [-1,1]
+    float t = stai_out_buf[i];
     if (t >  1.0f) t =  1.0f;
     if (t < -1.0f) t = -1.0f;
     control->normalizedForces[i] = 0.5f * (t + 1.0f);
     lastAction[i] = t;
+
+    if (rl_print_counter % 100 == 0) {
+      DEBUG_PRINT("action[%d] = %f\n", i, t);
+    }
   }
+
+  if (rl_print_counter >= 100) {
+    rl_print_counter = 0;
+  }
+
   control->controlMode = controlModeForce;
 }
 
