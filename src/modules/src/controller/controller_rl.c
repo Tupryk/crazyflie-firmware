@@ -39,30 +39,29 @@ SOFTWARE.
 #include "debug.h"
 #include "usec_time.h"
 
-#include "stai.h"     // ST Edge AI Embedded Client API
 #include "network.h"  // Generated model definitions (activations, weights, I/O sizes)
+#include "network_data.h"
 
-/* Global byte buffer to save instantiated C-model network context */
-STAI_ALIGNED(STAI_NETWORK_CONTEXT_ALIGNMENT)
-static stai_network network_context[STAI_NETWORK_CONTEXT_SIZE] = {0};
+/* Global handle to reference the instantiated C-model */
+static ai_handle network = AI_HANDLE_NULL;
 
 /* Global c-array to handle the activations buffer */
-STAI_ALIGNED(STAI_NETWORK_ACTIVATION_1_ALIGNMENT)
-static uint8_t activations[STAI_NETWORK_ACTIVATION_1_SIZE_BYTES];
+AI_ALIGNED(32)
+static ai_u8 activations[AI_NETWORK_DATA_ACTIVATIONS_SIZE];
 
 /* Array to store the data of the input tensor */
-STAI_ALIGNED(STAI_NETWORK_IN_1_ALIGNMENT)
-static float in_data[STAI_NETWORK_IN_1_SIZE];
-/* or static uint8_t in_data[STAI_NETWORK_IN_1_SIZE_BYTES]; */
+AI_ALIGNED(32)
+static ai_float in_data[AI_NETWORK_IN_1_SIZE];
+/* or static ai_u8 in_data[AI_NETWORK_IN_1_SIZE_BYTES]; */
 
 /* c-array to store the data of the output tensor */
-STAI_ALIGNED(STAI_NETWORK_OUT_1_ALIGNMENT)
-static float out_data[STAI_NETWORK_OUT_1_SIZE];
-/* static uint8_t out_data[STAI_NETWORK_OUT_1_SIZE_BYTES]; */
+AI_ALIGNED(32)
+static ai_float out_data[AI_NETWORK_OUT_1_SIZE];
+/* static ai_u8 out_data[AI_NETWORK_OUT_1_SIZE_BYTES]; */
 
 /* Array of pointer to manage the model's input/output tensors */
-static stai_ptr stai_input[STAI_NETWORK_IN_NUM];
-static stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
+static ai_buffer *ai_input;
+static ai_buffer *ai_output;
 
 
 static float lastAction[4] = {0};
@@ -76,29 +75,19 @@ static uint32_t rl_print_counter = 0;
  * Bootstrap
  */
 int aiInit(void) {
-  stai_return_code ret_code;
+  ai_error err;
   
-  /* Initialize runtime library */
-  ret_code = stai_runtime_init();
-  if (ret_code != STAI_SUCCESS) { 
-    DEBUG_PRINT("stai_runtime_init failed: %d\n", ret_code);
+  /* Create and initialize the c-model */
+  const ai_handle acts[] = { activations };
+  err = ai_network_create_and_init(&network, acts, NULL);
+  if (err.type != AI_ERROR_NONE) { 
+    DEBUG_PRINT("AI network creation failed with code: %d\n", err.type);
     return -1;
    };
 
-  /* Initialize network model context */
-  ret_code = stai_network_init(network_context);
-  if (ret_code != STAI_SUCCESS) { 
-    DEBUG_PRINT("stai_network_init failed: %d\n", ret_code);
-    return -1;
-   };
-
-  /* Set network activations buffers */
-  const stai_ptr acts[] = { activations };
-  ret_code = stai_network_set_activations(network_context, acts, STAI_NETWORK_ACTIVATIONS_NUM);
-  if (ret_code != STAI_SUCCESS) { 
-    DEBUG_PRINT("stai_network_set_activations failed: %d\n", ret_code);
-    return -1;
-   };
+  /* Reteive pointers to the model's input/output tensors */
+  ai_input = ai_network_inputs_get(network, NULL);
+  ai_output = ai_network_outputs_get(network, NULL);
 
   return 0;
 }
@@ -117,29 +106,19 @@ void controllerRLFirmwareInit(void)
  * Run inference
  */
 int aiRun(const void *in_data, void *out_data) {
-  stai_return_code ret_code;
-
-  /* Set network input/output buffers */
-  const stai_ptr inputs_ptr[] = { in_data };
-  ret_code = stai_network_set_inputs(network_context, inputs_ptr, STAI_NETWORK_IN_NUM);
-  if (ret_code != STAI_SUCCESS) { 
-    DEBUG_PRINT("stai_network_set_inputs failed: %d\n", ret_code);
-    return -1;
-   };
-
-  const stai_ptr outputs_ptr[] = { out_data };
-  ret_code = stai_network_set_outputs(network_context, outputs_ptr, STAI_NETWORK_OUT_NUM);
-  if (ret_code != STAI_SUCCESS) { 
-    DEBUG_PRINT("stai_network_set_outputs failed: %d\n", ret_code);
-    return -1;
-   };
-
+  ai_i32 n_batch;
+  ai_error err;
+  
+  /* 1 - Update IO handlers with the data payload */
+  ai_input[0].data = AI_HANDLE_PTR(in_data);
+  ai_output[0].data = AI_HANDLE_PTR(out_data);
 
   /* 2 - Perform the inference */
-  ret_code = stai_network_run(network, STAI_MODE_SYNC);
-  if (ret_code != STAI_SUCCESS) {
-      ret_code = stai_network_get_error(network_context);
-      DEBUG_PRINT("stai_network_run failed: %d\n", ret_code);
+  n_batch = ai_network_run(network, &ai_input[0], &ai_output[0]);
+  if (n_batch != 1) {
+      err = ai_network_get_error(network);
+      DEBUG_PRINT("AI network run failed with code: %d\n", err.type);
+      return -1;
   };
   
   return 0;
