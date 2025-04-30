@@ -38,27 +38,10 @@ SOFTWARE.
 #include "usec_time.h"
 
 #include "network.h"
-#include "network_data.h"
-#include "network_data_params.h"
 
 static ai_handle rl_network = AI_HANDLE_NULL;
-
-
-static AI_ALIGNED(4)
-ai_u8 rl_activations_data[ AI_NETWORK_DATA_ACTIVATIONS_SIZE_BYTES ];
-
-static ai_handle rl_activations[] = {
-  AI_NETWORK_DATA_ACTIVATIONS(rl_activations_data)
-};
-
-
-extern const ai_u64 s_network_weights_array_u64[ AI_NETWORK_DATA_WEIGHTS_COUNT * (AI_NETWORK_DATA_WEIGHTS_SIZE/8) ];
-static ai_handle rl_weights[] = {
-  AI_NETWORK_DATA_WEIGHTS(s_network_weights_array_u64)
-};
-
-static ai_buffer *input_bufs  = NULL;
-static ai_buffer *output_bufs = NULL;
+static ai_buffer *rl_input;
+static ai_buffer *rl_output;
 
 static float lastAction[4] = {0};
 static uint32_t rl_print_counter = 0;
@@ -68,18 +51,18 @@ static uint32_t rl_print_counter = 0;
 
 void controllerRLFirmwareInit(void)
 {
+  // Initialize RL network
   ai_error err = ai_network_create_and_init(
     &rl_network,
-    rl_activations,
-    rl_weights
-  );
+    AI_NETWORK_DATA_ACTIVATIONS_TABLE_GET(),
+    AI_NETWORK_DATA_WEIGHTS_TABLE_GET());
   if (err.type != AI_ERROR_NONE) {
-    DEBUG_PRINT("AI network init failed: %d\n", err.type);
-    return;
+    DEBUG_PRINT("RL network init error type %d code %d\n", err.type, err.code);
+  } else {
+    uint16_t n;
+    rl_input = ai_network_inputs_get(rl_network, &n);
+    rl_output = ai_network_outputs_get(rl_network, &n);
   }
-  input_bufs  = ai_network_inputs_get(rl_network,  NULL);
-  output_bufs = ai_network_outputs_get(rl_network, NULL);
-  DEBUG_PRINT("AI network initialized successfully.\n");
 }
 
 bool controllerRLFirmwareTest(void)
@@ -136,20 +119,17 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   in_buf[23] = lastAction[2];
   in_buf[24] = lastAction[3];
 
-  // copy into AI input buffer
-  memcpy(input_bufs[0].data, in_buf, sizeof(in_buf));
-
-  // run AI inference
-  ai_i32 nb = ai_network_run(rl_network, input_bufs, output_bufs);
-  if (nb <= 0) {
-    DEBUG_PRINT("AI inference failed\n");
-    return;
+  // Copy inputs and run network
+  rl_input[0].data = (ai_ptr)in_buf;
+  if (ai_network_run(rl_network, rl_input, rl_output) != 1) {
+    DEBUG_PRINT("RL inference failed\n");
   }
+  float *output = (float *)rl_output[0].data;
 
   rl_print_counter++;
 
   for (int i = 0; i < 4; i++) {
-    float t = ((float*)output_bufs[0].data)[i];
+    float t = output[i];
     if (t >  1.0f) t =  1.0f;
     if (t < -1.0f) t = -1.0f;
     control->normalizedForces[i] = 0.5f * (t + 1.0f);
