@@ -42,11 +42,28 @@ SOFTWARE.
 #include "stai.h"     // ST Edge AI Embedded Client API
 #include "network.h"  // Generated model definitions (activations, weights, I/O sizes)
 
-static stai_network_t *network = NULL;
+/* Global byte buffer to save instantiated C-model network context */
+STAI_ALIGNED(STAI_NETWORK_CONTEXT_ALIGNMENT)
+static stai_network network_context[STAI_NETWORK_CONTEXT_SIZE] = {0};
+
+/* Global c-array to handle the activations buffer */
+STAI_ALIGNED(STAI_NETWORK_ACTIVATION_1_ALIGNMENT)
+static uint8_t activations[STAI_NETWORK_ACTIVATION_1_SIZE_BYTES];
+
+/* Array to store the data of the input tensor */
+STAI_ALIGNED(STAI_NETWORK_IN_1_ALIGNMENT)
 static float in_data[STAI_NETWORK_IN_1_SIZE];
+/* or static uint8_t in_data[STAI_NETWORK_IN_1_SIZE_BYTES]; */
+
+/* c-array to store the data of the output tensor */
+STAI_ALIGNED(STAI_NETWORK_OUT_1_ALIGNMENT)
 static float out_data[STAI_NETWORK_OUT_1_SIZE];
-static stai_buffer *stai_input  = NULL;
-static stai_buffer *stai_output = NULL;
+/* static uint8_t out_data[STAI_NETWORK_OUT_1_SIZE_BYTES]; */
+
+/* Array of pointer to manage the model's input/output tensors */
+static stai_ptr stai_input[STAI_NETWORK_IN_NUM];
+static stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
+
 
 static float lastAction[4] = {0};
 static uint32_t rl_print_counter = 0;
@@ -54,20 +71,78 @@ static uint32_t rl_print_counter = 0;
 #define THRUST_MIN 0.0f     // Minimum thrust (N)
 #define THRUST_MAX 0.118f   // Maximum thrust (N)
 
+
+/* 
+ * Bootstrap
+ */
+int aiInit(void) {
+  stai_return_code ret_code;
+  
+  /* Initialize runtime library */
+  ret_code = stai_runtime_init();
+  if (ret_code != STAI_SUCCESS) { 
+    DEBUG_PRINT("stai_runtime_init failed: %d\n", ret_code);
+    return -1;
+   };
+
+  /* Initialize network model context */
+  ret_code = stai_network_init(network_context);
+  if (ret_code != STAI_SUCCESS) { 
+    DEBUG_PRINT("stai_network_init failed: %d\n", ret_code);
+    return -1;
+   };
+
+  /* Set network activations buffers */
+  const stai_ptr acts[] = { activations };
+  ret_code = stai_network_set_activations(network_context, acts, STAI_NETWORK_ACTIVATIONS_NUM);
+  if (ret_code != STAI_SUCCESS) { 
+    DEBUG_PRINT("stai_network_set_activations failed: %d\n", ret_code);
+    return -1;
+   };
+
+  return 0;
+}
+
 void controllerRLFirmwareInit(void)
 {
-  stai_return_code rc = stai_network_create_and_init(
-        &network,
-        STAI_NETWORK_DATA_ACTIVATIONS_TABLE_GET(),
-        STAI_NETWORK_DATA_WEIGHTS_TABLE_GET()
-    );
-    if (rc != STAI_SUCCESS) {
-        DEBUG_PRINT("stai_network_create_and_init failed: %d\n", rc);
-        return;
-    }
-    stai_input  = stai_network_inputs_get(network,  NULL);
-    stai_output = stai_network_outputs_get(network, NULL);
-    DEBUG_PRINT("Network initialized via Embedded Client STAI API.\n");
+  int s = aiInit();
+  if (s != 0) {
+    DEBUG_PRINT("AI initialization failed with code: %d\n", s);
+    return;
+  }
+}
+
+
+/* 
+ * Run inference
+ */
+int aiRun(const void *in_data, void *out_data) {
+  stai_return_code ret_code;
+
+  /* Set network input/output buffers */
+  const stai_ptr inputs_ptr[] = { in_data };
+  ret_code = stai_network_set_inputs(network_context, inputs_ptr, STAI_NETWORK_IN_NUM);
+  if (ret_code != STAI_SUCCESS) { 
+    DEBUG_PRINT("stai_network_set_inputs failed: %d\n", ret_code);
+    return -1;
+   };
+
+  const stai_ptr outputs_ptr[] = { out_data };
+  ret_code = stai_network_set_outputs(network_context, outputs_ptr, STAI_NETWORK_OUT_NUM);
+  if (ret_code != STAI_SUCCESS) { 
+    DEBUG_PRINT("stai_network_set_outputs failed: %d\n", ret_code);
+    return -1;
+   };
+
+
+  /* 2 - Perform the inference */
+  ret_code = stai_network_run(network, STAI_MODE_SYNC);
+  if (ret_code != STAI_SUCCESS) {
+      ret_code = stai_network_get_error(network_context);
+      DEBUG_PRINT("stai_network_run failed: %d\n", ret_code);
+  };
+  
+  return 0;
 }
 
 void controllerRLFirmware(control_t *control,
@@ -123,14 +198,8 @@ void controllerRLFirmware(control_t *control,
   in_data[23] = lastAction[2];
   in_data[24] = lastAction[3];
 
-    stai_input[0].data  = (stai_ptr)in_data;
-    stai_output[0].data = (stai_ptr)out_data;
-
-    stai_error rc = stai_network_run(network, STAI_MODE_SYNC);
-    if (rc != STAI_SUCCESS) {
-        DEBUG_PRINT("stai_network_run failed: %d\n", rc);
-        return;
-    }
+    /* 2 - Call inference engine */
+    aiRun(in_data, out_data);
 
     for (int i = 0; i < 4; i++) {
         float t = out_data[i];
@@ -142,8 +211,8 @@ void controllerRLFirmware(control_t *control,
 
     if (++rl_print_counter % 100 == 0) {
         DEBUG_PRINT("action = [%f, %f, %f, %f]\n",
-          lastAction[0], lastAction[1],
-          lastAction[2], lastAction[3]);
+          out_data[0], out_data[1],
+          out_data[2], out_data[3]);
         rl_print_counter = 0;
     }
 
