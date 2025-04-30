@@ -40,14 +40,28 @@ SOFTWARE.
 #include "stai.h"             /* ST Edge AI runtime & APIs */
 #include "network.h"          /* Generated model macros */
 
-/* Declare and allocate private network context buffer */
-STAI_NETWORK_CONTEXT_DECLARE(stai_network_ctx, STAI_NETWORK_CONTEXT_SIZE);
+/* Replace macro with aligned C‐array */
+STAI_ALIGNED(STAI_NETWORK_CONTEXT_ALIGNMENT)
+static stai_network stai_network_ctx[STAI_NETWORK_CONTEXT_SIZE] = {0};
+
+/* Global activation buffers */
+STAI_ALIGNED(STAI_NETWORK_ACTIVATION_1_ALIGNMENT)
+static uint8_t activation1[STAI_NETWORK_ACTIVATION_1_SIZE] = {0};
+STAI_ALIGNED(STAI_NETWORK_ACTIVATION_2_ALIGNMENT)
+static uint8_t activation2[STAI_NETWORK_ACTIVATION_2_SIZE] = {0};
+static stai_ptr activation_buffers[STAI_NETWORK_ACTIVATIONS_NUM] = {
+  (stai_ptr)activation1, (stai_ptr)activation2
+};
 
 /* Buffers for I/O */
 STAI_ALIGNED(STAI_NETWORK_IN_1_ALIGNMENT)
 static float in_data[STAI_NETWORK_IN_1_SIZE];
 STAI_ALIGNED(STAI_NETWORK_OUT_1_ALIGNMENT)
 static float out_data[STAI_NETWORK_OUT_1_SIZE];
+
+/* Global pointer arrays */
+static stai_ptr stai_input[STAI_NETWORK_IN_NUM];
+static stai_ptr stai_output[STAI_NETWORK_OUT_NUM];
 
 static float lastAction[4] = {0};
 static uint32_t rl_print_counter = 0;
@@ -73,15 +87,7 @@ void controllerRLFirmwareInit(void)
     return;
   }
 
-  /* Allocate and bind activations */
-  stai_ptr activation_buffers[STAI_NETWORK_ACTIVATIONS_NUM] = {0};
-  STAI_ALIGNED(STAI_NETWORK_ACTIVATION_1_ALIGNMENT)
-  uint8_t activation1[STAI_NETWORK_ACTIVATION_1_SIZE] = {0};
-  STAI_ALIGNED(STAI_NETWORK_ACTIVATION_2_ALIGNMENT)
-  uint8_t activation2[STAI_NETWORK_ACTIVATION_2_SIZE] = {0};
-  activation_buffers[0] = (stai_ptr)activation1;
-  activation_buffers[1] = (stai_ptr)activation2;
-
+  /* Set global activations */
   rc = stai_network_set_activations(stai_network_ctx,
                                     activation_buffers,
                                     STAI_NETWORK_ACTIVATIONS_NUM);
@@ -148,9 +154,9 @@ void controllerRLFirmware(control_t *control,
   in_data[24] = lastAction[3];
 
   /* Bind input */
-  stai_ptr input_buffers[STAI_NETWORK_IN_NUM] = {(stai_ptr)in_data};
+  stai_input[0] = (stai_ptr)in_data;
   rc = stai_network_set_inputs(stai_network_ctx,
-                               input_buffers,
+                               stai_input,
                                STAI_NETWORK_IN_NUM);
   if (rc != STAI_SUCCESS) {
     DEBUG_PRINT("Failed to set inputs: 0x%x\n", rc);
@@ -158,9 +164,9 @@ void controllerRLFirmware(control_t *control,
   }
 
   /* Bind output */
-  stai_ptr output_buffers[STAI_NETWORK_OUT_NUM] = {(stai_ptr)out_data};
+  stai_output[0] = (stai_ptr)out_data;
   rc = stai_network_set_outputs(stai_network_ctx,
-                                output_buffers,
+                                stai_output,
                                 STAI_NETWORK_OUT_NUM);
   if (rc != STAI_SUCCESS) {
     DEBUG_PRINT("Failed to set outputs: 0x%x\n", rc);
