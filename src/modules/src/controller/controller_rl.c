@@ -38,12 +38,15 @@ SOFTWARE.
 #include "usec_time.h"
 
 #include "network.h"
-#include "network_data.h"
+#include "network_data_params.h"
 
-static ai_handle rl_network = AI_HANDLE_NULL;
-static ai_buffer *rl_ai_input = NULL;
-static ai_buffer *rl_ai_output = NULL;
+static ai_handle network;
+static ai_u8 activations[AI_NETWORK_DATA_ACTIVATIONS_SIZE];
+static float aiInData[AI_NETWORK_IN_1_SIZE];
+static float aiOutData[AI_NETWORK_OUT_1_SIZE];
 
+static ai_buffer * ai_input;
+static ai_buffer * ai_output;
 static float lastAction[4] = {0};
 static uint32_t rl_print_counter = 0;
 
@@ -52,16 +55,19 @@ static uint32_t rl_print_counter = 0;
 
 void controllerRLFirmwareInit(void)
 {
-    ai_error err;
-    ai_handle activations[] = { AI_NETWORK_DATA_ACTIVATIONS_TABLE_GET() };
-    ai_handle weights[]     = { AI_NETWORK_DATA_WEIGHTS_TABLE_GET() };
+  const ai_handle act_addr[] = { activations };
 
-    err = ai_network_create_and_init(&rl_network, activations, weights);
-    if (err.type != AI_ERROR_NONE) {
-        DEBUG_PRINT("RL network init error: %d\n", err.type);
-    }
-    rl_ai_input  = ai_network_inputs_get(rl_network,  NULL);
-    rl_ai_output = ai_network_outputs_get(rl_network, NULL);
+  ai_error e = ai_network_create_and_init(&network, act_addr, NULL);
+  if (e.type != AI_ERROR_NONE)
+  {
+    DEBUG_PRINT("Failed to initialize network. Error code: %d.%d\n", e.type, e.code);
+  }
+  else
+  {
+    DEBUG_PRINT("Neural network initialized successfully.\n");
+  }
+  ai_input = ai_network_inputs_get(network, NULL);
+  ai_output = ai_network_outputs_get(network, NULL);
 }
 
 bool controllerRLFirmwareTest(void)
@@ -118,22 +124,26 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   in_buf[23] = lastAction[2];
   in_buf[24] = lastAction[3];
 
-  // copy to NN input
-  rl_ai_input[0].data = AI_PTR(in_buf);
+  // Bind input and output buffers
+  ai_input[0].data = AI_HANDLE_PTR(aiInData);
+  ai_output[0].data = AI_HANDLE_PTR(aiOutData);
 
-  // run inference
-  ai_i32 nbatch = ai_network_run(rl_network, rl_ai_input, rl_ai_output);
-  if (nbatch != 1) {
-      DEBUG_PRINT("RL inference failed: %d\n", nbatch);
+  // Run neural network
+  uint64_t start = usecTimestamp();
+  ai_i32 batch = ai_network_run(network, ai_input, ai_output);
+  uint64_t end = usecTimestamp();
+
+  if (batch != 1)
+  {
+    ai_error err = ai_network_get_error(network);
+    DEBUG_PRINT("Inference failed. Error code: %d.%d\n", err.type, err.code);
+    return;
   }
-
-  // get pointer to NN output
-  float *out_buf = (float *)rl_ai_output[0].data;
 
   rl_print_counter++;
 
   for (int i = 0; i < 4; i++) {
-    float t = out_buf[i];
+    float t = aiOutData[i];
     if (t >  1.0f) t =  1.0f;
     if (t < -1.0f) t = -1.0f;
     control->normalizedForces[i] = 0.5f * (t + 1.0f);
