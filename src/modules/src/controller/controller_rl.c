@@ -44,8 +44,9 @@ static float aiInData[AI_NETWORK_IN_1_SIZE];
 static float aiOutData[AI_NETWORK_OUT_1_SIZE];
 static float lastAction[4] = {0};
 
-static ai_buffer ai_input[AI_NETWORK_IN_1_NB_BUFFERS];
-static ai_buffer ai_output[AI_NETWORK_OUT_1_NB_BUFFERS];
+
+static ai_buffer *ai_input;
+static ai_buffer *ai_output;
 
 #define THRUST_MIN 0.0f     // Minimum thrust (N)
 #define THRUST_MAX 0.118f   // Maximum thrust (N)
@@ -63,6 +64,9 @@ void controllerRLFirmwareInit(void)
   {
     DEBUG_PRINT("Neural network initialized successfully.\n");
   }
+
+  ai_input  = ai_network_inputs_get(network, NULL);
+  ai_output = ai_network_outputs_get(network, NULL);
 }
 
 bool controllerRLFirmwareTest(void)
@@ -92,74 +96,53 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   struct vec pos_error_world = vsub(pos_desired, pos);
   struct vec pos_error_body  = qvrot(qinv(q), pos_error_world);
 
-// pos_error, # (3,) 0:3
-// quad1_rot, # (9,) 3:12
-// quad1_linvel, # (3,) 12:15
-// quad1_angvel, # (3,) 15:18
-// quad1_linear_acc, # (3,) 18:21
-// quad1_angular_acc, # (3,) 21:24
-// last_action, # (4,) 24:28
 
-  aiInData[0]  = pos_error_body.x;
-  aiInData[1]  = pos_error_body.y;
-  aiInData[2]  = pos_error_body.z;
-  aiInData[3]  = R.m[0][0];
-  aiInData[4]  = R.m[0][1];
-  aiInData[5]  = R.m[0][2];
-  aiInData[6]  = R.m[1][0];
-  aiInData[7]  = R.m[1][1];
-  aiInData[8]  = R.m[1][2];
-  aiInData[9]  = R.m[2][0];
-  aiInData[10] = R.m[2][1];
-  aiInData[11] = R.m[2][2];
-  aiInData[12] = vel_body.x;
-  aiInData[13] = vel_body.y;
-  aiInData[14] = vel_body.z;
-  aiInData[15] = radians(sensors->gyro.x);
-  aiInData[16] = radians(sensors->gyro.y);
-  aiInData[17] = radians(sensors->gyro.z);
-  aiInData[18] = sensors->acc.x;
-  aiInData[19] = sensors->acc.y;
-  aiInData[20] = sensors->acc.z;
-  aiInData[21] = lastAction[0];
-  aiInData[22] = lastAction[1];
-  aiInData[23] = lastAction[2];
-  aiInData[24] = lastAction[3];
+  float *in_buf = (float*)ai_input[0].data;
+  in_buf[0]  = pos_error_body.x;
+  in_buf[1]  = pos_error_body.y;
+  in_buf[2]  = pos_error_body.z;
+  in_buf[3]  = R.m[0][0];
+  in_buf[4]  = R.m[0][1];
+  in_buf[5]  = R.m[0][2];
+  in_buf[6]  = R.m[1][0];
+  in_buf[7]  = R.m[1][1];
+  in_buf[8]  = R.m[1][2];
+  in_buf[9]  = R.m[2][0];
+  in_buf[10] = R.m[2][1];
+  in_buf[11] = R.m[2][2];
+  in_buf[12] = vel_body.x;
+  in_buf[13] = vel_body.y;
+  in_buf[14] = vel_body.z;
+  in_buf[15] = radians(sensors->gyro.x);
+  in_buf[16] = radians(sensors->gyro.y);
+  in_buf[17] = radians(sensors->gyro.z);
+  in_buf[18] = sensors->acc.x;
+  in_buf[19] = sensors->acc.y;
+  in_buf[20] = sensors->acc.z;
+  in_buf[21] = lastAction[0];
+  in_buf[22] = lastAction[1];
+  in_buf[23] = lastAction[2];
+  in_buf[24] = lastAction[3];
+  ai_input[0].n_batches = 1;
 
-  ai_network_inputs_get(network,  &ai_input[0]);
-  ai_network_outputs_get(network, &ai_output[0]);
-
-  ai_input[0].data        = AI_HANDLE_PTR(aiInData);
-  ai_input[0].data_start  = AI_HANDLE_PTR(aiInData);
-  ai_input[0].n_batches   = 1;
-
-  ai_output[0].data        = AI_HANDLE_PTR(aiOutData);
-  ai_output[0].data_start  = AI_HANDLE_PTR(aiOutData);
-  ai_output[0].n_batches   = 1;
-
-  // Run neural network
-  uint64_t start = usecTimestamp();
-  ai_i32 batch = ai_network_run(network, &ai_input[0], &ai_output[0]);
-  uint64_t end = usecTimestamp();
-
-  if (batch != 1)
-  {
+  //run inference
+  ai_i32 batch = ai_network_run(network, ai_input, ai_output);
+  if (batch != 1) {
     ai_error err = ai_network_get_error(network);
-    DEBUG_PRINT("Inference failed. Error code: %d.%d\n", err.type, err.code);
+    DEBUG_PRINT("Inference failed: %d.%d\n", err.type, err.code);
     return;
   }
 
-  for (int i = 0; i < 4; i++)
-  {
+  // cast output buffer 
+  float *out_buf = (float*)ai_output[0].data;
+  for (int i = 0; i < 4; i++) {
+    float t = out_buf[i];
     // clip to [-1,1]
-    if (aiOutData[i] > 1.0f)      aiOutData[i] = 1.0f;
-    else if (aiOutData[i] < -1.0f) aiOutData[i] = -1.0f;
-    // Thrust commands for four motors mapped to [0, 0.118] (N)
-    // control->thrust[4-i] = THRUST_MIN + (0.5f * (aiOutData[i]
-    control->normalizedForces[i] = 0.5f * (aiOutData[i] + 1.0f);
-    lastAction[i] = aiOutData[i];
-    control->controlMode = controlModeForce;
+    if (t >  1.0f) t =  1.0f;
+    if (t < -1.0f) t = -1.0f;
+    control->normalizedForces[i] = 0.5f * (t + 1.0f);
+    lastAction[i] = t;
   }
-  
+  control->controlMode = controlModeForce;
 }
 
