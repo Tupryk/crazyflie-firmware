@@ -44,8 +44,8 @@ static float aiInData[AI_NETWORK_IN_1_SIZE];
 static float aiOutData[AI_NETWORK_OUT_1_SIZE];
 static float lastAction[4] = {0};
 
-static ai_buffer * ai_input;
-static ai_buffer * ai_output;
+static ai_buffer ai_input[AI_NETWORK_IN_1_NB_BUFFERS];
+static ai_buffer ai_output[AI_NETWORK_OUT_1_NB_BUFFERS];
 
 #define THRUST_MIN 0.0f     // Minimum thrust (N)
 #define THRUST_MAX 0.118f   // Maximum thrust (N)
@@ -63,8 +63,6 @@ void controllerRLFirmwareInit(void)
   {
     DEBUG_PRINT("Neural network initialized successfully.\n");
   }
-  ai_input = ai_network_inputs_get(network, NULL);
-  ai_output = ai_network_outputs_get(network, NULL);
 }
 
 bool controllerRLFirmwareTest(void)
@@ -128,13 +126,20 @@ void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
   aiInData[23] = lastAction[2];
   aiInData[24] = lastAction[3];
 
-  // Bind input and output buffers
-  ai_input[0].data = AI_HANDLE_PTR(aiInData);
-  ai_output[0].data = AI_HANDLE_PTR(aiOutData);
+  ai_network_inputs_get(network,  &ai_input[0]);
+  ai_network_outputs_get(network, &ai_output[0]);
+
+  ai_input[0].data        = AI_HANDLE_PTR(aiInData);
+  ai_input[0].data_start  = AI_HANDLE_PTR(aiInData);
+  ai_input[0].n_batches   = 1;
+
+  ai_output[0].data        = AI_HANDLE_PTR(aiOutData);
+  ai_output[0].data_start  = AI_HANDLE_PTR(aiOutData);
+  ai_output[0].n_batches   = 1;
 
   // Run neural network
   uint64_t start = usecTimestamp();
-  ai_i32 batch = ai_network_run(network, ai_input, ai_output);
+  ai_i32 batch = ai_network_run(network, &ai_input[0], &ai_output[0]);
   uint64_t end = usecTimestamp();
 
   if (batch != 1)
