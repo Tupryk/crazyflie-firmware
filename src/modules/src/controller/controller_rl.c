@@ -38,11 +38,25 @@ SOFTWARE.
 #include "usec_time.h"
 
 #include "network.h"
+#include "network_data.h"
 #include "network_data_params.h"
 
 static ai_handle rl_network = AI_HANDLE_NULL;
-static const ai_handle rl_activations[] = { AI_NETWORK_DATA_ACTIVATIONS };
-static const ai_handle rl_weights[]     = { AI_NETWORK_DATA_WEIGHTS };
+
+
+static AI_ALIGNED(4)
+ai_u8 rl_activations_data[ AI_NETWORK_DATA_ACTIVATIONS_SIZE_BYTES ];
+
+static const ai_handle rl_activations[] = {
+  AI_NETWORK_DATA_ACTIVATIONS(rl_activations_data)
+};
+
+
+extern const ai_u64 s_network_weights_array_u64[ AI_NETWORK_DATA_WEIGHTS_COUNT * (AI_NETWORK_DATA_WEIGHTS_SIZE/8) ];
+static const ai_handle rl_weights[] = {
+  AI_NETWORK_DATA_WEIGHTS(s_network_weights_array_u64)
+};
+
 static ai_buffer *input_bufs  = NULL;
 static ai_buffer *output_bufs = NULL;
 
