@@ -169,7 +169,7 @@ void controllerRLFirmware(control_t *control,
   in_data[15] = radians(sensors->gyro.x);
   in_data[16] = radians(sensors->gyro.y);
   in_data[17] = radians(sensors->gyro.z);
-  // convert from Gs to m/s²
+  // convert from Gs to m/s^2
   in_data[18] = sensors->acc.x * 9.80665f;
   in_data[19] = sensors->acc.y * 9.80665f;
   // include gravity
