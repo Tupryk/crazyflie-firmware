@@ -169,9 +169,11 @@ void controllerRLFirmware(control_t *control,
   in_data[15] = radians(sensors->gyro.x);
   in_data[16] = radians(sensors->gyro.y);
   in_data[17] = radians(sensors->gyro.z);
-  in_data[18] = sensors->acc.x;
-  in_data[19] = sensors->acc.y;
-  in_data[20] = sensors->acc.z;
+  // convert from Gs to m/s²
+  in_data[18] = sensors->acc.x * 9.80665f;
+  in_data[19] = sensors->acc.y * 9.80665f;
+  // include gravity
+  in_data[20] = (sensors->acc.z + 1.0f) * 9.80665f;
   in_data[21] = lastAction[0];
   in_data[22] = lastAction[1];
   in_data[23] = lastAction[2];
