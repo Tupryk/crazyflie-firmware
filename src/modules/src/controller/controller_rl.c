@@ -200,3 +200,7 @@ void controllerRLFirmware(control_t *control,
     control->controlMode = controlModeForce;
 }
 
+bool controllerRLFirmwareTest(void)
+{
+  return true;
+}
