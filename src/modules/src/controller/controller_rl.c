@@ -150,6 +150,10 @@ void controllerRLFirmware(control_t *control,
                                 state->position.z);
   struct vec pos_err_b = qvrot(qinv(q), vsub(pos_des, pos));
 
+  // rotate state acceleration in G to body frrame
+  struct vec acc_world = mkvec(state->acc.x, state->acc.y, state->acc.z);
+  struct vec acc_body  = qvrot(qinv(q), acc_world);
+
   /*— fill input array —*/
   in_data[0]  = pos_err_b.x;
   in_data[1]  = pos_err_b.y;
@@ -169,11 +173,9 @@ void controllerRLFirmware(control_t *control,
   in_data[15] = radians(sensors->gyro.x);
   in_data[16] = radians(sensors->gyro.y);
   in_data[17] = radians(sensors->gyro.z);
-  // convert from Gs to m/s^2
-  in_data[18] = sensors->acc.x * 9.80665f;
-  in_data[19] = sensors->acc.y * 9.80665f;
-  // include gravity
-  in_data[20] = (sensors->acc.z + 1.0f) * 9.80665f;
+  in_data[18] = acc_body.x * 9.80665f;
+  in_data[19] = acc_body.y * 9.80665f;
+  in_data[20] = acc_body.z * 9.80665f;
   in_data[21] = lastAction[0];
   in_data[22] = lastAction[1];
   in_data[23] = lastAction[2];
@@ -204,3 +206,9 @@ bool controllerRLFirmwareTest(void)
 {
   return true;
 }
+
+// LOG_GROUP_START(ctrlrl)
+// LOG_ADD_CORE(LOG_FLOAT, in18, &in_data[18])
+// LOG_ADD_CORE(LOG_FLOAT, in19, &in_data[19])
+// LOG_ADD_CORE(LOG_FLOAT, in20, &in_data[20])
+// LOG_GROUP_STOP(ctrlrl)
