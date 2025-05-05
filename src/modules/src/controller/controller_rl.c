@@ -130,7 +130,7 @@ void controllerRLFirmware(control_t *control,
                           const state_t     *state,
                           const uint32_t     tick)
 {
-  if (!RATE_DO_EXECUTE(250, tick)) return;
+  if (!RATE_DO_EXECUTE(100, tick)) return;
 
   /*— compute body-frame errors, velocities, rotation matrix —*/
   struct quat q        = mkquat(state->attitudeQuaternion.x,
