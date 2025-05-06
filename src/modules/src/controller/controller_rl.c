@@ -133,10 +133,10 @@ void controllerRLFirmware(control_t *control,
   if (!RATE_DO_EXECUTE(250, tick)) return;
 
   /*— compute body-frame errors, velocities, rotation matrix —*/
-  struct quat q        = mkquat(state->attitudeQuaternion.x,
+  struct quat q        = qnormalize(mkquat(state->attitudeQuaternion.x,
                                 state->attitudeQuaternion.y,
                                 state->attitudeQuaternion.z,
-                                state->attitudeQuaternion.w);
+                                state->attitudeQuaternion.w));
   struct mat33 R       = quat2rotmat(q);
   struct vec vel_world = mkvec(state->velocity.x,
                                state->velocity.y,
@@ -148,16 +148,20 @@ void controllerRLFirmware(control_t *control,
   struct vec pos       = mkvec(state->position.x,
                                 state->position.y,
                                 state->position.z);
-  struct vec pos_err_b = qvrot(qinv(q), vsub(pos_des, pos));
+  struct vec pos_err   = vsub(pos_des, pos);
+  float    distance    = vnorm(pos_err);
+  float    inv_d       = 1.0f / fmaxf(distance, 1.0f);
+  struct vec pos_err_clamped = vscale(pos_err, inv_d);
+
 
   // rotate state acceleration in G to body frrame
   struct vec acc_world = mkvec(state->acc.x, state->acc.y, state->acc.z);
   struct vec acc_body  = qvrot(qinv(q), acc_world);
 
   /*— fill input array —*/
-  in_data[0]  = pos_err_b.x;
-  in_data[1]  = pos_err_b.y;
-  in_data[2]  = pos_err_b.z;
+  in_data[0]  = pos_err_clamped.x;
+  in_data[1]  = pos_err_clamped.y;
+  in_data[2]  = pos_err_clamped.z;
   in_data[3]  = R.m[0][0];
   in_data[4]  = R.m[0][1];
   in_data[5]  = R.m[0][2];
