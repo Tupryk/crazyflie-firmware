@@ -130,7 +130,7 @@ void controllerRLFirmware(control_t *control,
                           const state_t     *state,
                           const uint32_t     tick)
 {
-  if (!RATE_DO_EXECUTE(100, tick)) return;
+  if (!RATE_DO_EXECUTE(250, tick)) return;
 
   /*— compute body-frame errors, velocities, rotation matrix —*/
   struct quat q        = mkquat(state->attitudeQuaternion.x,
@@ -176,10 +176,10 @@ void controllerRLFirmware(control_t *control,
   in_data[18] = acc_body.x * 9.80665f;
   in_data[19] = acc_body.y * 9.80665f;
   in_data[20] = acc_body.z * 9.80665f;
-  in_data[21] = lastAction[0];
-  in_data[22] = lastAction[1];
-  in_data[23] = lastAction[2];
-  in_data[24] = lastAction[3];
+  // in_data[21] = lastAction[0];
+  // in_data[22] = lastAction[1];
+  // in_data[23] = lastAction[2];
+  // in_data[24] = lastAction[3];
 
     /* 2 - Call inference engine */
     aiRun(in_data, out_data);
@@ -189,7 +189,7 @@ void controllerRLFirmware(control_t *control,
         if (t >  1.0f) t =  1.0f;
         if (t < -1.0f) t = -1.0f;
         control->normalizedForces[i] = 0.5f * (t + 1.0f);
-        lastAction[i] = t;
+        // lastAction[i] = t;
     }
 
     if (++rl_print_counter % 100 == 0) {
