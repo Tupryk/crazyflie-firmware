@@ -149,9 +149,8 @@ void controllerRLFirmware(control_t *control,
                                 state->position.y,
                                 state->position.z);
   struct vec pos_err   = vsub(pos_des, pos);
-  float    distance    = vnorm(pos_err);
-  float    inv_d       = 1.0f / fmaxf(distance, 1.0f);
-  struct vec pos_err_clamped = vscale(pos_err, inv_d);
+
+  struct vec pos_err_clamped = vclampnorm(pos_err, 1.0f);
 
 
   // rotate state acceleration in G to body frrame
