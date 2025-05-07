@@ -17,7 +17,7 @@
       "mpool_id": 1,
       "name": "gemm_0_bias_array",
       "nbits": 32,
-      "offset_start": 5376,
+      "offset_start": 4608,
       "qmn": {},
       "shape": [
         64
@@ -75,13 +75,13 @@
       "qmn": {},
       "shape": [
         64,
-        21
+        18
       ],
       "shape_map": [
         "CH",
         "CH_IN"
       ],
-      "size_bytes": 5376
+      "size_bytes": 4608
     },
     {
       "alignment": 4,
@@ -100,7 +100,7 @@
       "mpool_id": 1,
       "name": "gemm_2_bias_array",
       "nbits": 32,
-      "offset_start": 22016,
+      "offset_start": 21248,
       "qmn": {},
       "shape": [
         64
@@ -154,7 +154,7 @@
       "mpool_id": 1,
       "name": "gemm_2_weights_array",
       "nbits": 32,
-      "offset_start": 5632,
+      "offset_start": 4864,
       "qmn": {},
       "shape": [
         64,
@@ -183,7 +183,7 @@
       "mpool_id": 1,
       "name": "gemm_4_bias_array",
       "nbits": 32,
-      "offset_start": 23296,
+      "offset_start": 22528,
       "qmn": {},
       "shape": [
         4
@@ -237,7 +237,7 @@
       "mpool_id": 1,
       "name": "gemm_4_weights_array",
       "nbits": 32,
-      "offset_start": 22272,
+      "offset_start": 21504,
       "qmn": {},
       "shape": [
         4,
@@ -320,70 +320,70 @@
       "mpool_id": 0,
       "name": "serving_default_args_00_output_array",
       "nbits": 32,
-      "offset_start": 172,
+      "offset_start": 184,
       "qmn": {},
       "shape": [
-        21
+        18
       ],
       "shape_map": [
         "CH"
       ],
-      "size_bytes": 84
+      "size_bytes": 72
     }
   ],
   "environment": {
     "generated_model": {
-      "generated_time": "2025-05-06T09:52:38+0000",
+      "generated_time": "2025-05-07T10:43:09+0000",
       "model_files": [
         {
           "name": "network_data_params.h",
-          "signature": "0xa5d8788d8535d523ccc41e3dfe30f83d"
+          "signature": "0x9ef072b0c4e34c49f9120bc8bd9618f6"
         },
         {
           "name": "network_data_params.c",
-          "signature": "0xf6e27be5a1eb5d1673fd822a710f47cd"
+          "signature": "0x995e1c9474646662a7ca7c7dc892a06e"
         },
         {
           "name": "network_data.h",
-          "signature": "0x4df33bae5203a2095536bfd2e145eb0d"
+          "signature": "0x2fd190de3edcf76af1f106804eaca42b"
         },
         {
           "name": "network_data.c",
-          "signature": "0xc3e190d423299413cf5e44701b3c1848"
+          "signature": "0x7522cafc049bb7cd647f06533b785bd8"
         },
         {
           "name": "network_config.h",
-          "signature": "0xfc2e6523cfd5c7cc77e2c4823a8dc35b"
+          "signature": "0x459498288af3f7b74536ed67d6dcd21e"
         },
         {
           "name": "network.h",
-          "signature": "0x5802ba9fe87c4a2f58835e523a4b2b39"
+          "signature": "0xf46bc5bdac50391f940354d9a884dd25"
         },
         {
           "name": "network.c",
-          "signature": "0xfde56278954c93eec9d97b814f3e6bf2"
+          "signature": "0xcb132213f4bf0cd9021fdc9a3c3b0ead"
         }
       ],
       "name": "network"
     },
-    "network_signature": "0xf5e2ff02901439a7",
+    "network_signature": "0x9bd2f4ce4979646f",
     "test_name": "",
     "tools": [
       {
-        "arguments": "generate --model /tmp/stm32ai_service/f1cb067d-5cbb-44f2-a170-3a1e4b74c774/actor_model-10.tflite --optimization balanced --target stm32f4 --name network --workspace /tmp/stm32ai_service/f1cb067d-5cbb-44f2-a170-3a1e4b74c774/workspace --output /tmp/stm32ai_service/f1cb067d-5cbb-44f2-a170-3a1e4b74c774/output",
+        "arguments": "generate --model /tmp/stm32ai_service/9468fe2f-9914-4bc2-939e-0d5c5f4d6d49/actor_model-11.tflite --optimization balanced --target stm32f4 --name network --workspace /tmp/stm32ai_service/9468fe2f-9914-4bc2-939e-0d5c5f4d6d49/workspace --output /tmp/stm32ai_service/9468fe2f-9914-4bc2-939e-0d5c5f4d6d49/output",
         "environment": [
           "STATS_TYPE=stmai_webservice"
         ],
         "input_model": {
           "model_files": [
             {
-              "name": "actor_model-10.tflite",
-              "signature": "0x3e077c46025dd83efceb099511c720a8"
+              "name": "actor_model-11.tflite",
+              "signature": "0x05ea6104afd64253257c3bc0ac879a3d"
             }
           ],
-          "n_params": 5828,
-          "name": "actor_model10",
-          "size": 23312,
+          "n_params": 5636,
+          "name": "actor_model11",
+          "size": 22544,
           "type": "tflite"
         },
         "name": "ST.EdgeAI.Core",
@@ -455,7 +455,7 @@
       "inputs": [
         81
       ],
-      "name": "actor_model10",
+      "name": "actor_model11",
       "nodes": [
         {
           "attributes": {
@@ -469,7 +469,7 @@
             93,
             96
           ],
-          "macc": 1408,
+          "macc": 1216,
           "mapping": "NODE_SW",
           "name": "gemm_0",
           "original_nodes": [
@@ -600,7 +600,7 @@
           "name": "serving_default_args_00",
           "shape": [
             1,
-            21
+            18
           ],
           "shape_map": [
             "BATCH",
@@ -647,7 +647,7 @@
     "toolchain": "arm-none-eabi-gcc (GNU Tools for STM32 10.3-2021.10.20211105-1100) 10.3.1 20210824 (release)",
     "toolchain_flash": 802,
     "toolchain_ram": 0,
-    "weights": 23312
+    "weights": 22544
   },
   "memory_pools": [
     {
@@ -700,7 +700,7 @@
       "rights": "ACC_READ",
       "size_bytes": -1,
       "subpools": [],
-      "used_size_bytes": 23312,
+      "used_size_bytes": 22544,
       "user_allocated": false,
       "virtual": false
     }
