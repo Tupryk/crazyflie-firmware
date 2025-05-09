@@ -153,9 +153,23 @@ void controllerRLFirmware(control_t *control,
   struct vec pos_err_clamped = vclampnorm(pos_err, 1.0f);
 
 
-  // rotate state acceleration in G to body frrame
-  struct vec acc_world = mkvec(state->acc.x, state->acc.y, state->acc.z);
-  struct vec acc_body  = qvrot(qinv(q), acc_world);
+  // // rotate state acceleration in G to body frrame
+  // struct vec acc_world = mkvec(state->acc.x, state->acc.y, state->acc.z);
+  // struct vec acc_body  = qvrot(qinv(q), acc_world);
+ 
+  // raw accel in body frame (Gs)
+  struct vec raw_body = mkvec(sensors->acc.x, sensors->acc.y, sensors->acc.z);
+  // convert to world-frame (Gs) via R, then to m/s^2 and subtract 1g
+  struct vec acc_world = {
+    R.m[0][0]*raw_body.x + R.m[0][1]*raw_body.y + R.m[0][2]*raw_body.z,
+    R.m[1][0]*raw_body.x + R.m[1][1]*raw_body.y + R.m[1][2]*raw_body.z,
+    R.m[2][0]*raw_body.x + R.m[2][1]*raw_body.y + R.m[2][2]*raw_body.z
+  };
+  acc_world.x *= 9.80665f;
+  acc_world.y *= 9.80665f;
+  acc_world.z = (acc_world.z - 1.0f) * 9.80665f;
+  // rotate back to body frame (m/s^2)
+  struct vec acc_body = qvrot(qinv(q), acc_world);
 
   /*— fill input array —*/
   in_data[0]  = pos_err_clamped.x;
@@ -176,9 +190,9 @@ void controllerRLFirmware(control_t *control,
   in_data[15] = radians(sensors->gyro.x);
   in_data[16] = radians(sensors->gyro.y);
   in_data[17] = radians(sensors->gyro.z);
-  in_data[18] = acc_body.x * 9.80665f;
-  in_data[19] = acc_body.y * 9.80665f;
-  in_data[20] = acc_body.z * 9.80665f;
+  in_data[18] = acc_body.x;
+  in_data[19] = acc_body.y;
+  in_data[20] = acc_body.z;
   in_data[21] = lastAction[0];
   in_data[22] = lastAction[1];
   in_data[23] = lastAction[2];
