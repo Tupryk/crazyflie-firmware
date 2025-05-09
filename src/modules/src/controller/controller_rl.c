@@ -154,8 +154,8 @@ void controllerRLFirmware(control_t *control,
 
 
   // rotate state acceleration in G to body frrame
-  // struct vec acc_world = mkvec(state->acc.x, state->acc.y, state->acc.z);
-  // struct vec acc_body  = qvrot(qinv(q), acc_world);
+  struct vec acc_world = mkvec(state->acc.x, state->acc.y, state->acc.z);
+  struct vec acc_body  = qvrot(qinv(q), acc_world);
 
   /*— fill input array —*/
   in_data[0]  = pos_err_clamped.x;
@@ -176,13 +176,13 @@ void controllerRLFirmware(control_t *control,
   in_data[15] = radians(sensors->gyro.x);
   in_data[16] = radians(sensors->gyro.y);
   in_data[17] = radians(sensors->gyro.z);
-  // in_data[18] = acc_body.x * 9.80665f;
-  // in_data[19] = acc_body.y * 9.80665f;
-  // in_data[20] = acc_body.z * 9.80665f;
-  // in_data[21] = lastAction[0];
-  // in_data[22] = lastAction[1];
-  // in_data[23] = lastAction[2];
-  // in_data[24] = lastAction[3];
+  in_data[18] = acc_body.x * 9.80665f;
+  in_data[19] = acc_body.y * 9.80665f;
+  in_data[20] = acc_body.z * 9.80665f;
+  in_data[21] = lastAction[0];
+  in_data[22] = lastAction[1];
+  in_data[23] = lastAction[2];
+  in_data[24] = lastAction[3];
 
     /* 2 - Call inference engine */
     aiRun(in_data, out_data);
@@ -192,7 +192,7 @@ void controllerRLFirmware(control_t *control,
         if (t >  1.0f) t =  1.0f;
         if (t < -1.0f) t = -1.0f;
         control->normalizedForces[i] = 0.5f * (t + 1.0f);
-        // lastAction[i] = t;
+        lastAction[i] = t;
     }
 
     if (++rl_print_counter % 100 == 0) {
