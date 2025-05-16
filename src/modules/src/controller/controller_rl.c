@@ -130,7 +130,7 @@ void controllerRLFirmware(control_t *control,
                           const state_t     *state,
                           const uint32_t     tick)
 {
-  if (!RATE_DO_EXECUTE(500, tick)) return;
+  if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) return;
 
   /*— compute body-frame errors, velocities, rotation matrix —*/
   struct quat q        = qnormalize(mkquat(state->attitudeQuaternion.x,
@@ -158,18 +158,18 @@ void controllerRLFirmware(control_t *control,
   // struct vec acc_body  = qvrot(qinv(q), acc_world);
  
   // raw accel in body frame (Gs)
-  struct vec raw_body = mkvec(sensors->acc.x, sensors->acc.y, sensors->acc.z);
-  // convert to world-frame (Gs) via R, then to m/s^2 and subtract 1g
-  struct vec acc_world = {
-    R.m[0][0]*raw_body.x + R.m[0][1]*raw_body.y + R.m[0][2]*raw_body.z,
-    R.m[1][0]*raw_body.x + R.m[1][1]*raw_body.y + R.m[1][2]*raw_body.z,
-    R.m[2][0]*raw_body.x + R.m[2][1]*raw_body.y + R.m[2][2]*raw_body.z
-  };
-  acc_world.x *= 9.80665f;
-  acc_world.y *= 9.80665f;
-  acc_world.z = (acc_world.z - 1.0f) * 9.80665f;
-  // rotate back to body frame (m/s^2)
-  struct vec acc_body = qvrot(qinv(q), acc_world);
+  // struct vec raw_body = mkvec(sensors->acc.x, sensors->acc.y, sensors->acc.z);
+  // // convert to world-frame (Gs) via R, then to m/s^2 and subtract 1g
+  // struct vec acc_world = {
+  //   R.m[0][0]*raw_body.x + R.m[0][1]*raw_body.y + R.m[0][2]*raw_body.z,
+  //   R.m[1][0]*raw_body.x + R.m[1][1]*raw_body.y + R.m[1][2]*raw_body.z,
+  //   R.m[2][0]*raw_body.x + R.m[2][1]*raw_body.y + R.m[2][2]*raw_body.z
+  // };
+  // acc_world.x *= 9.80665f;
+  // acc_world.y *= 9.80665f;
+  // acc_world.z = (acc_world.z - 1.0f) * 9.80665f;
+  // // rotate back to body frame (m/s^2)
+  // struct vec acc_body = qvrot(qinv(q), acc_world);
 
   /*— fill input array —*/
   in_data[0]  = pos_err_clamped.x;
@@ -190,9 +190,9 @@ void controllerRLFirmware(control_t *control,
   in_data[15] = radians(sensors->gyro.x);
   in_data[16] = radians(sensors->gyro.y);
   in_data[17] = radians(sensors->gyro.z);
-  in_data[18] = acc_body.x;
-  in_data[19] = acc_body.y;
-  in_data[20] = acc_body.z;
+  in_data[18] = sensors->acc.x * 9.80665f;
+  in_data[19] = sensors->acc.y * 9.80665f;
+  in_data[20] = sensors->acc.z * 9.80665f;
   in_data[21] = lastAction[0];
   in_data[22] = lastAction[1];
   in_data[23] = lastAction[2];
@@ -203,10 +203,10 @@ void controllerRLFirmware(control_t *control,
 
     for (int i = 0; i < 4; i++) {
         float t = out_data[i];
+        lastAction[i] = t;
         if (t >  1.0f) t =  1.0f;
         if (t < -1.0f) t = -1.0f;
         control->normalizedForces[i] = 0.5f * (t + 1.0f);
-        lastAction[i] = t;
     }
 
     if (++rl_print_counter % 100 == 0) {
