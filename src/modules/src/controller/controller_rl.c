@@ -130,7 +130,7 @@ void controllerRLFirmware(control_t *control,
                           const state_t     *state,
                           const uint32_t     tick)
 {
-  if (!RATE_DO_EXECUTE(ATTITUDE_RATE, tick)) return;
+  if (!RATE_DO_EXECUTE(250, tick)) return;
 
   /*— compute body-frame errors, velocities, rotation matrix —*/
   struct quat q        = qnormalize(mkquat(state->attitudeQuaternion.x,
@@ -175,38 +175,41 @@ void controllerRLFirmware(control_t *control,
   in_data[0]  = pos_err_clamped.x;
   in_data[1]  = pos_err_clamped.y;
   in_data[2]  = pos_err_clamped.z;
-  in_data[3]  = R.m[0][0];
-  in_data[4]  = R.m[0][1];
-  in_data[5]  = R.m[0][2];
-  in_data[6]  = R.m[1][0];
-  in_data[7]  = R.m[1][1];
-  in_data[8]  = R.m[1][2];
-  in_data[9]  = R.m[2][0];
-  in_data[10] = R.m[2][1];
-  in_data[11] = R.m[2][2];
-  in_data[12] = vel_body.x;
-  in_data[13] = vel_body.y;
-  in_data[14] = vel_body.z;
-  in_data[15] = radians(sensors->gyro.x);
-  in_data[16] = radians(sensors->gyro.y);
-  in_data[17] = radians(sensors->gyro.z);
-  in_data[18] = sensors->acc.x * 9.80665f;
-  in_data[19] = sensors->acc.y * 9.80665f;
-  in_data[20] = sensors->acc.z * 9.80665f;
-  in_data[21] = lastAction[0];
-  in_data[22] = lastAction[1];
-  in_data[23] = lastAction[2];
-  in_data[24] = lastAction[3];
+  in_data[3]  = vel_body.x;
+  in_data[4]  = vel_body.y;
+  in_data[5]  = vel_body.z;
+  in_data[6]  = 0.0f; // rel_pos is 0 for no payload
+  in_data[7]  = 0.0f; // rel_vel is
+  in_data[8]  = 0.0f; // rel_acc is
+  in_data[9]  = R.m[0][0];
+  in_data[10] = R.m[0][1];
+  in_data[11] = R.m[0][2];
+  in_data[12] = R.m[1][0];
+  in_data[13] = R.m[1][1];
+  in_data[14] = R.m[1][2];
+  in_data[15] = R.m[2][0];
+  in_data[16] = R.m[2][1];
+  in_data[17] = R.m[2][2];
+  in_data[18] = 0.0f; // linvels 0.0f for no payload
+  in_data[19] = 0.0f; // linvels 0.0f for no payload
+  in_data[20] = 0.0f; // linvels 0.0f for no payload
+  in_data[21] = radians(sensors->gyro.x);
+  in_data[22] = radians(sensors->gyro.y);
+  in_data[23] = radians(sensors->gyro.z);
+  in_data[24] = lastAction[0];
+  in_data[25] = lastAction[1];
+  in_data[26] = lastAction[2];
+  in_data[27] = lastAction[3];
 
     /* 2 - Call inference engine */
     aiRun(in_data, out_data);
-
+    control->controlMode = controlModeForce;
     for (int i = 0; i < 4; i++) {
-        float t = out_data[i];
-        lastAction[i] = t;
-        if (t >  1.0f) t =  1.0f;
-        if (t < -1.0f) t = -1.0f;
-        control->normalizedForces[i] = 0.5f * (t + 1.0f);
+        float a = out_data[i];
+        if (a >  1.0f) a =  1.0f;
+        if (a < -1.0f) a = -1.0f;
+        lastAction[i] = a;
+        control->normalizedForces[i] = 0.5f * (a + 1.0f);
     }
 
     if (++rl_print_counter % 100 == 0) {
@@ -216,7 +219,7 @@ void controllerRLFirmware(control_t *control,
         rl_print_counter = 0;
     }
 
-    control->controlMode = controlModeForce;
+    
 }
 
 bool controllerRLFirmwareTest(void)

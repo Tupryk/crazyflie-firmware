@@ -3,7 +3,7 @@
   ******************************************************************************
   * @file    network_config.h
   * @author  AST Embedded Analytics Research Platform
-  * @date    2025-05-20T16:08:23+0000
+  * @date    2025-07-09T21:07:43+0000
   * @brief   AI Tool Automatic Code Generator for Custom Layers Implementation
   ******************************************************************************
   * @attention
@@ -24,9 +24,9 @@
 #undef AI_TOOLS_VERSION_MINOR
 #undef AI_TOOLS_VERSION_MICRO
 #define AI_TOOLS_VERSION_MAJOR 2
-#define AI_TOOLS_VERSION_MINOR 1
+#define AI_TOOLS_VERSION_MINOR 2
 #define AI_TOOLS_VERSION_MICRO 0
-#define AI_TOOLS_VERSION_EXTRA "20182 a437ed3c9"
+#define AI_TOOLS_VERSION_EXTRA "20266 2adc00962"
 
 
 #undef AI_PLATFORM_API_MAJOR
