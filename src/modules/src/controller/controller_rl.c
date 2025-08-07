@@ -141,10 +141,11 @@ void controllerRLFirmware(control_t *control,
   struct vec vel_world = mkvec(state->velocity.x,
                                state->velocity.y,
                                state->velocity.z);
-  struct vec vel_body  = qvrot(qinv(q), vel_world);
-  struct vec pos_des   = mkvec(setpoint->position.x,
-                                setpoint->position.y,
-                                setpoint->position.z);
+  // struct vec vel_body  = qvrot(qinv(q), vel_world);
+  // struct vec pos_des   = mkvec(setpoint->position.x,
+  //                               setpoint->position.y,
+  //                               setpoint->position.z);
+  struct vec pos_des   = mkvec( 0.0f, 0.0f, 1.0f);
   struct vec pos       = mkvec(state->position.x,
                                 state->position.y,
                                 state->position.z);
@@ -175,9 +176,9 @@ void controllerRLFirmware(control_t *control,
   in_data[0]  = pos_err_clamped.x;
   in_data[1]  = pos_err_clamped.y;
   in_data[2]  = pos_err_clamped.z;
-  in_data[3]  = vel_body.x;
-  in_data[4]  = vel_body.y;
-  in_data[5]  = vel_body.z;
+  in_data[3]  = vel_world.x;
+  in_data[4]  = vel_world.y;
+  in_data[5]  = vel_world.z;
   in_data[6]  = 0.0f; // rel_pos is 0 for no payload
   in_data[7]  = 0.0f; // rel_vel is
   in_data[8]  = 0.0f; // rel_acc is
