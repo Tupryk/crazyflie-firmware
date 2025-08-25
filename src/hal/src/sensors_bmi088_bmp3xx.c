@@ -110,6 +110,8 @@ static xQueueHandle accelerometerDataQueue;
 STATIC_MEM_QUEUE_ALLOC(accelerometerDataQueue, 1, sizeof(Axis3f));
 static xQueueHandle gyroDataQueue;
 STATIC_MEM_QUEUE_ALLOC(gyroDataQueue, 1, sizeof(Axis3f));
+static xQueueHandle gyroNoLpfDataQueue;
+STATIC_MEM_QUEUE_ALLOC(gyroNoLpfDataQueue, 1, sizeof(Axis3f));
 static xQueueHandle magnetometerDataQueue;
 STATIC_MEM_QUEUE_ALLOC(magnetometerDataQueue, 1, sizeof(Axis3f));
 static xQueueHandle barometerDataQueue;
@@ -273,6 +275,7 @@ bool sensorsBmi088Bmp3xxReadBaro(baro_t *baro)
 void sensorsBmi088Bmp3xxAcquire(sensorData_t *sensors)
 {
   sensorsReadGyro(&sensors->gyro);
+  xQueueReceive(gyroNoLpfDataQueue, &sensors->gyroNoLpf, 0);
   sensorsReadAcc(&sensors->acc);
   sensorsReadMag(&sensors->mag);
   sensorsReadBaro(&sensors->baro);
@@ -367,6 +370,7 @@ static void sensorsTask(void *param)
     }
     xQueueOverwrite(accelerometerDataQueue, &sensorData.acc);
     xQueueOverwrite(gyroDataQueue, &sensorData.gyro);
+    xQueueOverwrite(gyroNoLpfDataQueue, &sensorData.gyroNoLpf);
     if (isBarometerPresent)
     {
       xQueueOverwrite(barometerDataQueue, &sensorData.baro);
@@ -559,6 +563,7 @@ static void sensorsTaskInit(void)
 {
   accelerometerDataQueue = STATIC_MEM_QUEUE_CREATE(accelerometerDataQueue);
   gyroDataQueue = STATIC_MEM_QUEUE_CREATE(gyroDataQueue);
+  gyroNoLpfDataQueue = STATIC_MEM_QUEUE_CREATE(gyroNoLpfDataQueue);
   magnetometerDataQueue = STATIC_MEM_QUEUE_CREATE(magnetometerDataQueue);
   barometerDataQueue = STATIC_MEM_QUEUE_CREATE(barometerDataQueue);
 
