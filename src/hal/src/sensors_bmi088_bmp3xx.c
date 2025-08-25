@@ -322,6 +322,11 @@ static void sensorsTask(void *param)
       gyroScaledIMU.y =  (gyroRaw.y - gyroBias.y) * SENSORS_BMI088_DEG_PER_LSB_CFG;
       gyroScaledIMU.z =  (gyroRaw.z - gyroBias.z) * SENSORS_BMI088_DEG_PER_LSB_CFG;
       sensorsAlignToAirframe(&gyroScaledIMU, &sensorData.gyro);
+
+      sensorData.gyroNoLpf.x = sensorData.gyro.x;
+      sensorData.gyroNoLpf.y = sensorData.gyro.y;
+      sensorData.gyroNoLpf.z = sensorData.gyro.z;
+
       applyAxis3fLpf((lpf2pData*)(&gyroLpf), &sensorData.gyro);
 
       measurement.type = MeasurementTypeGyroscope;
