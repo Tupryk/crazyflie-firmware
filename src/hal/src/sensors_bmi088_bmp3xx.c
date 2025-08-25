@@ -58,7 +58,7 @@
 
 #define GYRO_ADD_RAW_AND_VARIANCE_LOG_VALUES
 
-#define SENSORS_READ_RATE_HZ            1000
+#define SENSORS_READ_RATE_HZ            2000
 #define SENSORS_STARTUP_TIME_MS         1000
 #define SENSORS_READ_BARO_HZ            50
 #define SENSORS_READ_MAG_HZ             20
@@ -412,9 +412,9 @@ static void sensorsDeviceInit(void)
     bmi088Dev.gyro_cfg.power = BMI088_GYRO_PM_NORMAL;
     rslt |= bmi088_set_gyro_power_mode(&bmi088Dev);
     /* set bandwidth and range of gyro */
-    bmi088Dev.gyro_cfg.bw = BMI088_GYRO_BW_116_ODR_1000_HZ;
+    bmi088Dev.gyro_cfg.bw = BMI088_GYRO_BW_532_ODR_2000_HZ;//BMI088_GYRO_BW_116_ODR_1000_HZ;
     bmi088Dev.gyro_cfg.range = SENSORS_BMI088_GYRO_FS_CFG;
-    bmi088Dev.gyro_cfg.odr = BMI088_GYRO_BW_116_ODR_1000_HZ;
+    bmi088Dev.gyro_cfg.odr = BMI088_GYRO_BW_532_ODR_2000_HZ;//BMI088_GYRO_BW_116_ODR_1000_HZ;
     rslt |= bmi088_set_gyro_meas_conf(&bmi088Dev);
 
     intConfig.gyro_int_channel = BMI088_INT_CHANNEL_3;
