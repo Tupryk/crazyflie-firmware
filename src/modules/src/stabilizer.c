@@ -57,6 +57,7 @@
 #include "static_mem.h"
 #include "rateSupervisor.h"
 #include "eventtrigger.h"
+#include "peer_localization.h"
 
 static bool isInit;
 
@@ -118,6 +119,12 @@ static struct {
   int16_t ay;
   int16_t az;
 } setpointCompressed;
+
+// for payloads
+static float payload_alpha_v = 0.9; // between 0...1; 1: no filter
+static float payload_alpha_w = 0.9; // between 0...1; 1: no filter
+static point_t payload_pos_last;         // m   (world frame)
+static velocity_t payload_vel_last;      // m/s (world frame)
 
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
 STATIC_MEM_TASK_ALLOC(rateSupervisorTask, RATE_SUPERVISOR_TASK_STACKSIZE);
@@ -329,6 +336,74 @@ static void stabilizerTask(void* param)
 
       stateEstimator(&state, stabilizerStep);
 
+      // add the payload and neighbor states here
+      uint8_t num_uavs = 1;
+      state.team_state[0].id = locSrvMyId();
+      state.team_state[0].pos.x = state.position.x;
+      state.team_state[0].pos.y = state.position.y;
+      state.team_state[0].pos.z = state.position.z;
+
+      for (int i = 0; i < PEER_LOCALIZATION_MAX_NEIGHBORS; ++i) {
+
+        peerLocalizationOtherPosition_t const *other = peerLocalizationGetPositionByIdx(i);
+
+        if (other == NULL || other->id == 0) {
+          continue;
+        }
+
+        if (other->id == 255) {
+          // handle the payload
+
+          // if we got a new state
+          if (payload_pos_last.timestamp < other->pos.timestamp) {
+            struct vec vel_filtered = vzero();
+            // in the beginning, estimate the velocity to be zero, otherwise use
+            // numeric estimation with filter
+            if (payload_pos_last.timestamp != 0) {
+              // estimate the velocity numerically
+              const float dt = (other->pos.timestamp - payload_pos_last.timestamp) / 1000.0f; //s
+              struct vec pos = mkvec(other->pos.x, other->pos.y, other->pos.z);
+              struct vec last_pos = mkvec(payload_pos_last.x, payload_pos_last.y, payload_pos_last.z);
+              struct vec vel = vdiv(vsub(pos, last_pos), dt);
+              vel = vclampnorm(vel, 2.0); // rescale to avoid weird outliers
+
+              // apply a simple complementary filter
+              // struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
+              // vel_filtered = vadd(vscl(1.0f - payload_alpha_v, vel_old), vscl(payload_alpha_v, vel));
+              vel_filtered = mkvec(vel.x, vel.y, vel.z);
+            }
+            // update the position
+            state.payload_pos.x = other->pos.x;
+            state.payload_pos.y = other->pos.y;
+            state.payload_pos.z = other->pos.z;
+            state.payload_pos.timestamp = other->pos.timestamp;
+
+            // update the velocity
+            state.payload_vel.x = vel_filtered.x;
+            state.payload_vel.y = vel_filtered.y;
+            state.payload_vel.z = vel_filtered.z;
+            state.payload_vel.timestamp = other->pos.timestamp;
+
+           
+            // update state
+            payload_pos_last = state.payload_pos;
+            payload_vel_last = state.payload_vel;
+          } else {
+            state.payload_pos = payload_pos_last;
+            state.payload_vel = payload_vel_last;
+          }
+
+        } else if (num_uavs < MAX_TEAM_SIZE) {
+          // handle regular team members
+          state.team_state[num_uavs].id = other->id;
+          state.team_state[num_uavs].pos.x = other->pos.x;
+          state.team_state[num_uavs].pos.y = other->pos.y;
+          state.team_state[num_uavs].pos.z = other->pos.z;
+          ++num_uavs;
+        }
+      }
+      state.num_uavs = num_uavs;
+
       const bool areMotorsAllowedToRun = supervisorAreMotorsAllowedToRun();
 
       // Critical for safety, be careful if you modify this code!
@@ -399,6 +474,11 @@ PARAM_ADD_CORE(PARAM_UINT8, estimator, &estimatorType)
  * @brief Controller type Auto select(0), PID(1), Mellinger(2), INDI(3), Brescianini(4), Lee(5) (Default: 0)
  */
 PARAM_ADD_CORE(PARAM_UINT8, controller, &controllerType)
+
+PARAM_ADD_CORE(PARAM_FLOAT, pAlphaV, &payload_alpha_v)
+
+PARAM_ADD_CORE(PARAM_FLOAT, pAlphaW, &payload_alpha_w)
+
 PARAM_GROUP_STOP(stabilizer)
 
 
@@ -766,6 +846,38 @@ LOG_ADD_CORE(LOG_FLOAT, qz, &state.attitudeQuaternion.z)
  * @brief Attitude as a quaternion, w
  */
 LOG_ADD_CORE(LOG_FLOAT, qw, &state.attitudeQuaternion.w)
+
+
+/**
+ * @brief The position of the payload in the global reference frame, X [m]
+ */
+LOG_ADD(LOG_FLOAT, px, &state.payload_pos.x)
+
+/**
+ * @brief The position of the payload in the global reference frame, Y [m]
+ */
+LOG_ADD(LOG_FLOAT, py, &state.payload_pos.y)
+
+/**
+ * @brief The position of the payload in the global reference frame, Z [m]
+ */
+LOG_ADD(LOG_FLOAT, pz, &state.payload_pos.z)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, X [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pvx, &state.payload_vel.x)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, Y [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pvy, &state.payload_vel.y)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, Z [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pvz, &state.payload_vel.z)
+
 LOG_GROUP_STOP(stateEstimate)
 
 /**

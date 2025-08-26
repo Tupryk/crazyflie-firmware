@@ -145,6 +145,12 @@ void locSrvInit()
   isInit = true;
 }
 
+uint8_t locSrvMyId(void) 
+{
+  return my_id;
+}
+
+
 static void locSrvCrtpCB(CRTPPacket* pk)
 {
   switch (pk->channel)
@@ -206,12 +212,12 @@ static void extPosePackedHandler(const CRTPPacket* pk) {
   for (uint8_t i = 0; i < numItems; ++i) {
     const extPosePackedItem* item = (const extPosePackedItem*)&pk->data[1 + i * sizeof(extPosePackedItem)];
     if (item->id == my_id) {
-      ext_pose.x = item->x / 1000.0f;
-      ext_pose.y = item->y / 1000.0f;
-      ext_pose.z = item->z / 1000.0f;
-      quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
-      ext_pose.stdDevPos = extPosStdDev;
-      ext_pose.stdDevQuat = extQuatStdDev;
+    ext_pose.x = item->x / 1000.0f;
+    ext_pose.y = item->y / 1000.0f;
+    ext_pose.z = item->z / 1000.0f;
+    quatdecompress(item->quat, (float *)&ext_pose.quat.q0);
+    ext_pose.stdDevPos = extPosStdDev;
+    ext_pose.stdDevQuat = extQuatStdDev;
       estimatorEnqueuePose(&ext_pose);
       tickOfLastPacket = xTaskGetTickCount();
     } else {

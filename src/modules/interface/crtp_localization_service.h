@@ -98,4 +98,6 @@ void locSrvResetEmergencyStopRequest();
  */
 uint32_t locSrvGetEmergencyStopWatchdogNotificationTick();
 
+uint8_t locSrvMyId(void);
+
 #endif /* _CRTP_LOCALIZATION_SERVICE_H_ */
