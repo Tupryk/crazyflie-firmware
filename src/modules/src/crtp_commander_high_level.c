@@ -57,6 +57,7 @@ such as: take-off, landing, polynomial trajectories.
 #include "commander.h"
 #include "stabilizer_types.h"
 #include "stabilizer.h"
+#include "controller.h"
 
 // Local types
 enum TrajectoryLocation_e {
@@ -112,6 +113,7 @@ static StaticSemaphore_t lockTrajBuffer;
 static float defaultTakeoffVelocity = 0.5f;
 static float defaultLandingVelocity = 0.5f;
 
+static ControllerType last_controller_type = ControllerTypeMellinger;
 // Trajectory memory handling from the memory module
 static uint32_t handleMemGetSize(void) { return crtpCommanderHighLevelTrajectoryMemSize(); }
 static bool handleMemRead(const uint32_t memAddr, const uint8_t readLen, uint8_t* buffer);
@@ -317,9 +319,16 @@ bool crtpCommanderHighLevelIsStopped()
 void crtpCommanderHighLevelTellState(const state_t *state)
 {
   xSemaphoreTake(lockTraj, portMAX_DELAY);
-  pos = state2vec(state->position);
-  vel = state2vec(state->velocity);
-  yaw = radians(state->attitude.yaw);
+  if (controllerGetType() == ControllerTypeRLPayload) {
+    // If the controller is to track the payload, use its state, rather than the UAVs' state
+    pos = state2vec(state->payload_pos);
+    vel = state2vec(state->payload_vel);
+    yaw = 0.0;
+  } else {
+    pos = state2vec(state->position);
+    vel = state2vec(state->velocity);
+    yaw = radians(state->attitude.yaw);
+  }
   xSemaphoreGive(lockTraj);
 }
 
@@ -329,9 +338,10 @@ int crtpCommanderHighLevelDisable()
   return 0;
 }
 
-bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *state, stabilizerStep_t stabilizerStep)
+bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *state, stabilizerStep_t stabilizerStep, ControllerType controller_type)
 {
-  if (!RATE_DO_EXECUTE(RATE_HL_COMMANDER, stabilizerStep)) {
+  bool controller_type_changed = controller_type != last_controller_type;
+  if (!RATE_DO_EXECUTE(RATE_HL_COMMANDER, stabilizerStep) && !controller_type_changed) {
     return false;
   }
 
@@ -340,13 +350,24 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
   struct traj_eval ev = plan_current_goal(&planner, t);
   xSemaphoreGive(lockTraj);
 
+  last_controller_type = controller_type;
+
   // If we are not actively following a trajectory, then update the "last
   // setpoint" values with the current state estimate, so we have the right
   // initial conditions for future trajectory planning.
   if (plan_is_disabled(&planner) || plan_is_stopped(&planner)) {
-    pos = state2vec(state->position);
-    vel = state2vec(state->velocity);
-    yaw = radians(state->attitude.yaw);
+    if (controllerGetType() == ControllerTypeRLPayload) {
+      // If the controller is to track the payload, use its state, rather than the UAVs' state
+      pos = state2vec(state->payload_pos);
+      vel = state2vec(state->payload_vel);
+
+       yaw = 0.0;
+
+    } else {
+      pos = state2vec(state->position);
+      vel = state2vec(state->velocity);
+      yaw = radians(state->attitude.yaw);
+    }
     if (plan_is_stopped(&planner)) {
       // Return a null setpoint - when the HLcommander is stopped, it wants the
       // motors to be off.

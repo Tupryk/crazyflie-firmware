@@ -27,6 +27,7 @@ SOFTWARE.
 #include "stabilizer_types.h"
 
 void controllerRLFirmwareInit(void);
+void controllerRLPayloadFirmwareInit(void);
 bool controllerRLFirmwareTest(void);
 void controllerRLFirmware(control_t *control, const setpoint_t *setpoint,
                                          const sensorData_t *sensors,

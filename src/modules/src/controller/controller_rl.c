@@ -118,6 +118,12 @@ void controllerRLFirmwareInit(void)
   // }
 }
 
+void controllerRLPayloadFirmwareInit(void)
+{
+  controllerRLFirmwareInit();
+  // TODO: can set a flag here, if needed
+}
+
 
 /* 
  * Run inference
@@ -235,12 +241,12 @@ void controllerRLFirmware(control_t *control,
         control->normalizedForces[i] = 0.5f * (a + 1.0f);
     }
 
-    if (++rl_print_counter % 100 == 0) {
-        DEBUG_PRINT("action = [%f, %f, %f, %f]\n",
-          out_data[0], out_data[1],
-          out_data[2], out_data[3]);
-        rl_print_counter = 0;
-    }
+    // if (++rl_print_counter % 100 == 0) {
+    //     DEBUG_PRINT("action = [%f, %f, %f, %f]\n",
+    //       out_data[0], out_data[1],
+    //       out_data[2], out_data[3]);
+    //     rl_print_counter = 0;
+    // }
 
     
 }

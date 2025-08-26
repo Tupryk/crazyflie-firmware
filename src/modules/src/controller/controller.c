@@ -32,6 +32,7 @@ static ControllerFcns controllerFunctions[] = {
   {.init = controllerBrescianiniInit, .test = controllerBrescianiniTest, .update = controllerBrescianini, .name = "Brescianini"},
   {.init = controllerLeeFirmwareInit, .test = controllerLeeFirmwareTest, .update = controllerLeeFirmware, .name = "Lee"},
   {.init = controllerRLFirmwareInit, .test = controllerRLFirmwareTest, .update = controllerRLFirmware, .name = "RL"},
+  {.init = controllerRLPayloadFirmwareInit, .test = controllerRLFirmwareTest, .update = controllerRLFirmware, .name = "RLPayload"},
   #ifdef CONFIG_CONTROLLER_OOT
   {.init = controllerOutOfTreeInit, .test = controllerOutOfTreeTest, .update = controllerOutOfTree, .name = "OutOfTree"},
   #endif
@@ -61,6 +62,8 @@ void controllerInit(ControllerType controller) {
     #define CONTROLLER ControllerTypeLee
   #elif defined(CONFIG_CONTROLLER_RL)
     #define CONTROLLER ControllerTypeRL
+  #elif defined(CONFIG_CONTROLLER_RL_PAYLOAD)
+    #define CONTROLLER ControllerTypeRLPayload
   #elif defined(CONFIG_CONTROLLER_OOT)
     #define CONTROLLER ControllerTypeOot
   #else

@@ -235,18 +235,31 @@ static void setMotorRatios(const motors_thrust_pwm_t* motorPwm)
   motorsSetRatio(MOTOR_M4, motorPwm->motors.m4);
 }
 
-static void updateStateEstimatorAndControllerTypes() {
+static void updateStateEstimatorAndControllerTypes(const state_t* state) {
   if (stateEstimatorGetType() != estimatorType) {
     stateEstimatorSwitchTo(estimatorType);
     estimatorType = stateEstimatorGetType();
   }
 
   if (controllerGetType() != controllerType) {
+    ControllerType last_controllerType = controllerGetType();
     controllerInit(controllerType);
     controllerType = controllerGetType();
 
     eventTrigger_controllerChanged_payload.ctrl = controllerType;
     eventTrigger(&eventTrigger_controllerChanged);
+
+    if (controllerType == ControllerTypeRLPayload) {
+      // we just switched TO the payload controller -> re-compute trajectory to payload state
+      crtpCommanderHighLevelTellState(state); // make sure the last known state is the one from the payload
+      crtpCommanderHighLevelDisable(); // disable current plan (so the next call will plan from current state, not current setpoint)
+      crtpCommanderHighLevelGoTo(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z, 0.0, 1.0, false);
+    } else if (last_controllerType == ControllerTypeRLPayload) {
+      // we just switched FROM the payload controller -> re-compute trajectory to UAV state
+      crtpCommanderHighLevelTellState(state); // make sure the last known state is the one from the payload
+      crtpCommanderHighLevelDisable(); // disable current plan (so the next call will plan from current state, not current setpoint)
+      crtpCommanderHighLevelGoTo(state->position.x, state->position.y, state->position.z, 0.0, 1.0, false);
+    }
   }
 }
 
@@ -338,7 +351,7 @@ static void stabilizerTask(void* param)
     if (healthShallWeRunTest()) {
       healthRunTests(&sensorData);
     } else {
-      updateStateEstimatorAndControllerTypes();
+      updateStateEstimatorAndControllerTypes(&state);
 
       stateEstimator(&state, stabilizerStep);
 
@@ -413,7 +426,7 @@ static void stabilizerTask(void* param)
       // Critical for safety, be careful if you modify this code!
       crtpCommanderBlock(! areMotorsAllowedToRun);
 
-      if (crtpCommanderHighLevelGetSetpoint(&tempSetpoint, &state, stabilizerStep)) {
+      if (crtpCommanderHighLevelGetSetpoint(&tempSetpoint, &state, stabilizerStep, controllerType)) {
         commanderSetSetpoint(&tempSetpoint, COMMANDER_PRIORITY_HIGHLEVEL);
       }
       commanderGetSetpoint(&setpoint, &state);
