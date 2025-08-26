@@ -190,4 +190,22 @@ static inline float get_butterworth_2_low_pass(Butterworth2LowPass *filter)
   return filter->o[0];
 }
 
+// helper for math3d vector version
+#include "math3d.h"
+
+static inline void update_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3], struct vec value)
+{
+	update_butterworth_2_low_pass(&filter[0], value.x);
+	update_butterworth_2_low_pass(&filter[1], value.y);
+	update_butterworth_2_low_pass(&filter[2], value.z);
+}
+
+static inline struct vec get_butterworth_2_low_pass_vec(Butterworth2LowPass filter[3]) {
+  float x = get_butterworth_2_low_pass(&filter[0]);
+  float y = get_butterworth_2_low_pass(&filter[1]);
+  float z = get_butterworth_2_low_pass(&filter[2]);
+  return mkvec(x, y, z);
+}
+
+
 #endif //FILTER_H_

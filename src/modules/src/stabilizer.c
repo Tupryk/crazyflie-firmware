@@ -58,6 +58,7 @@
 #include "rateSupervisor.h"
 #include "eventtrigger.h"
 #include "peer_localization.h"
+#include "filter.h"
 
 static bool isInit;
 
@@ -121,8 +122,8 @@ static struct {
 } setpointCompressed;
 
 // for payloads
-static float payload_alpha_v = 0.9; // between 0...1; 1: no filter
-static float payload_alpha_w = 0.9; // between 0...1; 1: no filter
+static Butterworth2LowPass filter_payload_vel[3];
+
 static point_t payload_pos_last;         // m   (world frame)
 static velocity_t payload_vel_last;      // m/s (world frame)
 
@@ -322,6 +323,11 @@ static void stabilizerTask(void* param)
   xRateSupervisorSemaphore = xSemaphoreCreateBinary();
   STATIC_MEM_TASK_CREATE(rateSupervisorTask, rateSupervisorTask, RATE_SUPERVISOR_TASK_NAME, NULL, RATE_SUPERVISOR_TASK_PRI);
 
+  for (int8_t i = 0; i < 3; i++) {
+      const float cutoff = 70; // Hz
+      init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
+  }
+
   while(1) {
     // The sensor should unlock at 1kHz
     sensorsWaitDataReady();
@@ -356,7 +362,7 @@ static void stabilizerTask(void* param)
 
           // if we got a new state
           if (payload_pos_last.timestamp < other->pos.timestamp) {
-            struct vec vel_filtered = vzero();
+            struct vec payload_vel_filtered = vzero();
             // in the beginning, estimate the velocity to be zero, otherwise use
             // numeric estimation with filter
             if (payload_pos_last.timestamp != 0) {
@@ -364,13 +370,12 @@ static void stabilizerTask(void* param)
               const float dt = (other->pos.timestamp - payload_pos_last.timestamp) / 1000.0f; //s
               struct vec pos = mkvec(other->pos.x, other->pos.y, other->pos.z);
               struct vec last_pos = mkvec(payload_pos_last.x, payload_pos_last.y, payload_pos_last.z);
-              struct vec vel = vdiv(vsub(pos, last_pos), dt);
-              vel = vclampnorm(vel, 2.0); // rescale to avoid weird outliers
+              struct vec payload_vel_unfiltered = vdiv(vsub(pos, last_pos), dt);
+              payload_vel_unfiltered = vclampnorm(payload_vel_unfiltered, 2.0); // rescale to avoid weird outliers
 
-              // apply a simple complementary filter
-              // struct vec vel_old = mkvec(payload_vel_last.x, payload_vel_last.y, payload_vel_last.z);
-              // vel_filtered = vadd(vscl(1.0f - payload_alpha_v, vel_old), vscl(payload_alpha_v, vel));
-              vel_filtered = mkvec(vel.x, vel.y, vel.z);
+              // apply butterworth filter
+              update_butterworth_2_low_pass_vec(filter_payload_vel, payload_vel_unfiltered);
+              payload_vel_filtered = get_butterworth_2_low_pass_vec(filter_payload_vel);
             }
             // update the position
             state.payload_pos.x = other->pos.x;
@@ -379,12 +384,11 @@ static void stabilizerTask(void* param)
             state.payload_pos.timestamp = other->pos.timestamp;
 
             // update the velocity
-            state.payload_vel.x = vel_filtered.x;
-            state.payload_vel.y = vel_filtered.y;
-            state.payload_vel.z = vel_filtered.z;
+            state.payload_vel.x = payload_vel_filtered.x;
+            state.payload_vel.y = payload_vel_filtered.y;
+            state.payload_vel.z = payload_vel_filtered.z;
             state.payload_vel.timestamp = other->pos.timestamp;
 
-           
             // update state
             payload_pos_last = state.payload_pos;
             payload_vel_last = state.payload_vel;
@@ -474,10 +478,6 @@ PARAM_ADD_CORE(PARAM_UINT8, estimator, &estimatorType)
  * @brief Controller type Auto select(0), PID(1), Mellinger(2), INDI(3), Brescianini(4), Lee(5) (Default: 0)
  */
 PARAM_ADD_CORE(PARAM_UINT8, controller, &controllerType)
-
-PARAM_ADD_CORE(PARAM_FLOAT, pAlphaV, &payload_alpha_v)
-
-PARAM_ADD_CORE(PARAM_FLOAT, pAlphaW, &payload_alpha_w)
 
 PARAM_GROUP_STOP(stabilizer)
 
