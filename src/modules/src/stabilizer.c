@@ -56,6 +56,7 @@
 #include "statsCnt.h"
 #include "static_mem.h"
 #include "rateSupervisor.h"
+#include "eventtrigger.h"
 
 static bool isInit;
 
@@ -120,6 +121,9 @@ static struct {
 
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
 STATIC_MEM_TASK_ALLOC(rateSupervisorTask, RATE_SUPERVISOR_TASK_STACKSIZE);
+
+// defines eventTrigger_controllerChanged
+EVENTTRIGGER(controllerChanged, uint8, ctrl)
 
 static void stabilizerTask(void* param);
 static void rateSupervisorTask(void* param);
@@ -232,6 +236,9 @@ static void updateStateEstimatorAndControllerTypes() {
   if (controllerGetType() != controllerType) {
     controllerInit(controllerType);
     controllerType = controllerGetType();
+
+    eventTrigger_controllerChanged_payload.ctrl = controllerType;
+    eventTrigger(&eventTrigger_controllerChanged);
   }
 }
 

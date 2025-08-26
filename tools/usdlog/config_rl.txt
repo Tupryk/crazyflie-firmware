@@ -1,0 +1,65 @@
+1     # version
+512   # buffer size in bytes
+rl    # file name
+0     # enable on startup (0/1)
+on:fixedFrequency
+250   # frequency
+1     # mode (0: disabled, 1: synchronous stabilizer, 2: asynchronous)
+#stateEstimate.x
+#stateEstimate.y
+#stateEstimate.z
+#stateEstimateZ.vx
+#stateEstimateZ.vy
+#stateEstimateZ.vz
+#stateEstimateZ.ax# acc.x
+#stateEstimateZ.ay# acc.y
+#stateEstimateZ.az# acc.z
+#stateEstimateZ.px
+#stateEstimateZ.py
+#stateEstimateZ.pz
+#stateEstimateZ.pvx
+#stateEstimateZ.pvy
+#stateEstimateZ.pvz
+#stateEstimateZ.quat
+ctrlrl.in0
+ctrlrl.in1
+ctrlrl.in2
+ctrlrl.in3
+ctrlrl.in4
+ctrlrl.in5
+ctrlrl.in6
+ctrlrl.in7
+ctrlrl.in8
+ctrlrl.in9
+ctrlrl.in10
+ctrlrl.in11
+ctrlrl.in12
+ctrlrl.in13
+ctrlrl.in14
+ctrlrl.in15
+ctrlrl.in16
+ctrlrl.in17
+ctrlrl.in18
+ctrlrl.in19
+ctrlrl.in20
+ctrlrl.in21
+ctrlrl.in22
+ctrlrl.in23
+ctrlrl.in24
+ctrlrl.in25
+ctrlrl.in26
+ctrlrl.in27
+ctrlrl.out0
+ctrlrl.out1
+ctrlrl.out2
+ctrlrl.out3
+rpm.m1
+rpm.m2
+rpm.m3
+rpm.m4
+motor.m1
+motor.m2
+motor.m3
+motor.m4
+pm.vbatMV
+on:controllerChanged

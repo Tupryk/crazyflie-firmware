@@ -730,6 +730,11 @@ static inline struct mat33 quat2rotmat(struct quat q) {
 // operators
 //
 
+// multiply a quaternion by a scalar.
+static inline struct quat qscl(float s, struct quat q) {
+	return mkquat(s * q.x , s * q.y, s * q.z, s * q.w);
+}
+
 // rotate a vector by a quaternion.
 static inline struct vec qvrot(struct quat q, struct vec v) {
 	// from http://gamedev.stackexchange.com/a/50545 - TODO find real citation
@@ -749,6 +754,16 @@ static inline struct quat qqmul(struct quat q, struct quat p) {
 	float w = -q.x*p.x - q.y*p.y - q.z*p.z + q.w*p.w;
 	return mkquat(x, y, z, w);
 }
+
+// version that matches https://imrclab.github.io/teachingpages/flying-robots/quaternions.pdf
+static inline struct quat qqmul2(struct quat q, struct quat p) {
+	float w = q.w*p.w-q.x*p.x-q.y*p.y-q.z*p.z;
+	float x = q.x*p.w+q.w*p.x-q.z*p.y+q.y*p.z;
+	float y = q.y*p.w+q.z*p.x+q.w*p.y-q.x*p.z;
+	float z = q.z*p.w-q.y*p.x+q.x*p.y+q.w*p.z;
+	return mkquat(x, y, z, w);
+}
+
 // invert a quaternion.
 static inline struct quat qinv(struct quat q) {
 	return mkquat(-q.x, -q.y, -q.z, q.w);

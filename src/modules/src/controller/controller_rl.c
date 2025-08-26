@@ -38,6 +38,7 @@ SOFTWARE.
 #include "log.h"
 #include "debug.h"
 #include "usec_time.h"
+#include "motors.h"
 
 #include "network.h"  // Generated model definitions (activations, weights, I/O sizes)
 #include "network_data.h"
@@ -65,10 +66,10 @@ static ai_buffer *ai_output;
 
 
 static float lastAction[4] = {0};
-static uint32_t rl_print_counter = 0;
+// static uint32_t rl_print_counter = 0;
 
-#define THRUST_MIN 0.0f     // Minimum thrust (N)
-#define THRUST_MAX 0.118f   // Maximum thrust (N)
+// #define THRUST_MIN 0.0f     // Minimum thrust (N)
+// #define THRUST_MAX 0.118f   // Maximum thrust (N)
 
 
 /* 
@@ -99,6 +100,22 @@ void controllerRLFirmwareInit(void)
     DEBUG_PRINT("AI initialization failed with code: %d\n", s);
     return;
   }
+
+  // // initialize last action
+  // for (uint32_t id = 0; id < 4; ++id) {
+  //   uint16_t pwm = motorsGetRatio(id);
+
+  //   // thrust = a * pwm^2 + b * pwm
+  //   //    where PWM is normalized (range 0...1)
+  //   //          thrust is in Newtons (per rotor)
+  //   float pwmToThrustA = 0.091492681f;
+  //   float pwmToThrustB = 0.067673604f;
+
+  //   float pwm_normalized = pwm / UINT16_MAX;
+  //   float thrust_in_newton = pwmToThrustA * pwm_normalized * pwm_normalized + pwmToThrustB * pwm_normalized;
+  //   lastAction[id] = (thrust_in_newton / 0.118f - 0.5f) * 2.0f;
+
+  // }
 }
 
 
@@ -172,6 +189,11 @@ void controllerRLFirmware(control_t *control,
   // // rotate back to body frame (m/s^2)
   // struct vec acc_body = qvrot(qinv(q), acc_world);
 
+  // struct vec omega_body = mkvec(radians(sensors->gyro.x), radians(sensors->gyro.y), radians(sensors->gyro.z)); // rad/s
+  // struct vec omega_world = qvrot(q, omega_body); // rad/s
+
+  // struct quat q_dot = qscl(0.5f, qqmul2(q, quatvw(omega_body, 0.0f)));
+
   /*— fill input array —*/
   in_data[0]  = pos_err_clamped.x;
   in_data[1]  = pos_err_clamped.y;
@@ -194,9 +216,9 @@ void controllerRLFirmware(control_t *control,
   in_data[18] = 0.0f; // linvels 0.0f for no payload
   in_data[19] = 0.0f; // linvels 0.0f for no payload
   in_data[20] = 0.0f; // linvels 0.0f for no payload
-  in_data[21] = radians(sensors->gyro.x);
-  in_data[22] = radians(sensors->gyro.y);
-  in_data[23] = radians(sensors->gyro.z);
+  in_data[21] = radians(sensors->gyroNoLpf.x);
+  in_data[22] = radians(sensors->gyroNoLpf.y);
+  in_data[23] = radians(sensors->gyroNoLpf.z);
   in_data[24] = lastAction[0];
   in_data[25] = lastAction[1];
   in_data[26] = lastAction[2];
