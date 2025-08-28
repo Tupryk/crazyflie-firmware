@@ -172,9 +172,24 @@ void controllerRLFirmware(control_t *control,
   struct vec pos       = mkvec(state->position.x,
                                 state->position.y,
                                 state->position.z);
-  struct vec pos_err   = vsub(pos_des, pos);
 
+  struct vec payload_pos = mkvec(state->payload_pos.x,
+                                state->payload_pos.y,
+                                state->payload_pos.z);
+
+  struct vec payload_vel_world = mkvec(state->payload_vel.x,
+                               state->payload_vel.y,
+                               state->payload_vel.z);
+
+  struct vec pos_err   = vsub(pos_des, pos);
   struct vec pos_err_clamped = vclampnorm(pos_err, 1.0f);
+
+  struct vec payload_pos_err   = vsub(pos_des, payload_pos);
+  struct vec payload_pos_err_clamped = vclampnorm(payload_pos_err, 1.0f);
+
+  struct vec rel_pos = vsub(pos, payload_pos);
+
+
 
 
   // // rotate state acceleration in G to body frrame
@@ -201,15 +216,15 @@ void controllerRLFirmware(control_t *control,
   // struct quat q_dot = qscl(0.5f, qqmul2(q, quatvw(omega_body, 0.0f)));
 
   /*— fill input array —*/
-  in_data[0]  = pos_err_clamped.x;
-  in_data[1]  = pos_err_clamped.y;
-  in_data[2]  = pos_err_clamped.z;
-  in_data[3]  = vel_world.x;
-  in_data[4]  = vel_world.y;
-  in_data[5]  = vel_world.z;
-  in_data[6]  = 0.0f; // rel_pos is 0 for no payload
-  in_data[7]  = 0.0f; // rel_vel is
-  in_data[8]  = 0.0f; // rel_acc is
+  in_data[0]  = payload_pos_err_clamped.x;
+  in_data[1]  = payload_pos_err_clamped.y;
+  in_data[2]  = payload_pos_err_clamped.z;
+  in_data[3]  = payload_vel_world.x;
+  in_data[4]  = payload_vel_world.y;
+  in_data[5]  = payload_vel_world.z;
+  in_data[6]  = rel_pos.x; // rel_pos is 0 for no payload
+  in_data[7]  = rel_pos.y; // rel_vel is
+  in_data[8]  = rel_pos.z; // rel_acc is
   in_data[9]  = R.m[0][0];
   in_data[10] = R.m[0][1];
   in_data[11] = R.m[0][2];
@@ -219,9 +234,9 @@ void controllerRLFirmware(control_t *control,
   in_data[15] = R.m[2][0];
   in_data[16] = R.m[2][1];
   in_data[17] = R.m[2][2];
-  in_data[18] = 0.0f; // linvels 0.0f for no payload
-  in_data[19] = 0.0f; // linvels 0.0f for no payload
-  in_data[20] = 0.0f; // linvels 0.0f for no payload
+  in_data[18] = vel_world.x; // linvels 0.0f for no payload
+  in_data[19] = vel_world.y; // linvels 0.0f for no payload
+  in_data[20] = vel_world.z; // linvels 0.0f for no payload
   in_data[21] = radians(sensors->gyroNoLpf.x);
   in_data[22] = radians(sensors->gyroNoLpf.y);
   in_data[23] = radians(sensors->gyroNoLpf.z);

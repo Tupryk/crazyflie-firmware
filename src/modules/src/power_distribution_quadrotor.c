@@ -127,7 +127,7 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
 
 static void powerDistributionForce(const control_t *control, motors_thrust_uncapped_t* motorThrustUncapped) {
   for (int motorIndex = 0; motorIndex < STABILIZER_NR_OF_MOTORS; motorIndex++) {
-    float motorForce = control->normalizedForces[motorIndex] * 0.118f;
+    float motorForce = control->normalizedForces[motorIndex] * 0.12f;
     if (motorForce < 0.0f) {
       motorForce = 0.0f;
     }
