@@ -1,9 +1,9 @@
->>> stedgeai generate --model actor_model-83.tflite --optimization balanced --target stm32f4 --name network --workspace workspace --output output
+>>> stedgeai generate --model actor_model-84.tflite --optimization balanced --target stm32f4 --name network --workspace workspace --output output
 ST Edge AI Core v2.2.0-20266 2adc00962
 Creating c (debug) info json file network_c_info.json
  Exec/report summary (generate)
  ---------------------------------------------------------------------------------------------------------
- model file         :   actor_model-83.tflite   
+ model file         :   actor_model-84.tflite   
  type               :   tflite                                                                            
  c_name             :   network                                                                           
  compression        :   lossless                                                                          
@@ -13,14 +13,14 @@ Creating c (debug) info json file network_c_info.json
  workspace dir      :   workspace               
  output dir         :   output                  
  model_fmt          :   float                                                                             
- model_name         :   actor_model83                                                                     
- model_hash         :   0xc1c88eca25b737483e3514034ca376d6                                                
- params #           :   10,436 items (40.77 KiB)                                                          
+ model_name         :   actor_model84                                                                     
+ model_hash         :   0xd4dcd5beed5d12f5286a624b0b9f7f7a                                                
+ params #           :   10,628 items (41.52 KiB)                                                          
  ---------------------------------------------------------------------------------------------------------
- input 1/1          :   'serving_default_args_00', f32(1x28), 112 Bytes, activations                      
+ input 1/1          :   'serving_default_args_00', f32(1x31), 124 Bytes, activations                      
  output 1/1         :   'gemm_6', f32(1x4), 16 Bytes, activations                                         
- macc               :   12,356                                                                            
- weights (ro)       :   41,744 B (40.77 KiB) (1 segment)                                                  
+ macc               :   12,548                                                                            
+ weights (ro)       :   42,512 B (41.52 KiB) (1 segment)                                                  
  activations (rw)   :   512 B (512 B) (1 segment) *                                                       
  ram (total)        :   512 B (512 B) = 512 + 0 + 0                                                       
  ---------------------------------------------------------------------------------------------------------
@@ -37,11 +37,11 @@ Computing AI RT data/code size (target=stm32f4)..
  ------------------------------ ------- -------- ------- -----
  RT total**                       7,464       72   2,156   152
  ------------------------------ ------- -------- ------- -----
- weights                              0   41,744       0     0
+ weights                              0   42,512       0     0
  activations                          0        0       0   512
  io                                   0        0       0     0
  ------------------------------ ------- -------- ------- -----
- TOTAL                            7,464   41,816   2,156   664
+ TOTAL                            7,464   42,584   2,156   664
  ------------------------------ ------- -------- ------- -----
  *  toolchain objects (libm/libgcc*)
  ** RT AI runtime objects (kernels+infrastructure)
@@ -49,9 +49,9 @@ Computing AI RT data/code size (target=stm32f4)..
   ---------------------------------------------------
                FLASH (ro)      %*   RAM (rw)       %
   ---------------------------------------------------
-  RT total          9,692   18.8%      2,308   81.8%
+  RT total          9,692   18.6%      2,308   81.8%
   ---------------------------------------------------
-  TOTAL            51,436              2,820
+  TOTAL            52,204              2,820
   ---------------------------------------------------
   *  rt/total
  Generated files (7)
@@ -64,4 +64,4 @@ Computing AI RT data/code size (target=stm32f4)..
  network.h
  network.c
 Creating txt report file network_generate_report.txt
-elapsed time (generate): 40.084s
+elapsed time (generate): 3.618s
