@@ -65,7 +65,7 @@ static ai_buffer *ai_input;
 static ai_buffer *ai_output;
 
 
-static float lastAction[4] = {0};
+static float lastAction[4] = {-1.0f, -1.0f, -1.0f, -1.0f};
 // static uint32_t rl_print_counter = 0;
 
 // #define THRUST_MIN 0.0f     // Minimum thrust (N)
