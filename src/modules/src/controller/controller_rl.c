@@ -189,6 +189,9 @@ void controllerRLFirmware(control_t *control,
 
   struct vec rel_pos = vsub(pos, payload_pos);
 
+  struct vec other_pos = mkvec(state->team_state[1].pos.x, state->team_state[1].pos.y, state->team_state[1].pos.z);
+
+  struct vec rel_pos_other = vsub(other_pos, payload_pos);
 
 
 
@@ -244,6 +247,9 @@ void controllerRLFirmware(control_t *control,
   in_data[25] = lastAction[1];
   in_data[26] = lastAction[2];
   in_data[27] = lastAction[3];
+  in_data[28] = rel_pos_other.x;
+  in_data[29] = rel_pos_other.y;
+  in_data[30] = rel_pos_other.z;
 
     /* 2 - Call inference engine */
     aiRun(in_data, out_data);
@@ -300,6 +306,9 @@ LOG_ADD_CORE(LOG_FLOAT, in24, &in_data[24])
 LOG_ADD_CORE(LOG_FLOAT, in25, &in_data[25])
 LOG_ADD_CORE(LOG_FLOAT, in26, &in_data[26])
 LOG_ADD_CORE(LOG_FLOAT, in27, &in_data[27])
+LOG_ADD_CORE(LOG_FLOAT, in28, &in_data[28])
+LOG_ADD_CORE(LOG_FLOAT, in29, &in_data[29])
+LOG_ADD_CORE(LOG_FLOAT, in30, &in_data[30])
 
 LOG_ADD_CORE(LOG_FLOAT, out0, &out_data[0])
 LOG_ADD_CORE(LOG_FLOAT, out1, &out_data[1])
