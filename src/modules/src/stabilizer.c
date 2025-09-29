@@ -104,6 +104,21 @@ static struct {
   int16_t rateRoll;
   int16_t ratePitch;
   int16_t rateYaw;
+
+  // payload position - mm
+  int16_t px;
+  int16_t py;
+  int16_t pz;
+
+  // payload velocity - mm / sec
+  int16_t pvx;
+  int16_t pvy;
+  int16_t pvz;
+
+// payload acceleration - mm / sec^2
+  int16_t pax;
+  int16_t pay;
+  int16_t paz;
 } stateCompressed;
 
 static struct {
@@ -171,6 +186,19 @@ static void compressState()
   stateCompressed.rateRoll = sensorData.gyro.x * deg2millirad;
   stateCompressed.ratePitch = -sensorData.gyro.y * deg2millirad;
   stateCompressed.rateYaw = sensorData.gyro.z * deg2millirad;
+
+  // payload
+  stateCompressed.px = state.payload_pos.x * 1000.0f;
+  stateCompressed.py = state.payload_pos.y * 1000.0f;
+  stateCompressed.pz = state.payload_pos.z * 1000.0f;
+
+  stateCompressed.pvx = state.payload_vel.x * 1000.0f;
+  stateCompressed.pvy = state.payload_vel.y * 1000.0f;
+  stateCompressed.pvz = state.payload_vel.z * 1000.0f;
+
+  stateCompressed.pax = state.payload_acc.x * 1000.0f;
+  stateCompressed.pay = state.payload_acc.y * 1000.0f;
+  stateCompressed.paz = state.payload_acc.z * 1000.0f;
 }
 
 static void compressSetpoint()
@@ -1012,6 +1040,53 @@ LOG_ADD(LOG_INT16, ratePitch, &stateCompressed.ratePitch)
  * @brief Yaw rate (angular velocity) [milliradians / sec]
  */
 LOG_ADD(LOG_INT16, rateYaw, &stateCompressed.rateYaw)
+
+
+/**
+ * @brief The position of the payload in the global reference frame, X [mm]
+ */
+LOG_ADD(LOG_INT16, px, &stateCompressed.px)
+
+/**
+ * @brief The position of the payload in the global reference frame, Y [mm]
+ */
+LOG_ADD(LOG_INT16, py, &stateCompressed.py)
+
+/**
+ * @brief The position of the payload in the global reference frame, Z [mm]
+ */
+LOG_ADD(LOG_INT16, pz, &stateCompressed.pz)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, X [mm/s]
+ */
+LOG_ADD(LOG_INT16, pvx, &stateCompressed.pvx)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, Y [mm/s]
+ */
+LOG_ADD(LOG_INT16, pvy, &stateCompressed.pvy)
+
+/**
+ * @brief The velocity of the payload in the global reference frame, Z [mm/s]
+ */
+LOG_ADD(LOG_INT16, pvz, &stateCompressed.pvz)
+
+/**
+ * @brief The acc of the payload in the global reference frame, X [mm/s]
+ */
+LOG_ADD(LOG_INT16, pax, &stateCompressed.pax)
+
+/**
+ * @brief The acc of the payload in the global reference frame, Y [mm/s]
+ */
+LOG_ADD(LOG_INT16, pay, &stateCompressed.pay)
+
+/**
+ * @brief The acc of the payload in the global reference frame, Z [mm/s]
+ */
+LOG_ADD(LOG_INT16, paz, &stateCompressed.paz)
+
 LOG_GROUP_STOP(stateEstimateZ)
 
 
