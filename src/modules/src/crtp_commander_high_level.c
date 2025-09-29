@@ -319,7 +319,7 @@ bool crtpCommanderHighLevelIsStopped()
 void crtpCommanderHighLevelTellState(const state_t *state)
 {
   xSemaphoreTake(lockTraj, portMAX_DELAY);
-  if (controllerGetType() == ControllerTypeRLPayload) {
+  if (controllerGetType() == ControllerTypeRLPayload || controllerGetType() == ControllerTypeLeePayload) {
     // If the controller is to track the payload, use its state, rather than the UAVs' state
     pos = state2vec(state->payload_pos);
     vel = state2vec(state->payload_vel);
@@ -356,7 +356,7 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
   // setpoint" values with the current state estimate, so we have the right
   // initial conditions for future trajectory planning.
   if (plan_is_disabled(&planner) || plan_is_stopped(&planner)) {
-    if (controllerGetType() == ControllerTypeRLPayload) {
+    if (controllerGetType() == ControllerTypeRLPayload || controllerGetType() == ControllerTypeLeePayload) {
       // If the controller is to track the payload, use its state, rather than the UAVs' state
       pos = state2vec(state->payload_pos);
       vel = state2vec(state->payload_vel);
@@ -387,9 +387,8 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
     setpoint->velocity.y = ev.vel.y;
     setpoint->velocity.z = ev.vel.z;
     setpoint->attitude.yaw = degrees(ev.yaw);
-    setpoint->attitudeRate.roll = degrees(ev.omega.x);
-    setpoint->attitudeRate.pitch = degrees(ev.omega.y);
-    setpoint->attitudeRate.yaw = degrees(ev.omega.z);
+    setpoint->attitudeRate.yaw = degrees(ev.yaw_dot);
+    setpoint->attitudeAcc.yaw = degrees(ev.yaw_ddot);
     setpoint->mode.x = modeAbs;
     setpoint->mode.y = modeAbs;
     setpoint->mode.z = modeAbs;
@@ -403,7 +402,9 @@ bool crtpCommanderHighLevelGetSetpoint(setpoint_t* setpoint, const state_t *stat
     setpoint->jerk.x = ev.jerk.x;
     setpoint->jerk.y = ev.jerk.y;
     setpoint->jerk.z = ev.jerk.z;
-
+    setpoint->snap.x = ev.snap.x;
+    setpoint->snap.y = ev.snap.y;
+    setpoint->snap.z = ev.snap.z;
 
     // store the last setpoint
     pos = ev.pos;
@@ -648,7 +649,7 @@ int go_to(const struct data_go_to* data)
   static struct traj_eval ev = {
     // pos, vel, yaw will be filled before using
     .acc = {0.0f, 0.0f, 0.0f},
-    .omega = {0.0f, 0.0f, 0.0f},
+    .yaw_dot = 0.0,
   };
 
   if (isBlocked) {
@@ -679,7 +680,7 @@ int go_to2(const struct data_go_to_2* data)
   static struct traj_eval ev = {
     // pos, vel, yaw will be filled before using
     .acc = {0.0f, 0.0f, 0.0f},
-    .omega = {0.0f, 0.0f, 0.0f},
+    .yaw_dot = 0.0,
   };
 
   if (isBlocked) {
@@ -710,7 +711,7 @@ int spiral(const struct data_spiral* data)
   static struct traj_eval ev = {
     // pos, vel, yaw will be filled before using
     .acc = {0.0f, 0.0f, 0.0f},
-    .omega = {0.0f, 0.0f, 0.0f},
+    .yaw_dot = 0.0,
   };
   
   if (isBlocked) {

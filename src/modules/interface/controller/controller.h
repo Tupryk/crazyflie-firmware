@@ -37,6 +37,7 @@ typedef enum {
   ControllerTypeLee,
   ControllerTypeRL,
   ControllerTypeRLPayload,
+  ControllerTypeLeePayload,
 #ifdef CONFIG_CONTROLLER_OOT
   ControllerTypeOot,
 #endif

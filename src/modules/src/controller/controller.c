@@ -9,6 +9,7 @@
 #include "controller_brescianini.h"
 #include "controller_lee.h"
 #include "controller_rl.h"
+#include "controller_lee_payload.h"
 
 #include "autoconf.h"
 
@@ -33,6 +34,7 @@ static ControllerFcns controllerFunctions[] = {
   {.init = controllerLeeFirmwareInit, .test = controllerLeeFirmwareTest, .update = controllerLeeFirmware, .name = "Lee"},
   {.init = controllerRLFirmwareInit, .test = controllerRLFirmwareTest, .update = controllerRLFirmware, .name = "RL"},
   {.init = controllerRLPayloadFirmwareInit, .test = controllerRLFirmwareTest, .update = controllerRLFirmware, .name = "RLPayload"},
+  {.init = controllerLeePayloadFirmwareInit, .test = controllerLeePayloadFirmwareTest, .update = controllerLeePayloadFirmware, .name = "LeePayload"},
   #ifdef CONFIG_CONTROLLER_OOT
   {.init = controllerOutOfTreeInit, .test = controllerOutOfTreeTest, .update = controllerOutOfTree, .name = "OutOfTree"},
   #endif
@@ -64,6 +66,8 @@ void controllerInit(ControllerType controller) {
     #define CONTROLLER ControllerTypeRL
   #elif defined(CONFIG_CONTROLLER_RL_PAYLOAD)
     #define CONTROLLER ControllerTypeRLPayload
+  #elif defined(CONFIG_CONTROLLER_LEE_PAYLOAD)
+    #define CONTROLLER ControllerTypeLeePayload
   #elif defined(CONFIG_CONTROLLER_OOT)
     #define CONTROLLER ControllerTypeOot
   #else

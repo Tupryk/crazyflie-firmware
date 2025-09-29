@@ -68,6 +68,7 @@ typedef struct vec3_s point_t;
 typedef struct vec3_s velocity_t;
 typedef struct vec3_s acc_t;
 typedef struct vec3_s jerk_t;
+typedef struct vec3_s snap_t;
 
 /* Orientation as a quaternion */
 typedef struct quaternion_s {
@@ -194,6 +195,7 @@ typedef struct state_s {
   // Measured state of the payload
   point_t payload_pos;         // m   (world frame)
   velocity_t payload_vel;      // m/s (world frame)
+  acc_t payload_acc;           // m/s^2 (world frame)
 } state_t;
 
 #define STABILIZER_NR_OF_MOTORS 4
@@ -267,12 +269,14 @@ typedef struct setpoint_s {
 
   attitude_t attitude;      // deg
   attitude_t attitudeRate;  // deg/s
+  attitude_t attitudeAcc; // deg/s^2
   quaternion_t attitudeQuaternion;
   float thrust;
   point_t position;         // m
   velocity_t velocity;      // m/s
   acc_t acceleration;       // m/s^2
   jerk_t jerk;              // m/s^3
+  snap_t snap;              // m/s^4
   bool velocity_body;       // true if velocity is given in body frame; false if velocity is given in world frame
 
   struct {

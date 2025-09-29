@@ -123,9 +123,13 @@ static struct {
 
 // for payloads
 static Butterworth2LowPass filter_payload_vel[3];
+static Butterworth2LowPass filter_payload_acc[3]; // Add filter for acceleration
+
 
 static point_t payload_pos_last;         // m   (world frame)
 static velocity_t payload_vel_last;      // m/s (world frame)
+static velocity_t payload_vel_filtered_last; // Store last filtered velocity for acceleration
+static acc_t payload_acc_last;  // m/s^2 (world frame)
 
 STATIC_MEM_TASK_ALLOC(stabilizerTask, STABILIZER_TASK_STACKSIZE);
 STATIC_MEM_TASK_ALLOC(rateSupervisorTask, RATE_SUPERVISOR_TASK_STACKSIZE);
@@ -249,12 +253,12 @@ static void updateStateEstimatorAndControllerTypes(const state_t* state) {
     eventTrigger_controllerChanged_payload.ctrl = controllerType;
     eventTrigger(&eventTrigger_controllerChanged);
 
-    if (controllerType == ControllerTypeRLPayload) {
+    if (controllerType == ControllerTypeRLPayload || controllerType == ControllerTypeLeePayload) {
       // we just switched TO the payload controller -> re-compute trajectory to payload state
       crtpCommanderHighLevelTellState(state); // make sure the last known state is the one from the payload
       crtpCommanderHighLevelDisable(); // disable current plan (so the next call will plan from current state, not current setpoint)
       crtpCommanderHighLevelGoTo(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z, 0.0, 1.0, false);
-    } else if (last_controllerType == ControllerTypeRLPayload) {
+    } else if (last_controllerType == ControllerTypeRLPayload || last_controllerType == ControllerTypeLeePayload) {
       // we just switched FROM the payload controller -> re-compute trajectory to UAV state
       crtpCommanderHighLevelTellState(state); // make sure the last known state is the one from the payload
       crtpCommanderHighLevelDisable(); // disable current plan (so the next call will plan from current state, not current setpoint)
@@ -339,7 +343,9 @@ static void stabilizerTask(void* param)
   for (int8_t i = 0; i < 3; i++) {
       const float cutoff = 70; // Hz
       init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
-  }
+      init_butterworth_2_low_pass(&filter_payload_acc[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f); // Init acc filter
+
+    }
 
   while(1) {
     // The sensor should unlock at 1kHz
@@ -376,6 +382,8 @@ static void stabilizerTask(void* param)
           // if we got a new state
           if (payload_pos_last.timestamp < other->pos.timestamp) {
             struct vec payload_vel_filtered = vzero();
+            struct vec payload_acc_filtered = vzero();
+
             // in the beginning, estimate the velocity to be zero, otherwise use
             // numeric estimation with filter
             if (payload_pos_last.timestamp != 0) {
@@ -389,6 +397,19 @@ static void stabilizerTask(void* param)
               // apply butterworth filter
               update_butterworth_2_low_pass_vec(filter_payload_vel, payload_vel_unfiltered);
               payload_vel_filtered = get_butterworth_2_low_pass_vec(filter_payload_vel);
+
+              struct vec last_vel_filtered = mkvec(payload_vel_filtered_last.x, payload_vel_filtered_last.y, payload_vel_filtered_last.z);
+              struct vec payload_acc_unfiltered = vdiv(vsub(payload_vel_filtered, last_vel_filtered), dt);
+              
+              // apply butterworth filter to acceleration
+              update_butterworth_2_low_pass_vec(filter_payload_acc, payload_acc_unfiltered);
+              payload_acc_filtered = get_butterworth_2_low_pass_vec(filter_payload_acc);
+              
+              // update last filtered velocity
+              payload_vel_filtered_last.x = payload_vel_filtered.x;
+              payload_vel_filtered_last.y = payload_vel_filtered.y;
+              payload_vel_filtered_last.z = payload_vel_filtered.z;
+            
             }
             // update the position
             state.payload_pos.x = other->pos.x;
@@ -401,13 +422,21 @@ static void stabilizerTask(void* param)
             state.payload_vel.y = payload_vel_filtered.y;
             state.payload_vel.z = payload_vel_filtered.z;
             state.payload_vel.timestamp = other->pos.timestamp;
+            
+            // update the acceleration
+            state.payload_acc.x = payload_acc_filtered.x;
+            state.payload_acc.y = payload_acc_filtered.y;
+            state.payload_acc.z = payload_acc_filtered.z;
+            state.payload_acc.timestamp = other->pos.timestamp;
 
             // update state
             payload_pos_last = state.payload_pos;
             payload_vel_last = state.payload_vel;
+            payload_acc_last = state.payload_acc;
           } else {
             state.payload_pos = payload_pos_last;
             state.payload_vel = payload_vel_last;
+            state.payload_acc = payload_acc_last;
           }
 
         } else if (num_uavs < MAX_TEAM_SIZE) {
@@ -890,6 +919,23 @@ LOG_ADD(LOG_FLOAT, pvy, &state.payload_vel.y)
  * @brief The velocity of the payload in the global reference frame, Z [m/s]
  */
 LOG_ADD(LOG_FLOAT, pvz, &state.payload_vel.z)
+
+
+/**
+ * @brief The acc of the payload in the global reference frame, X [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pax, &state.payload_acc.x)
+
+/**
+ * @brief The acc of the payload in the global reference frame, Y [m/s]
+ */
+LOG_ADD(LOG_FLOAT, pay, &state.payload_acc.y)
+
+/**
+ * @brief The acc of the payload in the global reference frame, Z [m/s]
+ */
+LOG_ADD(LOG_FLOAT, paz, &state.payload_acc.z)
+
 
 LOG_GROUP_STOP(stateEstimate)
 
