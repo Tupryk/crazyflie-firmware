@@ -75,7 +75,7 @@ typedef struct controllerLeePayload_s {
     struct vec i_error_att_uav; // integral of attitude error
 
 
-    // Payload and Cable controller components    
+    // Payload and Cable controller components (also used for logging)    
     struct vec F_d; // desired payload force
     struct vec desVirtInp; // desired cable force
     
@@ -88,9 +88,8 @@ typedef struct controllerLeePayload_s {
     struct vec omega_cd; // desired cable angular velocity
     
     // Logging variables
-    struct vec pl_pos;
-    struct vec pl_vel;
-    struct vec pl_acc;
+    struct vec uav_pos_d;
+    struct vec uav_vel_d;
     struct vec rpy;
     struct vec rpy_des;
     struct mat33 R_des;

@@ -16,8 +16,8 @@
 
 
 static controllerLeePayload_t g_self = {
-  .mass = 0.034,
-  .mp   = 0.01,
+  .mass = 0.0366,
+  .mp   = 0.0048,
   // Inertia matrix (diagonal matrix), see
   // System Identification of the Crazyflie 2.0 Nano Quadrocopter
   // BA theses, Julian Foerster, ETHZ
@@ -25,22 +25,22 @@ static controllerLeePayload_t g_self = {
   .J = {16.571710e-6, 16.655602e-6, 29.261652e-6}, // kg m^2
 
   // Payload PID
-  .Kpos_P = {7.0, 7.0, 7.0}, // Kp in paper
+  .Kpos_P = {6.5, 6.5, 6.5}, // Kp in paper
   .Kpos_P_limit = 100,
-  .Kpos_D = {4.0, 4.0, 4.0}, // Kv in paper
+  .Kpos_D = {5.5, 5.5, 5.5}, // Kv in paper
   .Kpos_D_limit = 100,
   .Kpos_I = {0.0, 0.0, 0.0}, // not in paper
   .Kpos_I_limit = 100,
 
   // Cable PD 
-  .K_q = {1.0, 1.0, 1.0}, // cable direction P
+  .K_q = {25.0, 25.0, 16.0}, // cable direction P
   .K_q_limit = 100,
-  .K_w = {0.1, 0.1, 0.1}, // cable angular velocity D
+  .K_w = {10.0, 10.0, 6.0}, // cable angular velocity D
   .K_w_limit = 100,
   .K_q_I = {0.0, 0.0, 0.0}, // cable direction I
 
   // UAV Position PID Gains
-  .Kpos_UAV_P = {7.0, 7.0, 7.0}, // UAV position Kp
+  .Kpos_UAV_P = {3.0, 3.0, 3.0}, // UAV position Kp
   .Kpos_UAV_P_limit = 100,
   .Kpos_UAV_D = {4.0, 4.0, 4.0}, // UAV position Kv
   .Kpos_UAV_D_limit = 100,
@@ -48,9 +48,9 @@ static controllerLeePayload_t g_self = {
   .Kpos_UAV_I_limit = 100,
 
   // UAV Attitude PID
-  .KR = {0.007, 0.007, 0.008},
-  .Komega = {0.00115, 0.00115, 0.002},
-  .KI = {0.03, 0.03, 0.03},
+  .KR = {0.0045, 0.0045, 0.01},
+  .Komega = {0.0008, 0.0008, 0.015},
+  .KI = {0.01, 0.01, 0.01},
 
   .attachement_points[0].l = -1,
   .attachement_points[1].l = -1,
@@ -124,11 +124,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct vec plVel = mkvec(state->payload_vel.x, state->payload_vel.y, state->payload_vel.z);
     struct vec plAcc = mkvec(state->payload_acc.x, state->payload_acc.y, state->payload_acc.z);
     
-    //logging payload state
-    self->pl_pos = plPos;
-    self->pl_vel = plVel;
-    self->pl_acc = plAcc;
-
     // UAV position and velocity states
     struct vec statePos = mkvec(state->position.x, state->position.y, state->position.z);
     struct vec stateVel = mkvec(state->velocity.x, state->velocity.y, state->velocity.z);
@@ -139,10 +134,26 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     self->i_error_pos = vadd(self->i_error_pos, vscl(dt, plpos_e));
 
     struct vec plAcc_w_gcomp = vadd(plAcc, gravity_comp);
+  
+    // set the length of the cable
+    // struct vec attPoint = mkvec(0, 0, 0);
+    // float l = -1;
+    // // find the attachment point for this UAV (the one, which doesn't have any neighbor associated with it)
+    // for (uint8_t i = 0; i < state->num_uavs; ++i) {
+    //   if (self->attachement_points[i].id == state->team_state[0].id) {
+    //     // this attachement point belongs to a neighbor
+        
+    //     attPoint = self->attachement_points[i].point;
+    //     l = self->attachement_points[i].l;
+    //     break;
+    //   }
+    // }
+    float l = vmag(vsub(plPos, statePos));
+  
     // payload desired force
     self->F_d = vscl(self->mp, 
-      vadd4(
-      plAcc_w_gcomp,
+      vadd5(
+      plAcc_d, gravity_comp,
       veltmul(self->Kpos_P, plpos_e),
       veltmul(self->Kpos_D, plvel_e),
       veltmul(self->Kpos_I, self->i_error_pos)
@@ -155,40 +166,28 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
     //directional unit vector qi and its derivative qidot from UAV to payload
     self->qi = vnormalize(vsub(plPos, statePos));
-    self->qidot = vnormalize(vsub(plVel, stateVel));
+    self->qidot = vdiv(vsub(plVel, stateVel),l);
     self->omega_c = vcross(self->qi, self->qidot); // cable angular velocity
 
     struct mat33 qiqiT = vecmult(self->qi);
     // projection of the desired virtual input along qi
     struct vec virtualInp = mvmul(qiqiT, self->desVirtInp);
-    
-
-    struct vec attPoint = mkvec(0, 0, 0);
-    float l = -1;
-    // find the attachment point for this UAV (the one, which doesn't have any neighbor associated with it)
-    for (uint8_t i = 0; i < state->num_uavs; ++i) {
-      if (self->attachement_points[i].id == state->team_state[0].id) {
-        // this attachement point belongs to a neighbor
-
-        attPoint = self->attachement_points[i].point;
-        l = self->attachement_points[i].l;
-        break;
-      }
-    }
-    
     struct vec u_parallel = vadd3(virtualInp, vscl(self->mass*l*vmag2(self->omega_c), self->qi), vscl(self->mass, mvmul(qiqiT, plAcc_w_gcomp)));  
 
     // desired cable direction and its derivative
-    self->qdi = vnormalize(self->desVirtInp);
+    self->qdi = vneg(vnormalize(self->desVirtInp));
+    struct mat33 skewqi = mcrossmat(self->qi); // skew symmetric matrix of qi
+    struct mat33 skewqi2 = mmul(skewqi,skewqi); // skewqi squared
+
     // eq. 68-71 in Aggressive Maneuvering of a Quadrotor with a Cable-Suspended Payload by Sarah Tang
-    float T = self->mp*vmag(plAcc_w_gcomp); // cable tension
-    float T_dot = -self->mp * vdot(plJerk_d, self->qi); // tension derivative
+    float T = self->mp*vmag(vadd(plAcc_d, gravity_comp)); // cable tension
+    float T_dot = -self->mp * vdot(plJerk_d, self->qdi); // tension derivative
     self->qdidot = vdiv(vneg(vadd(vscl(self->mp, plJerk_d), vscl(T_dot, self->qdi))), T);
     self->omega_cd = vcross(vdiv(vscl(self->mp, plJerk_d), T), self->qi); // angular velocity of the cable, w in paper
 
-    struct mat33 skewqi = mcrossmat(self->qi); // skew symmetric matrix of qi
-    struct mat33 skewqi2 = mmul(skewqi,skewqi); // skewqi squared
-    
+    // set to zero for now
+    // self->qdidot = vzero(); 
+    // self->omega_cd = vzero(); 
     
     struct vec eq  = vclampscl(vcross(self->qdi, self->qi), -self->K_q_limit, self->K_q_limit);
     self->i_error_q = vadd(self->i_error_q, vscl(dt, eq));
@@ -198,11 +197,11 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct vec u_perpind = vsub(
       vscl(self->mass*l, 
         mvmul(skewqi,
-          vadd4(
+          vadd3(
             vneg(veltmul(self->K_q, eq)),
             vneg(veltmul(self->K_w, ew)),
-            vneg(vscl(vdot(self->qi, self->omega_cd), self->qidot)), 
-            vneg(veltmul(self->K_q_I, self->i_error_q)) // not originally in the paper
+            vneg(vscl(vdot(self->qi, self->omega_cd), self->qidot)) 
+            // veltmul(self->K_q_I, self->i_error_q)) // not originally in the paper
           )
         )
       ),
@@ -214,33 +213,53 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     
     // UAV Lee controller
     
-    struct vec pos_d = vsub(plPos, vscl(l, self->qi)); // desired UAV position
-    struct vec vel_d = vsub(plVel, vscl(l, self->qidot)); // desired UAV velocity
-    struct vec acc_d = vdiv(u, self->mass); // desired UAV acceleration
+    struct vec pos_d = vsub(plPos_d, vscl(l, self->qdi)); // desired UAV position
+    struct vec vel_d = vsub(plVel_d, vscl(l, self->qdidot)); // desired UAV velocity
+    //logging payload state
+    self->uav_pos_d = pos_d;
+    self->uav_vel_d = vel_d;
 
     struct vec pos_e = vclampscl(vsub(pos_d, statePos), -self->Kpos_UAV_P_limit, self->Kpos_UAV_P_limit);
     struct vec vel_e = vclampscl(vsub(vel_d, stateVel), -self->Kpos_UAV_D_limit, self->Kpos_UAV_D_limit);
 
     self->i_error_pos_uav = vadd(self->i_error_pos_uav, vscl(dt, pos_e));
-    struct vec F_uav = vadd4(
-      acc_d,
+    struct vec a_uav = vadd3(
       veltmul(self->Kpos_UAV_P, pos_e),
       veltmul(self->Kpos_UAV_D, vel_e),
       veltmul(self->Kpos_UAV_I, self->i_error_pos_uav)
-    );
+    ); // desired linear acceleration
 
     struct quat q = mkquat(state->attitudeQuaternion.x, state->attitudeQuaternion.y, state->attitudeQuaternion.z, state->attitudeQuaternion.w);
     struct mat33 R = quat2rotmat(q);
     struct vec z  = vbasis(2);
-    control->thrustSi = self->mass*vdot(F_uav , mvmul(R, z));
+    struct vec R_z = mvmul(R, z);
+    
+    u = vadd(u, vscl(self->mass, a_uav)); // add the PD control of the UAV to the feedforward force u
+    control->thrustSi = vdot(u, R_z);
     self->thrustSi = control->thrustSi;
+    
+    // DEBUG PRINTS
+    // static int counter = 0;
+    // ++counter;
+    // if (counter % 100 == 0) {
+    //   DEBUG_PRINT("thrust: %f\n", (double) self->thrustSi);
+    //   DEBUG_PRINT("R_z: %f %f %f\n", (double) R_z.x, (double) R_z.y, (double) R_z.z);
+    //   DEBUG_PRINT("u_par: %f %f %f\n", (double) u_parallel.x, (double) u_parallel.y, (double) u_parallel.z);
+    //   DEBUG_PRINT("u_perpind: %f %f %f\n", (double) u_perpind.x, (double) u_perpind.y, (double) u_perpind.z);
+    //   DEBUG_PRINT("length of the cable: %f\n", (double) l);
+    //   DEBUG_PRINT("desired payload position: %f %f %f\n", (double) plPos_d.x, (double) plPos_d.y, (double) plPos_d.z);
+    //   DEBUG_PRINT("payload position: %f %f %f\n", (double) plPos.x, (double) plPos.y, (double) plPos.z);
+    //   DEBUG_PRINT("uav position: %f %f %f\n", (double) statePos.x, (double) statePos.y, (double) statePos.z);
+    //   DEBUG_PRINT("desired uav position: %f %f %f\n", (double) pos_d.x, (double) pos_d.y, (double) pos_d.z);
+    //   DEBUG_PRINT("desired uav velocity: %f %f %f\n", (double) vel_d.x, (double) vel_d.y, (double) vel_d.z);
+    // }
     
     if (control->thrustSi < 0.01f) {
       controllerLeePayloadReset(self);
     }
-  
-    struct vec xb = vnormalize(vcross(yc, F_uav));
-    struct vec yb = vnormalize(vcross(F_uav, xb));
+    struct vec u_norm = vnormalize(u);
+    struct vec xb = vnormalize(vcross(yc, u));
+    struct vec yb = vnormalize(vcross(u, xb));
     struct vec zb = vcross(xb, yb);
     self->R_des = mcolumns(xb, yb, zb); // desired rotation matrix of the UAV
 
@@ -282,20 +301,20 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
   // angular velocity
   self->omega = mkvec(
-    radians(sensors->gyro.x),
-    radians(sensors->gyro.y),
-    radians(sensors->gyro.z));
+  radians(sensors->gyro.x),
+  radians(sensors->gyro.y),
+  radians(sensors->gyro.z));
 
   struct vec desJerk = vzero(); // desired UAV jerk set to zero for now
   struct vec desSnap = vzero(); // desired UAV snap set to zero for now
+  struct vec omega_des = vzero();
 
-
-  // Compute desired omega
+  // Compute desired omega NOT USED
   struct vec xb = mcolumn(self->R_des, 0);
   struct vec yb = mcolumn(self->R_des, 1);
   struct vec zb = mcolumn(self->R_des, 2);
 
-  float c = control->thrustSi / self->mass;
+  float c = control->thrustSi / (self->mass + self->mp);
   float B1 = c;
   float B3 = -vdot(yc, zb);
   float C3 = vmag(vcross(yc, zb));
@@ -303,7 +322,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
   float D2 = -vdot(yb, desJerk);
   float D3 = radians(setpoint->attitudeRate.yaw) * vdot(xc, xb);
   
-  struct vec omega_des = vzero();
   if (control->thrustSi != 0) {
     omega_des.x = D2/B1;
     omega_des.y = D1/B1;
@@ -312,7 +330,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
   // Compute desired omega dot
   float setpoint_yaw_ddot = radians(setpoint->attitudeAcc.yaw);
-  float setpoint_yaw_dot = radians(setpoint->attitudeRate.yaw);
+  float setpoint_yaw_dot  = radians(setpoint->attitudeRate.yaw);
 
   float c_dot = vdot(zb, desJerk);
   float E1 = vdot(xb,desSnap) - 2.0f * c_dot * omega_des.y - c * omega_des.x * omega_des.z;
@@ -325,7 +343,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     self->omega_des_dot.y = E1/B1;
     self->omega_des_dot.z = (B1*E3-B3*E1)/(B1*C3);
   }
-
 
   self->omega_r = mvmul(mmul(mtranspose(R), self->R_des), omega_des);
 
@@ -415,7 +432,7 @@ PARAM_ADD(PARAM_FLOAT, KqIz, &g_self.K_q_I.z)
 PARAM_ADD(PARAM_FLOAT, Kpos_UAV_Px, &g_self.Kpos_UAV_P.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_UAV_Py, &g_self.Kpos_UAV_P.y)
 PARAM_ADD(PARAM_FLOAT, Kpos_UAV_Pz, &g_self.Kpos_UAV_P.z)
-PARAM_ADD(PARAM_FLOAT, Kpos_UAV P_limit, &g_self.Kpos_UAV_P_limit)
+PARAM_ADD(PARAM_FLOAT, Kpos_UAV_P_limit, &g_self.Kpos_UAV_P_limit)
 // UAV Position D
 PARAM_ADD(PARAM_FLOAT, Kpos_UAV_Dx, &g_self.Kpos_UAV_D.x)
 PARAM_ADD(PARAM_FLOAT, Kpos_UAV_Dy, &g_self.Kpos_UAV_D.y)
@@ -445,7 +462,7 @@ PARAM_ADD(PARAM_FLOAT, KI_x, &g_self.KI.x)
 PARAM_ADD(PARAM_FLOAT, KI_y, &g_self.KI.y)
 PARAM_ADD(PARAM_FLOAT, KI_z, &g_self.KI.z)
 
-
+// UAV and payload mass
 PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
 PARAM_ADD(PARAM_FLOAT, massP, &g_self.mp)
 
@@ -500,13 +517,31 @@ LOG_ADD(LOG_FLOAT, omegarx, &g_self.omega_r.x)
 LOG_ADD(LOG_FLOAT, omegary, &g_self.omega_r.y)
 LOG_ADD(LOG_FLOAT, omegarz, &g_self.omega_r.z)
 
-LOG_ADD(LOG_FLOAT, plVelx, &g_self.pl_vel.x)
-LOG_ADD(LOG_FLOAT, plVely, &g_self.pl_vel.y)
-LOG_ADD(LOG_FLOAT, plVelz, &g_self.pl_vel.z)
+LOG_ADD(LOG_FLOAT, uav_posdx, &g_self.uav_pos_d.x)
+LOG_ADD(LOG_FLOAT, uav_posdy, &g_self.uav_pos_d.y)
+LOG_ADD(LOG_FLOAT, uav_posdz, &g_self.uav_pos_d.z)
 
-LOG_ADD(LOG_FLOAT, plAccx, &g_self.pl_acc.x)
-LOG_ADD(LOG_FLOAT, plAccy, &g_self.pl_acc.y)
-LOG_ADD(LOG_FLOAT, plAccz, &g_self.pl_acc.z)
+LOG_ADD(LOG_FLOAT, uav_veldx, &g_self.uav_vel_d.x)
+LOG_ADD(LOG_FLOAT, uav_veldy, &g_self.uav_vel_d.y)
+LOG_ADD(LOG_FLOAT, uav_veldz, &g_self.uav_vel_d.z)
+
+// Cable states 
+LOG_ADD(LOG_FLOAT, qix, &g_self.qi.x)
+LOG_ADD(LOG_FLOAT, qiy, &g_self.qi.y)
+LOG_ADD(LOG_FLOAT, qiz, &g_self.qi.z)
+
+LOG_ADD(LOG_FLOAT, qidotx, &g_self.qidot.x)
+LOG_ADD(LOG_FLOAT, qidoty, &g_self.qidot.y)
+LOG_ADD(LOG_FLOAT, qidotz, &g_self.qidot.z)
+
+LOG_ADD(LOG_FLOAT, qdix, &g_self.qdi.x)
+LOG_ADD(LOG_FLOAT, qdiy, &g_self.qdi.y)
+LOG_ADD(LOG_FLOAT, qdiz, &g_self.qdi.z)
+
+LOG_ADD(LOG_FLOAT, qdidotx, &g_self.qdidot.x)
+LOG_ADD(LOG_FLOAT, qdidoty, &g_self.qdidot.y)
+LOG_ADD(LOG_FLOAT, qdidotz, &g_self.qdidot.z)
+
 LOG_GROUP_STOP(ctrlLeeP)
 
 #endif // CRAZYFLIE_FW defined
