@@ -369,9 +369,10 @@ static void stabilizerTask(void* param)
   STATIC_MEM_TASK_CREATE(rateSupervisorTask, rateSupervisorTask, RATE_SUPERVISOR_TASK_NAME, NULL, RATE_SUPERVISOR_TASK_PRI);
 
   for (int8_t i = 0; i < 3; i++) {
-      const float cutoff = 70; // Hz
-      init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f);
-      init_butterworth_2_low_pass(&filter_payload_acc[i], 1 / (2 * M_PI_F * cutoff), 1.0 / ATTITUDE_RATE, 0.0f); // Init acc filter
+      const float cutoff_vel = 70; // Hz
+      const float cutoff_acc = 20; // Hz
+      init_butterworth_2_low_pass(&filter_payload_vel[i], 1 / (2 * M_PI_F * cutoff_vel), 1.0 / ATTITUDE_RATE, 0.0f);
+      init_butterworth_2_low_pass(&filter_payload_acc[i], 1 / (2 * M_PI_F * cutoff_acc), 1.0 / ATTITUDE_RATE, 0.0f); // Init acc filter
 
     }
 
@@ -428,7 +429,7 @@ static void stabilizerTask(void* param)
 
               struct vec last_vel_filtered = mkvec(payload_vel_filtered_last.x, payload_vel_filtered_last.y, payload_vel_filtered_last.z);
               struct vec payload_acc_unfiltered = vdiv(vsub(payload_vel_filtered, last_vel_filtered), dt);
-              
+              payload_acc_unfiltered = vclampnorm(payload_acc_unfiltered, 6.5); // rescale to avoid weird outliers
               // apply butterworth filter to acceleration
               update_butterworth_2_low_pass_vec(filter_payload_acc, payload_acc_unfiltered);
               payload_acc_filtered = get_butterworth_2_low_pass_vec(filter_payload_acc);
