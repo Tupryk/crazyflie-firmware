@@ -53,7 +53,7 @@ CDC 2010
 
 
 static controllerLee_t g_self = {
-  .mass = CF_MASS,
+  .mass = 0.034,
 
   // Inertia matrix (diagonal matrix), see
   // System Identification of the Crazyflie 2.0 Nano Quadrocopter
@@ -62,17 +62,17 @@ static controllerLee_t g_self = {
   .J = {16.571710e-6, 16.655602e-6, 29.261652e-6}, // kg m^2
 
   // Position PID
-  .Kpos_P = {7.0, 7.0, 7.0}, // Kp in paper
+  .Kpos_P = {10.0, 10.0, 10.0}, // Kp in paper
   .Kpos_P_limit = 100,
-  .Kpos_D = {4.0, 4.0, 4.0}, // Kv in paper
+  .Kpos_D = {9.0, 9.0, 9.0}, // Kv in paper
   .Kpos_D_limit = 100,
-  .Kpos_I = {0.0, 0.0, 0.0}, // not in paper
-  .Kpos_I_limit = 2,
+  .Kpos_I = {5.0, 5.0, 5.0}, // not in paper
+  .Kpos_I_limit = 2.0,
 
   // Attitude PID
-  .KR = {0.007, 0.007, 0.008},
-  .Komega = {0.00115, 0.00115, 0.002},
-  .KI = {0.03, 0.03, 0.03},
+  .KR = {0.0065, 0.0065, 0.008},
+  .Komega = {0.00095, 0.00095, 0.001},
+  .KI = {0.01, 0.01, 0.01},
 
   // INDI
   .indi = 0,
