@@ -87,6 +87,21 @@ typedef struct controllerLeePayload_s {
     struct vec qdidot; // desired cable direction derivative
     struct vec omega_cd; // desired cable angular velocity
     
+    // INDI
+    uint8_t indi;
+    struct vec omega_prev;
+    uint64_t timestamp_prev;
+
+    struct vec tau_rpm;
+    struct vec tau_rpm_filtered;
+    struct vec tau_imu_filtered;
+    struct vec tau_imu;
+
+    struct vec a_rpm;
+    struct vec a_rpm_filtered;
+    struct vec a_imu;
+    struct vec a_imu_filtered;
+
     // Logging variables
     struct vec uav_pos_d;
     struct vec uav_vel_d;
