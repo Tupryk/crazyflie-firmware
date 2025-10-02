@@ -35,6 +35,7 @@
 #include "autoconf.h"
 #include "config.h"
 #include "math.h"
+#include "pm.h"
 #include "platform_defaults.h"
 
 #if (!defined(CONFIG_MOTORS_REQUIRE_ARMING) || (CONFIG_MOTORS_REQUIRE_ARMING == 0)) && defined(CONFIG_MOTORS_DEFAULT_IDLE_THRUST) && (CONFIG_MOTORS_DEFAULT_IDLE_THRUST > 0)
@@ -55,6 +56,27 @@ static float thrustToTorque = 0.005964552f;
 //          thrust is in Newtons (per rotor)
 static float pwmToThrustA = 0.091492681f;
 static float pwmToThrustB = 0.067673604f;
+// voltage, thrust -> pwm
+static float d00 = -0.021749315756359296;
+static float d10 = 0.153990538574346;
+static float d01 = 0.0911156184449841;
+static float d11 = -0.061258089207338086;
+static float d20 = -0.002852944831382887;
+
+
+static uint16_t thrustToPWM(float batteryVoltage, float thrustGram)
+{
+  if (thrustGram > 0) {
+    // normalized voltage
+    float v = batteryVoltage / 4.2f;
+    // normalized pwm:
+    float pwm = d00 + d10 * thrustGram + d01 * v + d20 * thrustGram * thrustGram + d11 * thrustGram * v;
+
+    return pwm * UINT16_MAX;
+  }
+
+  return 0;
+}
 
 int powerDistributionMotorType(uint32_t id)
 {
@@ -113,15 +135,14 @@ static void powerDistributionForceTorque(const control_t *control, motors_thrust
   motorForces[1] = thrustPart - rollPart + pitchPart + yawPart;
   motorForces[2] = thrustPart + rollPart + pitchPart - yawPart;
   motorForces[3] = thrustPart + rollPart - pitchPart + yawPart;
-
+  float batteryVoltage = pmGetBatteryVoltage();
   for (int motorIndex = 0; motorIndex < STABILIZER_NR_OF_MOTORS; motorIndex++) {
     float motorForce = motorForces[motorIndex];
     if (motorForce < 0.0f) {
       motorForce = 0.0f;
     }
-
-    float motor_pwm = (-pwmToThrustB + sqrtf(pwmToThrustB * pwmToThrustB + 4.0f * pwmToThrustA * motorForce)) / (2.0f * pwmToThrustA);
-    motorThrustUncapped->list[motorIndex] = motor_pwm * UINT16_MAX;
+    float motorForceInGrams = motorForce * 1000.0f / 9.81f;
+    motorThrustUncapped->list[motorIndex] = thrustToPWM(batteryVoltage, motorForceInGrams);
   }
 }
 
