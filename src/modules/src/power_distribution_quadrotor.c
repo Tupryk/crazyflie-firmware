@@ -36,6 +36,7 @@
 #include "config.h"
 #include "math.h"
 #include "pm.h"
+#include "motors.h"
 #include "platform_defaults.h"
 
 #if (!defined(CONFIG_MOTORS_REQUIRE_ARMING) || (CONFIG_MOTORS_REQUIRE_ARMING == 0)) && defined(CONFIG_MOTORS_DEFAULT_IDLE_THRUST) && (CONFIG_MOTORS_DEFAULT_IDLE_THRUST > 0)
@@ -63,6 +64,9 @@ static float d01 = 0.0911156184449841;
 static float d11 = -0.061258089207338086;
 static float d20 = -0.002852944831382887;
 
+float rpm2pwmA = -0.12128823778162669f;
+float rpm2pwmB = 4.2310782971594264e-05f;
+float kappa_f[4]; // force[i] = kappa_f[i] * rpm^2
 
 static uint16_t thrustToPWM(float batteryVoltage, float thrustGram)
 {
@@ -255,4 +259,10 @@ PARAM_ADD(PARAM_FLOAT, pwmToThrustB, &pwmToThrustB)
  * The distance from the center to a motor
  */
 PARAM_ADD(PARAM_FLOAT, armLength, &armLength)
+PARAM_ADD(PARAM_FLOAT, rpm2pwmA, &rpm2pwmA)
+PARAM_ADD(PARAM_FLOAT, rpm2pwmB, &rpm2pwmB)
+PARAM_ADD(PARAM_FLOAT, kappa_f1, &kappa_f[0])
+PARAM_ADD(PARAM_FLOAT, kappa_f2, &kappa_f[1])
+PARAM_ADD(PARAM_FLOAT, kappa_f3, &kappa_f[2])
+PARAM_ADD(PARAM_FLOAT, kappa_f4, &kappa_f[3])
 PARAM_GROUP_STOP(quadSysId)

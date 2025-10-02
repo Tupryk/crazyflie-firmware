@@ -271,6 +271,8 @@ struct traj_eval traj_eval_zero()
 		.pos = vzero(),
 		.vel = vzero(),
 		.acc = vzero(),
+		.jerk = vzero(),
+		.snap = vzero(),
 		.yaw = 0.0f,
 		.yaw_dot = 0.0f,
 		.yaw_ddot = 0.0f,
@@ -313,6 +315,7 @@ struct traj_eval poly4d_eval(struct poly4d const *p, float t)
 	polyder4d(deriv);
 	out.jerk = polyval_xyz(deriv, t);
 
+	// 4th derivative
 	polyder4d(deriv);
 	out.snap = polyval_xyz(deriv, t);
 
