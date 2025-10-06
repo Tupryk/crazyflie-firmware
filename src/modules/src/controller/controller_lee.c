@@ -62,16 +62,16 @@ static controllerLee_t g_self = {
   .J = {16.571710e-6, 16.655602e-6, 29.261652e-6}, // kg m^2
 
   // Position PID
-  .Kpos_P = {10.0, 10.0, 10.0}, // Kp in paper
+  .Kpos_P = {12.0, 12.0, 12.0}, // Kp in paper
   .Kpos_P_limit = 100,
-  .Kpos_D = {9.0, 9.0, 9.0}, // Kv in paper
+  .Kpos_D = {10.5, 10.5, 10.5}, // Kv in paper
   .Kpos_D_limit = 100,
   .Kpos_I = {5.0, 5.0, 5.0}, // not in paper
-  .Kpos_I_limit = 2.0,
+  .Kpos_I_limit = 100,
 
   // Attitude PID
-  .KR = {0.0065, 0.0065, 0.008},
-  .Komega = {0.00095, 0.00095, 0.001},
+  .KR = {0.007, 0.007, 0.008},
+  .Komega = {0.0016, 0.0016, 0.002},
   .KI = {0.01, 0.01, 0.01},
 
   // INDI
@@ -261,13 +261,13 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
 
       float f_rpm = t1 + t2 + t3 + t4;
       self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f));
-      self->a_rpm = vclampnorm(self->a_rpm, 6.5);
+      self->a_rpm = vclampnorm(self->a_rpm, 10);
 
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
       // compute acceleration based on IMU (world frame, SI unit, no gravity)
       self->a_imu = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z));
-      self->a_imu = vclampnorm(self->a_imu, 6.5);
+      self->a_imu = vclampnorm(self->a_imu, 10);
       update_butterworth_2_low_pass_vec(filter_acc_imu, self->a_imu);
 
       self->a_rpm_filtered = get_butterworth_2_low_pass_vec(filter_acc_rpm);
@@ -333,9 +333,9 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
 
   // angular velocity
   self->omega = mkvec(
-    radians(sensors->gyro.x),
-    radians(sensors->gyro.y),
-    radians(sensors->gyro.z));
+    radians(sensors->gyroNoLpf.x),
+    radians(sensors->gyroNoLpf.y),
+    radians(sensors->gyroNoLpf.z));
 
   // Compute desired omega
   struct vec xb = mcolumn(self->R_des, 0);
@@ -399,7 +399,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       -arm * t1 + arm * t2 + arm * t3 - arm * t4,
       -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
     );
-    self->tau_rpm = vclampnorm(self->tau_rpm, 0.003);
+    self->tau_rpm = vclampnorm(self->tau_rpm, 0.006);
 
     update_butterworth_2_low_pass_vec(filter_tau_rpm, self->tau_rpm);
 
@@ -412,7 +412,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     struct vec angular_acc = vdiv(vsub(omega_unfirltered, self->omega_prev), dt);
     self->tau_imu = veltmul(self->J, angular_acc);
     self->tau_imu = vsub(self->tau_imu, vcross(veltmul(self->J, omega_unfirltered), omega_unfirltered));
-    self->tau_imu = vclampnorm(self->tau_imu, 0.003); // rescale to avoid weird outliers
+    self->tau_imu = vclampnorm(self->tau_imu, 0.006); // rescale to avoid weird outliers
 
     update_butterworth_2_low_pass_vec(filter_tau_imu, self->tau_imu);
 
