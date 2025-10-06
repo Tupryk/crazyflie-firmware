@@ -261,13 +261,13 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
 
       float f_rpm = t1 + t2 + t3 + t4;
       self->a_rpm = vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f));
-      self->a_rpm = vclampnorm(self->a_rpm, 6.5);
+      self->a_rpm = vclampnorm(self->a_rpm, 10);
 
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
       // compute acceleration based on IMU (world frame, SI unit, no gravity)
       self->a_imu = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z));
-      self->a_imu = vclampnorm(self->a_imu, 6.5);
+      self->a_imu = vclampnorm(self->a_imu, 10);
       update_butterworth_2_low_pass_vec(filter_acc_imu, self->a_imu);
 
       self->a_rpm_filtered = get_butterworth_2_low_pass_vec(filter_acc_rpm);
@@ -333,9 +333,9 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
 
   // angular velocity
   self->omega = mkvec(
-    radians(sensors->gyro.x),
-    radians(sensors->gyro.y),
-    radians(sensors->gyro.z));
+    radians(sensors->gyroNoLpf.x),
+    radians(sensors->gyroNoLpf.y),
+    radians(sensors->gyroNoLpf.z));
 
   // Compute desired omega
   struct vec xb = mcolumn(self->R_des, 0);
@@ -399,7 +399,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       -arm * t1 + arm * t2 + arm * t3 - arm * t4,
       -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
     );
-    self->tau_rpm = vclampnorm(self->tau_rpm, 0.003);
+    self->tau_rpm = vclampnorm(self->tau_rpm, 0.006);
 
     update_butterworth_2_low_pass_vec(filter_tau_rpm, self->tau_rpm);
 
@@ -412,7 +412,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     struct vec angular_acc = vdiv(vsub(omega_unfirltered, self->omega_prev), dt);
     self->tau_imu = veltmul(self->J, angular_acc);
     self->tau_imu = vsub(self->tau_imu, vcross(veltmul(self->J, omega_unfirltered), omega_unfirltered));
-    self->tau_imu = vclampnorm(self->tau_imu, 0.003); // rescale to avoid weird outliers
+    self->tau_imu = vclampnorm(self->tau_imu, 0.006); // rescale to avoid weird outliers
 
     update_butterworth_2_low_pass_vec(filter_tau_imu, self->tau_imu);
 
