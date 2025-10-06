@@ -267,10 +267,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct mat33 skewqi2 = mmul(skewqi,skewqi); // skewqi squared
 
     // eq. 68-71 in Aggressive Maneuvering of a Quadrotor with a Cable-Suspended Payload by Sarah Tang
+    struct vec qi_ref = vneg(vnormalize(vadd(plAcc_d, gravity_comp))); // desired cable direction
     float T = self->mp*vmag(vadd(plAcc_d, gravity_comp)); // cable tension
-    float T_dot = -self->mp * vdot(plJerk_d, self->qdi); // tension derivative
-    self->qdidot = vdiv(vneg(vadd(vscl(self->mp, plJerk_d), vscl(T_dot, self->qdi))), T);
-    self->omega_cd = vcross(vdiv(vscl(self->mp, plJerk_d), T), self->qi); // angular velocity of the cable, w in paper
+    float T_dot = -self->mp * vdot(plJerk_d, qi_ref); // tension derivative
+    self->qdidot = vdiv(vneg(vadd(vscl(self->mp, plJerk_d), vscl(T_dot, qi_ref))), T);
+    // self->omega_cd = vcross(vdiv(vscl(self->mp, plJerk_d), T), qi_ref); // angular velocity of the cable, w in paper
+    self->omega_cd = vcross(qi_ref, self->qdidot); // angular velocity of the cable, w in paper
 
     
     struct vec eq  = vclampscl(vcross(self->qdi, self->qi), -self->K_q_limit, self->K_q_limit);
@@ -299,14 +301,14 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
       float f_rpm = t1 + t2 + t3 + t4;
       // a_rpm = (f_rpm / m) * R * z - ge3 - (mp/m)*(plAcc + ge3)
-      self->a_rpm = vsub(vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f)), vscl(self->mp / self->mass, plAcc_w_gcomp));
+      self->a_rpm = vsub(vsub(vscl(f_rpm / self->mass, mvmul(R, z)), gravity_comp), vscl(self->mp / self->mass, plAcc_w_gcomp));
       self->a_rpm = vclampnorm(self->a_rpm, 6.5);
 
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
 
       // compute acceleration based on IMU (world frame, SI unit, no gravity)
       self->a_imu = vscl(9.81, mkvec(state->acc.x, state->acc.y, state->acc.z));
-      self->a_imu = vclampnorm(self->a_imu, 6.5);
+      // self->a_imu = vclampnorm(self->a_imu, 6.5);
       update_butterworth_2_low_pass_vec(filter_acc_imu, self->a_imu);
 
       self->a_rpm_filtered = get_butterworth_2_low_pass_vec(filter_acc_rpm);
@@ -315,12 +317,12 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       a_indi = vsub(self->a_imu_filtered, self->a_rpm_filtered);
 
       // DEBUG
-      // if (tick % 500 == 0) {
-      //   DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)self->a_rpm_filtered.x, (double)self->a_rpm_filtered.y, (double)self->a_rpm_filtered.z, (double)self->a_imu_filtered.x, (double)self->a_imu_filtered.y, (double)self->a_imu_filtered.z);
-      // }
+      if (tick % 500 == 0) {
+        DEBUG_PRINT("INDI p %f %f %f, %f %f %f\n", (double)self->a_rpm_filtered.x, (double)self->a_rpm_filtered.y, (double)self->a_rpm_filtered.z, (double)self->a_imu_filtered.x, (double)self->a_imu_filtered.y, (double)self->a_imu_filtered.z);
+      }
     }
     // UAV Lee controller
-    struct vec pos_d = vsub(plPos_d, vscl(l, self->qdi)); // desired UAV position
+    struct vec pos_d = vsub(plPos_d, vscl(l, qi_ref)); // desired UAV position
     struct vec vel_d = vsub(plVel_d, vscl(l, self->qdidot)); // desired UAV velocity
     //logging payload state
     self->uav_pos_d = pos_d;
@@ -336,7 +338,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
       veltmul(self->Kpos_UAV_I, self->i_error_pos_uav)
     ); // desired linear acceleration
 
-
+    a_indi.z = 0.0; // only consider INDI in horizontal plane for UAV position control
     u = vsub(vadd(u, vscl(self->mass, a_uav)),vscl(self->mass, a_indi)); // add the PD control of the UAV to the feedforward force u
     control->thrustSi = vdot(u, R_z);
     self->thrustSi = control->thrustSi;
@@ -360,7 +362,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     if (control->thrustSi < 0.01f) {
       controllerLeePayloadReset(self);
     }
-    struct vec u_norm = vnormalize(u);
     struct vec xb = vnormalize(vcross(yc, u));
     struct vec yb = vnormalize(vcross(u, xb));
     struct vec zb = vcross(xb, yb);
@@ -404,9 +405,9 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
 
   // angular velocity
   self->omega = mkvec(
-  radians(sensors->gyro.x),
-  radians(sensors->gyro.y),
-  radians(sensors->gyro.z));
+  radians(sensors->gyroNoLpf.x),
+  radians(sensors->gyroNoLpf.y),
+  radians(sensors->gyroNoLpf.z));
 
   struct vec desJerk = vzero(); // desired UAV jerk set to zero for now
   struct vec desSnap = vzero(); // desired UAV snap set to zero for now
@@ -609,6 +610,8 @@ PARAM_ADD(PARAM_FLOAT, KI_z, &g_self.KI.z)
 PARAM_ADD(PARAM_FLOAT, mass, &g_self.mass)
 PARAM_ADD(PARAM_FLOAT, massP, &g_self.mp)
 
+// INDI status 
+PARAM_ADD(PARAM_UINT8, indi, &g_self.indi)
 
 // Attachement points and cable lengths
 PARAM_ADD(PARAM_UINT8, ap0id, &g_self.attachement_points[0].id)
