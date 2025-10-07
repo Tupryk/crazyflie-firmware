@@ -38,6 +38,9 @@ typedef struct controllerLeePayload_s {
     float thrustSi;
     struct vec J; // Inertia matrix (diagonal matrix); kg m^2
 
+    struct vec plJerk_d; // desired payload jerk
+    struct vec plSnap_d; // desired payload snap
+    struct vec pldSnap_d; // desired payload snap derivative
     // Payload PID
     struct vec Kpos_P; // Payload Kp 
     float Kpos_P_limit;
@@ -85,8 +88,11 @@ typedef struct controllerLeePayload_s {
 
     struct vec qdi;    // desired cable desired direction -> desVirtInp normalized
     struct vec qdidot; // desired cable direction derivative
+    struct vec qddidot; // desired cable direction 2nd derivative
+    struct vec qdddidot; // desired cable direction 3rd derivative
     struct vec omega_cd; // desired cable angular velocity
-    
+    struct vec omega_cd_dot; // desired cable angular acceleration
+
     // INDI
     uint8_t indi;
     struct vec omega_prev;

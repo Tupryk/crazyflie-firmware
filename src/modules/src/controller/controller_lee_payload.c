@@ -209,10 +209,10 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct vec plPos_d = mkvec(setpoint->position.x, setpoint->position.y, setpoint->position.z);
     struct vec plVel_d = mkvec(setpoint->velocity.x, setpoint->velocity.y, setpoint->velocity.z);
     struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z);
-    struct vec plJerk_d = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
-    struct vec plSnap_d = mkvec(setpoint->snap.x, setpoint->snap.y, setpoint->snap.z);
-    struct vec pldSnap_d = vzero();   // set to zero for now
-    struct vec plddSnap_d = vzero(); // set to zero for now
+    self->plJerk_d = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
+    self->plSnap_d = mkvec(setpoint->snap.x, setpoint->snap.y, setpoint->snap.z);
+    self->pldSnap_d = vzero();   // set to zero for now
+    // struct vec plddSnap_d = vzero(); // set to zero for now
 
     // payload position and velocity states
     struct vec plPos = mkvec(state->payload_pos.x, state->payload_pos.y, state->payload_pos.z);
@@ -236,7 +236,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct vec R_z = mvmul(R, z);
     // cable length
     float l = vmag(vsub(plPos, statePos));
-  
+    self->attachement_points[0].l = l; // assuming only 1 uav connected to payload
     // payload desired force
     self->F_d = vscl(self->mp, 
       vadd5(
@@ -267,26 +267,39 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct mat33 skewqi2 = mmul(skewqi,skewqi); // skewqi squared
 
     // eq. 68-71 in Aggressive Maneuvering of a Quadrotor with a Cable-Suspended Payload by Sarah Tang
-    struct vec qi_ref = vneg(vnormalize(vadd(plAcc_d, gravity_comp))); // desired cable direction
+    // struct vec qi_ref = vneg(vnormalize(vadd(plAcc_d, gravity_comp))); // desired cable direction
+    struct vec qi_ref = self->qdi; // desired cable direction
     float T = self->mp*vmag(vadd(plAcc_d, gravity_comp)); // cable tension
-    float T_dot = -self->mp * vdot(plJerk_d, qi_ref); // tension derivative
-    self->qdidot = vdiv(vneg(vadd(vscl(self->mp, plJerk_d), vscl(T_dot, qi_ref))), T);
-    // self->omega_cd = vcross(vdiv(vscl(self->mp, plJerk_d), T), qi_ref); // angular velocity of the cable, w in paper
-    self->omega_cd = vcross(qi_ref, self->qdidot); // angular velocity of the cable, w in paper
-
+    float T_dot = -self->mp * vdot(self->plJerk_d, qi_ref); // tension derivative
+    self->qdidot = vdiv(vneg(vadd(vscl(self->mp, self->plJerk_d), vscl(T_dot, qi_ref))), T);
     
+    // T_ddot = -ml * (sl.dot(p) + jl.dot(p_dot))
+    float T_ddot = -self->mp * (vdot(self->plSnap_d, qi_ref) + vdot(self->plJerk_d, self->qdidot));
+    //  p_ddot = -(ml * sl + 2 * T_dot * p_dot + T_ddot * p) / T
+    self->qddidot = vdiv(vneg(vadd3(vscl(self->mp, self->plSnap_d), vscl(2 * T_dot, self->qdidot), vscl(T_ddot, qi_ref))), T);
+
+    // T_dddot = -ml * (dsl.dot(p) + 2 * sl.dot(p_dot) + jl.dot(p_ddot))
+    float T_dddot = -self->mp * (vdot(self->pldSnap_d, qi_ref) +  2 * vdot(self->plSnap_d, self->qdidot)+ vdot(self->plJerk_d, self->qddidot));
+    //  p_dddot = -(ml * dsl + 3 * T_ddot * p_dot + 3 * T_dot * p_ddot + T_dddot * p) / T
+    self->qdddidot = vdiv(vneg(vadd4(vscl(self->mp, self->pldSnap_d), vscl(3 * T_ddot, self->qdidot), vscl(3 * T_dot, self->qddidot), vscl(T_dddot, qi_ref))), T);
+
     struct vec eq  = vclampscl(vcross(self->qdi, self->qi), -self->K_q_limit, self->K_q_limit);
     self->i_error_q = vadd(self->i_error_q, vscl(dt, eq));
     
+    self->omega_cd = vcross(vdiv(vscl(self->mp, self->plJerk_d), T), qi_ref); // angular velocity of the cable, w in paper eq. 71
     struct vec ew  = vclampscl(vadd(self->omega_c, mvmul(skewqi2, self->omega_cd)), -self->K_w_limit, self->K_w_limit);
     
+    // omega_cdot =  ml*(np.cross(sl,p) + np.cross(jl,p_dot))
+    self->omega_cd_dot = vscl(self->mp, vadd(vcross(self->plSnap_d, qi_ref), vcross(self->plJerk_d, self->qdidot)));
+
     struct vec u_perpind = vsub(
       vscl(self->mass*l, 
         mvmul(skewqi,
-          vadd3(
+          vadd4(
             vneg(veltmul(self->K_q, eq)),
             vneg(veltmul(self->K_w, ew)),
-            vneg(vscl(vdot(self->qi, self->omega_cd), self->qidot)) 
+            vneg(vscl(vdot(self->qi, self->omega_cd), self->qidot)) ,
+            vneg(mvmul(skewqi2, self->omega_cd_dot))
             // veltmul(self->K_q_I, self->i_error_q)) // not originally in the paper
           )
         )
@@ -409,7 +422,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
   radians(sensors->gyroNoLpf.y),
   radians(sensors->gyroNoLpf.z));
 
-  struct vec desJerk = vzero(); // desired UAV jerk set to zero for now
+  struct vec desJerk = vsub(self->plJerk_d, vscl(self->attachement_points[0].l, self->qdddidot)); // desired UAV jerk 
   struct vec desSnap = vzero(); // desired UAV snap set to zero for now
   struct vec omega_des = vzero();
 
