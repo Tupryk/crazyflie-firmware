@@ -211,7 +211,7 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     struct vec plAcc_d = mkvec(setpoint->acceleration.x, setpoint->acceleration.y, setpoint->acceleration.z);
     self->plJerk_d = mkvec(setpoint->jerk.x, setpoint->jerk.y, setpoint->jerk.z);
     self->plSnap_d = mkvec(setpoint->snap.x, setpoint->snap.y, setpoint->snap.z);
-    self->pldSnap_d = vzero();   // set to zero for now
+    self->pldSnap_d = mkvec(setpoint->snapd.x, setpoint->snapd.y, setpoint->snapd.z); 
     // struct vec plddSnap_d = vzero(); // set to zero for now
 
     // payload position and velocity states
