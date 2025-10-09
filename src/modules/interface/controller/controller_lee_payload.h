@@ -41,6 +41,7 @@ typedef struct controllerLeePayload_s {
     struct vec plJerk_d; // desired payload jerk
     struct vec plSnap_d; // desired payload snap
     struct vec pldSnap_d; // desired payload snap derivative
+    struct vec a_cl; // desired acc + closed-loop (PID) 
     // Payload PID
     struct vec Kpos_P; // Payload Kp 
     float Kpos_P_limit;
