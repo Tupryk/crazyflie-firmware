@@ -26,36 +26,36 @@ static controllerLeePayload_t g_self = {
   .J = {16.571710e-6, 16.655602e-6, 29.261652e-6}, // kg m^2
 
   // Payload PID
-  .Kpos_P = {6.5, 6.5, 6.5}, // Kp in paper
+  .Kpos_P = {6.0, 6.0, 6.0}, // Kp in paper
   .Kpos_P_limit = 100,
-  .Kpos_D = {5.5, 5.5, 5.5}, // Kv in paper
+  .Kpos_D = {4.0, 4.0, 4.0}, // Kv in paper
   .Kpos_D_limit = 100,
-  .Kpos_I = {0.0, 0.0, 0.0}, // not in paper
+  .Kpos_I = {1.0, 1.0, 3.0}, // not in paper
   .Kpos_I_limit = 100,
 
   // Cable PD 
-  .K_q = {25.0, 25.0, 16.0}, // cable direction P
+  .K_q = {8.0, 8.0, 8.0}, // cable direction P
   .K_q_limit = 100,
-  .K_w = {10.0, 10.0, 6.0}, // cable angular velocity D
+  .K_w = {7.5, 7.5, 7.5}, // cable angular velocity D
   .K_w_limit = 100,
   .K_q_I = {0.0, 0.0, 0.0}, // cable direction I
 
   // UAV Position PID Gains
-  .Kpos_UAV_P = {3.0, 3.0, 3.0}, // UAV position Kp
+  .Kpos_UAV_P = {0.0, 0.0, 0.0}, // UAV position Kp
   .Kpos_UAV_P_limit = 100,
-  .Kpos_UAV_D = {4.0, 4.0, 4.0}, // UAV position Kv
+  .Kpos_UAV_D = {0.0, 0.0, 0.0}, // UAV position Kv
   .Kpos_UAV_D_limit = 100,
   .Kpos_UAV_I = {0.0, 0.0, 0.0}, // UAV position Ki
   .Kpos_UAV_I_limit = 100,
 
   // UAV Attitude PID
-  .KR = {0.0045, 0.0045, 0.01},
-  .Komega = {0.0008, 0.0008, 0.015},
+  .KR = {0.0085, 0.0085, 0.0085},
+  .Komega = {0.0013, 0.0013, 0.0013},
   .KI = {0.01, 0.01, 0.01},
 
-  .attachement_points[0].l = -1,
-  .attachement_points[1].l = -1,
-  .attachement_points[2].l = -1,
+  .attachement_points[0].l = 0.5,
+  .attachement_points[1].l = 0.5,
+  .attachement_points[2].l = 0.5,
 
   // INDI
   .indi = 0,
