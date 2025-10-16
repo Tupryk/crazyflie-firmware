@@ -38,6 +38,10 @@ typedef struct controllerLeePayload_s {
     float thrustSi;
     struct vec J; // Inertia matrix (diagonal matrix); kg m^2
 
+    struct vec plJerk_d; // desired payload jerk
+    struct vec plSnap_d; // desired payload snap
+    struct vec pldSnap_d; // desired payload snap derivative
+    struct vec a_cl; // desired acc + closed-loop (PID) 
     // Payload PID
     struct vec Kpos_P; // Payload Kp 
     float Kpos_P_limit;
@@ -54,7 +58,7 @@ typedef struct controllerLeePayload_s {
     float K_w_limit;
     struct vec K_q_I; // cable direction I
     struct vec i_error_q;  // integral of cable direction error
-
+    uint8_t use_flat_output; // use flat output for payload and cable control
 
     // UAV Position PID Gains
     struct vec Kpos_UAV_P; // UAV position Kp
@@ -84,9 +88,13 @@ typedef struct controllerLeePayload_s {
     struct vec omega_c; // cable angular velocity
 
     struct vec qdi;    // desired cable desired direction -> desVirtInp normalized
+    struct vec qi_ref;    // desired cable desired direction -> from desired acc + gravity
     struct vec qdidot; // desired cable direction derivative
+    struct vec qddidot; // desired cable direction 2nd derivative
+    struct vec qdddidot; // desired cable direction 3rd derivative
     struct vec omega_cd; // desired cable angular velocity
-    
+    struct vec omega_cd_dot; // desired cable angular acceleration
+
     // INDI
     uint8_t indi;
     struct vec omega_prev;
