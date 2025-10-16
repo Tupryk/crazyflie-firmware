@@ -70,7 +70,7 @@ static controllerLee_t g_self = {
   .Kpos_I_limit = 100,
 
   // Attitude PID
-  .KR = {0.007, 0.007, 0.008},
+  .KR = {0.007, 0.007, 0.01},
   .Komega = {0.002, 0.002, 0.002},
   .KI = {0.01, 0.01, 0.01},
 
