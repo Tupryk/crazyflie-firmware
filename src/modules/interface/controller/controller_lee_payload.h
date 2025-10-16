@@ -68,7 +68,6 @@ typedef struct controllerLeePayload_s {
     struct vec Kpos_UAV_I; // UAV position Ki
     float Kpos_UAV_I_limit;
     struct vec i_error_pos_uav; // integral of UAV position error
-    float K_acc; // feedforward acceleration switch (0: off, 1: on)
 
     
     // UAV Attitude PID

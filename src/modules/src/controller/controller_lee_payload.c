@@ -341,7 +341,6 @@ void controllerLeePayload(controllerLeePayload_t* self, control_t *control, cons
     // UAV Lee controller
     struct vec pos_d = vsub(plPos_d, vscl(l, self->qdi)); // desired UAV position
     struct vec vel_d = vsub(plVel_d, vscl(l, self->qdidot)); // desired UAV velocity
-    struct vec acc_d = vsub(plAcc_d, vscl(l, self->qddidot)); // desired UAV acceleration
     //logging payload state
     self->uav_pos_d = pos_d;
     self->uav_vel_d = vel_d;
