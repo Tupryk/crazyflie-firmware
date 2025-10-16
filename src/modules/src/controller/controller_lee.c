@@ -66,12 +66,12 @@ static controllerLee_t g_self = {
   .Kpos_P_limit = 100,
   .Kpos_D = {10.5, 10.5, 10.5}, // Kv in paper
   .Kpos_D_limit = 100,
-  .Kpos_I = {5.0, 5.0, 5.0}, // not in paper
+  .Kpos_I = {2.0, 2.0, 2.0}, // not in paper
   .Kpos_I_limit = 100,
 
   // Attitude PID
   .KR = {0.007, 0.007, 0.008},
-  .Komega = {0.0016, 0.0016, 0.002},
+  .Komega = {0.002, 0.002, 0.002},
   .KI = {0.01, 0.01, 0.01},
 
   // INDI
