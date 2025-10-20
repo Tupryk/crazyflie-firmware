@@ -320,7 +320,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
     if ((self->indi & 1) && rpm_deck_available) {
 
       float f_rpm = t1 + t2 + t3 + t4;
-      self->a_rpm = vsub(vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f)), a_nn);
+      self->a_rpm = vadd(vsub(vscl(f_rpm / self->mass, mvmul(R, z)), mkvec(0.0, 0.0, 9.81f)), a_nn);
       self->a_rpm = vclampnorm(self->a_rpm, 10);
 
       update_butterworth_2_low_pass_vec(filter_acc_rpm, self->a_rpm);
@@ -465,7 +465,7 @@ void controllerLee(controllerLee_t* self, control_t *control, const setpoint_t *
       -arm * t1 + arm * t2 + arm * t3 - arm * t4,
       -t2t * t1 + t2t * t2 - t2t * t3 + t2t * t4
     );
-    self->tau_rpm = vsub(self->tau_rpm, u_nn);
+    self->tau_rpm = vadd(self->tau_rpm, u_nn);
     self->tau_rpm = vclampnorm(self->tau_rpm, 0.006);
 
     update_butterworth_2_low_pass_vec(filter_tau_rpm, self->tau_rpm);
